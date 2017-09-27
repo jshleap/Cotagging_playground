@@ -145,19 +145,19 @@ def simulate_clump_ref(args, ref, f1, pthresh, split=False):
                          customPrange=pthresh, clean=False, validate=split != 
                          False, rstep=0.2)
             resE = PpTE.results    
-            bestclumpedE = resE.nlargest(1,'pR2').File[0]
+            bestclumpedE = resE.nlargest(1,'pR2').File.iloc[0]
             profilefnE = '%s.profile' % bestclumpedE
-            clumpE = clumped('%s.score' % bestclumpedE)
-            cSNPsE = clumpE.SNP
-            topE = cSNPsE.shape[0]
+            #clumpE = clumped('%s.score' % bestclumpedE)
+            #cSNPsE = clumpE.SNP
+            #topE = cSNPsE.shape[0]
             plotPRSvsPheno(profilefnE, label=ref, plottype=args.quality)
         else:
             resE = pd.read_table('%s.results' % ref, sep='\t')
-            bestclumpedE = resE.nlargest(1,'pR2').File[0]
+            bestclumpedE = resE.nlargest(1,'pR2').File.iloc[0]
             profilefnE = '%s.profile' % bestclumpedE
-            clumpE = clumped('%s.score' % bestclumpedE)
-            cSNPsE = clumpE.SNP
-            topE = cSNPsE.shape[0]
+            #clumpE = clumped('%s.score' % bestclumpedE)
+            #cSNPsE = clumpE.SNP
+            #topE = cSNPsE.shape[0]
             gwas2 = pd.read_table('%s_gwas.assoc.linear' % (ref), 
                                   delim_whitespace=True)
             truebeta2 = pd.read_table('%s.truebeta' % (ref), 
@@ -170,11 +170,12 @@ def simulate_clump_ref(args, ref, f1, pthresh, split=False):
             pickle.dump(obj, f)
     return causals, causalfn, truebeta2, gwas2, resE
     
-def main(args):
-    #pthresh=('1.0,0.8,0.5,0.4,0.3,0.2,0.1,0.08,0.05,0.02,0.01,10E-3,10E-4,'
-    #         '10E-5,10E-6,10E-7,10E-8')    
-    #pthresh=('1.0,0.5,0.1,0.05,10E-3,10E-5,10E-7,10E-8')    
-    pthresh=('1.0,0.5,0.1,10E-3,10E-7') 
+def main(args):   
+    if args.debug:
+        pthresh=('1.0,0.5,0.1,10E-3,10E-7') 
+    else:
+        pthresh=('1.0,0.8,0.5,0.4,0.3,0.2,0.1,0.08,0.05,0.02,0.01,10E-3,10E-4,'
+                 '10E-5,10E-6,10E-7,10E-8')           
     cwd = os.getcwd()
     ref, tar = args.labels
     if not os.path.isdir(ref):
@@ -210,11 +211,8 @@ def main(args):
     for f in G('*.nosex'):
         os.remove(f)
     res = PpT.results    
-    bestclumped = res.nlargest(1,'pR2').File[0]
-    bc = pd.read_table('%s.clumped' % bestclumped, delim_whitespace=True)
+    bestclumped = res.nlargest(1,'pR2').File.iloc[0]
     fn = '%s-%s' % (tar, ref)
-    gwas1[gwas1.SNP.isin(bc.SNP)].loc[:, ['SNP','A1', 'BETA']].to_csv(
-        '%s.score' % fn, sep=' ')
     os.chdir(cwd)
     cotags = pd.read_table(args.cotagfn, sep='\t')
     cotags = cotags[cotags.SNP.isin(f2.SNP)]
@@ -242,7 +240,13 @@ def main(args):
             clum = parse_sort_clump(args.sortedclump, allsnps)
         else:
             clum = parse_sort_clump(args.sortedclump, allsnps, ppt=ppts)
-    merge, col = prunebypercentage(args.prefix, args.target, gwasfn, phenofn, 
+    if args.qr:
+        merge, col = prunebypercentage_qr(args.prefix, args.target, gwasfn, 
+                                          phenofn, sortedcot, sortedtagT, 
+                                          sortedtagR, args.plinkexe, 
+                                          clumped=clum, step=args.step)      
+    else:
+        merge, col = prunebypercentage(args.prefix, args.target,gwasfn, phenofn, 
                                    sortedcot, sortedtagT, sortedtagR, 
                                    args.plinkexe, clumped=clum,
                                    step=args.step) 
@@ -290,5 +294,7 @@ if __name__ == '__main__':
                         ' res', default=None)   
     parser.add_argument('-D', '--debug', help='debug settings', 
                         action='store_true', default=False)     
+    parser.add_argument('-Q', '--qr', help='Use q-range', default=False, 
+                        action='store_true')   
     args = parser.parse_args()
     main(args)        
