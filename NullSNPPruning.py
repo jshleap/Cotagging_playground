@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from glob import glob
 from tqdm import tqdm
+from functools import reduce
 from dotproductV2 import norm
 import matplotlib.pyplot as plt
 from subprocess import Popen, PIPE
@@ -49,6 +50,23 @@ def read_scored(profilefn, phenofile):
     #lr = linregress(sc.PHENO, sc.SCORESUM)
     lr = linregress(sc.pheno, sc.SCORE)
     return sc, d, lr
+
+def read_scored_qr(profilefn, phenofile, kind, nsnps, tar_label, ref_label):
+    """
+    Read the profile file a.k.a. PRS file or scoresum
+    """
+    d = r'$\sum(Y_{%s} - \widehat{Y}_{%s|%s})^{2}$' % (tar_label, tar_label, 
+                                                       ref_label)
+    sc = pd.read_table(profilefn, delim_whitespace=True)
+    pheno = pd.read_table(phenofile, delim_whitespace=True, header=None, names=[
+    'FID', 'IID', 'pheno'])
+    sc = sc.merge(pheno, on=['FID', 'IID'])
+    err = sum((sc.pheno - sc.SCORE)**2)
+    lr = linregress(sc.pheno, sc.SCORE)
+    dic = {'SNP kept':nsnps, '%s_%s' % (d, kind): err, 
+           '-log(P)_%s' % kind : -np.log10(lr.pvalue), 
+           r'$R^{2}$_%s' % kind : lr.rvalue**2, 'Slope_%s' % kind: lr.slope}
+    return dic
 
 def read_gwas(gwasfile, cotagfile):
     """
@@ -92,6 +110,7 @@ def smartcotagsort(prefix, gwaswcotag, column='Cotagging'):
             tail = tail.append(df.loc[df.index[1:],:])
         beforetail = sorteddf.shape[0]
         df = sorteddf.append(tail.sample(frac=1)).reset_index(drop=True)
+        df['Index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump((df,beforetail), F)
     return df, beforetail
@@ -103,7 +122,11 @@ def set_first_step(nsnps, step):
     onesnp = 100/nsnps
     initial = np.arange(onesnp, step + onesnp, onesnp)
     rest = np.arange(step + onesnp, 100 + step, step)
-    return np.concatenate((initial, rest))
+    full = np.concatenate((initial, rest))
+    if full[-1] < 100:
+        full[-1] = 100
+    return ['%.2f' % x for x in full]
+
 
 def subsetter(sortedcotag, sortedtagT, sortedtagR, step, clumped=None):
     """
@@ -119,7 +142,7 @@ def subsetter(sortedcotag, sortedtagT, sortedtagR, step, clumped=None):
     randidx = np.array(sortedcotag.index.copy(deep=True))
     np.random.shuffle(randidx)
     for i in set_first_step(nsnp, step):
-        n = min(int(round(nsnp * (i/100.))), sortedcotag.shape[0])
+        n = min(int(round(nsnp * (float(i)/100.))), sortedcotag.shape[0])
         rand = sortedcotag.loc[sorted(randidx[:n]),:].SNP
         cota = sortedcotag.loc[sorted(cotaidx[:n]),:].SNP
         tagT = sortedtagT.loc[sorted(tagTidx[:n]),:].SNP
@@ -141,7 +164,48 @@ def subsetter(sortedcotag, sortedtagT, sortedtagR, step, clumped=None):
             yield i, cota, rand, tagT, tagR, clum, n
         else:
             yield i, cota, rand, tagT, tagR, n
-        
+
+def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
+                     clumped=None):
+    """
+    Create the files to be used in q-score-range. It will use the index of the
+    sorted files as thresholds
+    """  
+    assert sortedcota.shape[0] == sortedtagR.shape[0]
+    nsnps = sortedcota.shape[0]  
+    randomtagg = sortedcota.copy()
+    idxs = randomtagg.Index.tolist()
+    np.random.shuffle(idxs)
+    randomtagg['Index'] = idxs
+    qrange = '%s.qrange' % prefix
+    percentages = set_first_step(nsnps, step)
+    order = ['label', 'Min', 'Max']
+    qr = pd.DataFrame({'label':percentages, 'Min':np.zeros(len(percentages)),
+                      'Max':(np.array(percentages, dtype=float)*(nsnps/100)
+                             ).astype(int)}).loc[:, order]
+    qr.to_csv(qrange, header=False, index=False, sep =' ')    
+    qfile = '%s_%s.qfile'    
+    c = qfile % (prefix, 'cotag')
+    t = qfile % (prefix, 'tagt')
+    r = qfile % (prefix, 'tagr')
+    a = qfile % (prefix, 'rand')
+    sortedcota.loc[:,['SNP', 'Index']].to_csv(c, sep=' ', header=False, 
+                                              index=False)
+    sortedtagT.loc[:,['SNP', 'Index']].to_csv(t, sep=' ', header=False, 
+                                              index=False)
+    sortedtagR.loc[:,['SNP', 'Index']].to_csv(r, sep=' ', header=False, 
+                                              index=False)
+    randomtagg.loc[:,['SNP', 'Index']].to_csv(a, sep=' ', header=False,
+                                              index=False)    
+    out = (qr, c, t, r, a) 
+    if clumped is not None:
+        p = qfile % (prefix, 'clum')
+        out += (p,)
+        clumped = clumped[clumped.SNP.isin(sortedcota.SNP)]  
+        clumped.loc[:,['SNP', 'Index']].to_csv(p, sep=' ', header=False, 
+                                               index=False)
+    return out 
+    
 def cleanup():
     """
     Clean up the folder: remove nosex lists, put all logs under the LOGs folder
@@ -178,7 +242,22 @@ def process_profile(bfile, gwasfn, profilefn, dataframe, phenofile, plinkexe):
     log, rv, slope = -np.log10(lr.pvalue), lr.rvalue**2, lr.slope    
     error = df.loc[:, col].sum()    
     return  df, col, log, rv, slope, error
+
+def process_profile_qr(bfile, gwasfn, qrdf, dataframe, phenofile, plinkexe
+                       ):
+    """
+    produce and process the profile file with the ---q-score-range
+    """
     
+    if not os.path.isfile(profilefn):
+        fn = profilefn[: profilefn.rfind('.')]
+        dataframe.to_csv('%s.extract' % fn, sep=' ', index=False, header=False)
+        scoreit(bfile, gwasfn, fn, phenofile, plinkexe)
+    df, col, lr = read_scored(profilefn, phenofile)
+    log, rv, slope = -np.log10(lr.pvalue), lr.rvalue**2, lr.slope    
+    error = df.loc[:, col].sum()    
+    return  df, col, log, rv, slope, error
+   
 def prunebypercentage(prefix, bfile, gwasfn, phenofile, sortedcotag, sortedtagT,
                       sortedtagR, plinkexe, clumped=None, step=1, causal=None):
     """
@@ -203,6 +282,7 @@ def prunebypercentage(prefix, bfile, gwasfn, phenofile, sortedcotag, sortedtagT,
                 i, cota, rand, tagsT, tagsR, number = tup
             else:
                 i, cota, rand, tagsT, tagsR, clum, number = tup
+            i = float(i)
             fn = '%s_%.2f' % (prefix, i)
             # Process cotags
             profilecot = '%s_cotag.profile' % fn
@@ -263,13 +343,60 @@ def prunebypercentage(prefix, bfile, gwasfn, phenofile, sortedcotag, sortedtagT,
         with open('pbp.pickle', 'wb') as f:
             pickle.dump((merge, colc), f)
     return merge, colc
-        
+
+def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, 
+                         sortedtagT, sortedtagR, plinkexe, clumped=None, step=1,
+                         causal=None, tar_label='AFR', ref_label='EUR'):
+    """
+    Execute the prunning in a range from <step> to 100 with step <step> (in %)
+    scoring using --q-score-ragne
+    :param str gwasfn: filename of the summary stats to get the betas from
+    """
+    col = r'$\sum(Y_{%s} - \widehat{Y}_{%s|%s})^{2}$' % (tar_label, tar_label,
+                                                         ref_label)
+    frac_snps = sortedcotag.shape[0]/100
+    if os.path.isfile('pbp.pickle'):
+        with open('pbp.pickle', 'rb') as f:
+            merge, colc = pickle.load(f)
+    else:
+        print('Performing prunning ...')
+        out = subsetter_qrange(prefix, sortedcotag,sortedtagT, sortedtagR, step,
+                               clumped=clumped) 
+        qr = out[0]
+        qrange = '%s.qrange' % prefix
+        frames = []
+        for qfile in out[1:]:
+            suf = qfile[qfile.find('_') +1 : qfile.rfind('.')]
+            ou = '%s_%s' % (prefix, suf)
+            score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s '
+                     '%s --allow-no-sex --keep-allele-order --pheno %s --out %s'
+                     )
+            score = score%(plinkexe, bfile, gwasfn, qrange, qfile,  phenofile, 
+                           ou)
+            o,e = execute(score)       
+            df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label), 
+                                              phenofile, suf, 
+                                              round(float(x.label) * frac_snps), 
+                                              tar_label, ref_label)
+                               for x in qr.itertuples()])
+            frames.append(df)
+        merge = reduce(lambda x, y: pd.merge(x, y, on = 'SNP kept'), frames)
+        merge['Percentage of SNPs used'] = (merge.loc[:, 'SNP kept']/merge.loc[
+            :, 'SNP kept'].max()) * 100
+        merge.to_csv('%s_merged.tsv' % prefix, sep='\t', index=False)
+        cleanup()
+        with open('pbp.pickle', 'wb') as f:
+            pickle.dump((merge, col), f)
+    return merge, col
+
 def fix_clumped(clumped, allsnps):
     """
     If the clump file does not have all the SNPS put them in the tail
     """
     rest = allsnps[~allsnps.isin(clumped.SNP)]
-    return pd.concat((clumped.SNP,rest)).reset_index()
+    df = pd.concat((clumped.SNP,rest)).reset_index(drop=False)
+    df['Index'] = df.index.tolist()
+    return df
 
 def includePPT(ppt, lab, col, ax, x, color):
     if not 'Percentage of SNPs used' in ppt.columns:
@@ -289,7 +416,11 @@ def parse_sort_clump(fn, allsnps, ppt=None):
     """
     if fn == 'auto':
         fn = '%s.clumped' % ppt
-    df = pd.read_table(fn, delim_whitespace=True)
+    try:
+        df = pd.read_table(fn, delim_whitespace=True)
+    except FileNotFoundError:
+        fn = '.'.join(np.array(fn.split('.'))[[0,1,-1]])
+        df = pd.read_table(fn, delim_whitespace=True)
     SNPs = df.loc[:,'SP2']
     tail = [x.split('(')[0] for y in SNPs for x in y.split(',') if x.split('(')[
         0] != 'NONE']
@@ -339,7 +470,7 @@ def plotit(prefix, merge, col, labels, ppt=None, line=False, vline=None,
 
 def main(args):
     """
-    execute the code    
+    execute the code  DEPRECATED Will execute directly in linearpipeline  
     """
     #gwas = read_gwas(args.gwas, args.cotagfile)
     cotag = pd.read_table(args.cotagfile, sep='\t')
