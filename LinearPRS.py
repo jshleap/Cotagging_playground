@@ -117,7 +117,7 @@ def liabilities(prefix, h2, ncausal, prs_true, noenv=False):
 
 #----------------------------------------------------------------------
 def PlinkGWAS(plinkexe, bfile, outprefix, covs=None, nosex=False, 
-              threads=False, maxmem=False, validate=False, validsnpsfile=None):
+              threads=False, maxmem=False, validate=None, validsnpsfile=None):
     """
     Execute plink gwas. This assumes binary phenotype
     
@@ -150,8 +150,8 @@ def PlinkGWAS(plinkexe, bfile, outprefix, covs=None, nosex=False,
         plinkgwas += ' --threads %s' % threads
     if maxmem:
         plinkgwas += ' --memory %s' % maxmem 
-    if validate:
-        plinkgwas += ' --keep %s_train.keep' % bfile
+    if validate :
+        plinkgwas += ' --keep %s_test.keep' % bfile
     out = executeLine(plinkgwas)  
     return pd.read_table('%s_gwas.assoc.linear' % outprefix, 
                          delim_whitespace=True)
@@ -166,7 +166,7 @@ def main(args):
                            noenv=args.noenv)
     if args.GWAS:
         gwas = PlinkGWAS(args.plinkexe, args.bfile, args.outprefix, args.covs, 
-                  args.nosex, args.threads, args.maxmem)
+                  args.nosex, args.threads, args.maxmem, validate=args.validate)
         merged = gwas.merge(truebeta, on='SNP')
         slope, intercept, r2, p_value, std_err = stats.linregress(merged.beta, 
                                                                   merged.BETA)
@@ -194,5 +194,6 @@ if __name__ == '__main__':
     parser.add_argument('-M', '--maxmem', default=False, action='store')
     parser.add_argument('-e', '--noenv', default=False, action='store_true')
     parser.add_argument('-f', '--causalmean', default=0, type=float)
+    parser.add_argument('-v', '--validate', default=None)
     args = parser.parse_args()
     main(args)    

@@ -68,6 +68,7 @@ def train_test(bfile, splits=10):
                                             header=False,index=False, sep=' ')
         fam.loc[~msk, ['FID', 'IID']].to_csv('%s_test.keep' % (bfile), 
                                              header=False, index=False, sep=' ')
+        
     
 def simulate_phenos(bed, label, plinkexe, ncausal, h2, thr=False, mem=False, 
                     snps=None, frq=None, causaleff=None, ext='png', 
@@ -78,7 +79,7 @@ def simulate_phenos(bed, label, plinkexe, ncausal, h2, thr=False, mem=False,
     '''
     if os.path.isfile('pheno.pickle'):
         with open('pheno.pickle', 'rb') as f:
-            gwas, truebeta = pickle.load(f)
+            gwas, truebeta, bestr2, bed = pickle.load(f)
     else:
         if not os.path.isfile('%s.full'%(label)):
             geneff, truebeta , validsnpfile = TruePRS(label, bed, h2, ncausal, 
@@ -88,11 +89,12 @@ def simulate_phenos(bed, label, plinkexe, ncausal, h2, thr=False, mem=False,
         else:
             truebeta = pd.read_table('%s.full'%(label), delim_whitespace=True) 
                                    #header=None, names=['SNP', 'Allele', 'beta'])
-            score = pd.read_table('%s.profile'%(label), delim_whitespace=True)
+            geneff = pd.read_table('%s.profile'%(label), delim_whitespace=True)
             validsnpfile = '%s.totalsnps' % label
         # Generate the subset bfile
         subset = '%s --bfile %s --extract %s --make-bed --out %s'
-        execute(subset % (plinkexe, bed, validsnpfile, label))        
+        execute(subset % (plinkexe, bed, validsnpfile, label))  
+        bed = os.path.join(os.getcwd(), label)
         if splits:
             train_test(label, splits=splits)        
         if not os.path.isfile('%s.prs_pheno.gz'%(label)):
@@ -116,9 +118,10 @@ def simulate_phenos(bed, label, plinkexe, ncausal, h2, thr=False, mem=False,
         plt.tight_layout()    
         plt.savefig('%s_truebetavsinferred.%s' % (label, ext))
         plt.close()
+        bestr2 = stats.linregress(reference.PHENO, reference.gen_eff)[2]**2
         with open('pheno.pickle', 'wb') as f:
-            pickle.dump((gwas, truebeta), f)
-    return gwas, truebeta
+            pickle.dump((gwas, truebeta, bestr2, bed), f)
+    return gwas, truebeta, bestr2, bed
   
 def simulate_clump_ref(args, ref, f1, pthresh, split=False):
     if args.debug:
@@ -127,14 +130,16 @@ def simulate_clump_ref(args, ref, f1, pthresh, split=False):
         rstep = 0.1
     if os.path.isfile('refclump.pickle'):
         with open('refclump.pickle', 'rb') as f:
-            causals, causalfn, truebeta2, gwas2, resE = pickle.load(f)
+            pick = pickle.load(f)
+            causals, causalfn, truebeta2, gwas2, resE, bestr2ref = pick
     else:
         if not os.path.isfile('PhenoVsPRS_%s.png' % ref):
             ## Simulate phenotypes
-            gwas2, truebeta2 = simulate_phenos(args.reference,ref,args.plinkexe, 
-                                               args.ncausal, args.h2, 
-                                               args.threads, args.maxmem,frq=f1,
-                                               ext=args.quality, splits=split)
+            gwas2, truebeta2, bestr2ref, refbed = simulate_phenos(
+                args.reference, ref, args.plinkexe, args.ncausal, args.h2, 
+                args.threads, args.maxmem, frq=f1, ext=args.quality, 
+                splits=split)
+            args.reference = refbed
             causalfn = '%s.score'%(ref)
             causals = pd.read_table(causalfn, delim_whitespace=True,
                                     header=None, names=['SNP', 'A1', 'True_beta'
@@ -166,13 +171,14 @@ def simulate_clump_ref(args, ref, f1, pthresh, split=False):
             causals = pd.read_table(causalfn, delim_whitespace=True,header=None, 
                                     names=['SNP', 'A1', 'True_beta']) 
         with open('refclump.pickle', 'wb') as f:
-            obj = (causals, causalfn, truebeta2, gwas2, resE)
+            obj = (causals, causalfn, truebeta2, gwas2, resE, bestr2ref)
             pickle.dump(obj, f)
-    return causals, causalfn, truebeta2, gwas2, resE
+    return causals, causalfn, truebeta2, gwas2, resE, bestr2ref
     
 def main(args):   
     if args.debug:
         pthresh=('1.0,0.5,0.1,10E-3,10E-7') 
+        args.step=10
     else:
         pthresh=('1.0,0.8,0.5,0.4,0.3,0.2,0.1,0.08,0.05,0.02,0.01,10E-3,10E-4,'
                  '10E-5,10E-6,10E-7,10E-8')           
@@ -185,18 +191,16 @@ def main(args):
     f1, f2 = read_freqs(args.reference, ref, args.target, tar, args.plinkexe)
     allsnps= f2.SNP
     os.chdir(ref)
-    causals, causalfn, truebeta2, gwas2, resE = simulate_clump_ref(
+    causals, causalfn, truebeta2, gwas2, resE, bestr2ref = simulate_clump_ref(
         args, ref, f1, pthresh, split=args.split)
     gwasfn = os.path.join(cwd, ref, '%s_gwas.assoc.linear' % (ref))
     os.chdir(os.path.join(cwd, tar))
     ceff = truebeta2.loc[:, ['SNP','eff']]
-    gwas1, truebeta1,  = simulate_phenos(args.target, tar, args.plinkexe,
-                                         args.ncausal, args.h2, args.threads, 
-                                         args.maxmem,snps=truebeta2.SNP, frq=f2, 
-                                         causaleff=ceff, ext=args.quality,
-                                         splits=args.split)
-    plotPRSvsPheno('%s.profile' % (tar), label=tar, pheno='%s.pheno' % tar, 
-                   plottype=args.quality)
+    gwas1, truebeta1, bestr2tar, tarbed  = simulate_phenos(
+        args.target, tar, args.plinkexe, args.ncausal, args.h2, args.threads, 
+        args.maxmem,snps=truebeta2.SNP, frq=f2, causaleff=ceff, 
+        ext=args.quality, splits=args.split)
+    args.target = tarbed
     # perform P + T on target genotype with european sumstats
     if os.path.isfile('tarppt.pickle'):
         with open('tarppt.pickle', 'rb') as f:
@@ -208,10 +212,12 @@ def main(args):
                      validate=args.split, rstep=0.4 if args.debug else 0.1)
         with open('tarppt.pickle', 'wb') as f:
             pickle.dump(PpT, f)
-    for f in G('*.nosex'):
+    for f in glob('*.nosex'):
         os.remove(f)
     res = PpT.results    
     bestclumped = res.nlargest(1,'pR2').File.iloc[0]
+    plotPRSvsPheno('%s.profile' % bestclumped, label=tar, pheno='%s.pheno' %tar, 
+                   plottype=args.quality)        
     fn = '%s-%s' % (tar, ref)
     os.chdir(cwd)
     cotags = pd.read_table(args.cotagfn, sep='\t')
@@ -221,7 +227,7 @@ def main(args):
         os.mkdir('Null')
     os.chdir('Null')
     gwas = gwas2.merge(cotags, on='SNP')
-    phenofn = os.path.join(cwd,tar,'%s.pheno' % tar)
+    phenofn = os.path.join(cwd, tar, '%s.pheno' % tar)
     # Cotagging
     sortedcot, beforetail = smartcotagsort(args.prefix, cotags)
     # Tagging Target
@@ -239,7 +245,12 @@ def main(args):
         if args.sortedclump != 'auto':
             clum = parse_sort_clump(args.sortedclump, allsnps)
         else:
-            clum = parse_sort_clump(args.sortedclump, allsnps, ppt=ppts)
+            fil = resE.nlargest(1, 'pR2').File.iloc[0]
+            refppt = os.path.join(cwd, ref, fil)
+            clumtar = parse_sort_clump(args.sortedclump, allsnps, ppt=ppts)
+            clumref = parse_sort_clump(args.sortedclump, allsnps, ppt=refppt)
+            clum = [(clumref, ref), (clumtar, tar)]
+        ppts = [(res, tar, 'c'), (resE, ref, 'm')]
     if args.qr:
         merge, col = prunebypercentage_qr(args.prefix, args.target, gwasfn, 
                                           phenofn, sortedcot, sortedtagT, 
@@ -251,13 +262,13 @@ def main(args):
                                    args.plinkexe, clumped=clum,
                                    step=args.step) 
     
-    plotit(args.prefix, merge, col, args.labels, ppt=ppts, plottype=args.quality
-           )
+    plotit(args.prefix, merge, col, args.labels, ppt=ppts,plottype=args.quality,
+           hline=bestr2ref)
     plotit(args.prefix+'_pval', merge, '-log(P)', args.labels, ppt=ppts, 
-           vline=beforetail, plottype=args.quality) 
+           hline=bestr2ref, plottype=args.quality) 
     plotit(args.prefix+'_rval', merge, r'$R^{2}$', args.labels, ppt=ppts, 
-           plottype=args.quality)
-           
+           plottype=args.quality, hline=bestr2ref)
+    return bestr2ref, args.reference, args.target       
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

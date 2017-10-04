@@ -9,12 +9,14 @@
 
 ## Libraries ###################################################################
 #import unittest
+import pickle
+import tarfile
 import numpy as np
 import pandas as pd
 from time import sleep
 from tqdm import tqdm
 from scipy import stats
-from glob import glob as G
+from glob import glob
 from patsy import dmatrices
 import argparse, os, shutil
 import statsmodels.api as sm
@@ -183,7 +185,8 @@ class PplusT:
         :param float pval: Significance threshold for index SNPs
         :param float r2: LD threshold for clumping       
         """
-        outfn = '%s_%s_%.2f_%d'%(self.outpref, str(pval), r2, self.window)
+        #outfn = '%s_%.2f_%d'%(self.outpref, str(pval), r2, self.window)
+        outfn = '%s_%.2f_%d'%(self.outpref, r2, self.window)
         plink = ('%s --bfile %s -clump %s --clump-p1 %g --clump-p2 1 --clump-r2'
                  ' %f --clump-kb %d --out %s --allow-no-sex --keep-allele-order'
                  ' --pheno %s')
@@ -202,50 +205,53 @@ class PplusT:
             else:
                 raise FileNotFoundError(err)
         return outfn, table      
-    
+
     #---------------------------------------------------------------------------
-    def ScoreClumped(self, clumped):
+    def clumpVars2(self, r2):
         """
-        Compute the PRS for the clumped variants
-        
-        :param str clumpPref: prefix of the clumpped file (plink format) 
+        Use plink to clump variants based on a pval and r2 threshold 
+        :param float r2: LD threshold for clumping       
         """
-        ## merge to get specific clumps
-        name, clumped = clumped
-        if clumped is None:
-            return 
-        #merge = self.bim[self.bim.SNP.isin(clumped.loc[:, 'SNP'])]
-        merge = self.sumstatsdf[self.sumstatsdf.SNP.isin(clumped.loc[:, 'SNP'])]
-        #merge = merge.merge(self.sumstatsdf, on=['SNP', 'BP', 'CHR'])
-        if not 'OR' in merge.columns:
-            cols = ['SNP', 'A1', 'BETA']
-        else:
-            cols = ['SNP', 'A1', 'OR']
-            merge['OR'] = np.log(merge.OR)
-        merge = merge.loc[:, cols]
-        ## write file for scoring
-        merge.to_csv('%s.score'%(name), sep=' ', header=False, 
-                     index=False)
-        ## Score using plink
-        if not os.path.isfile('%s.profile'%(name)):
-            #score = '%s --bfile %s --score %s.score sum --allow-no-sex '
-            score = '%s --bfile %s --score %s.score --allow-no-sex '
-            score += '--keep-allele-order --out %s --pheno %s'
-            if self.validate:
-                score += ' --keep %s_test.keep'
-            score = score%(self.plinkexe, self.bfile, name, name, self.phenofn, 
-                           self.bfile)
-            o,e = execute(score)
-        score = pd.read_table('%s.profile'%(name), delim_whitespace=True)    
-        #score = score.loc[:,['FID', 'IID', 'SCORESUM']].merge(self.pheno, 
-        score = score.loc[:,['FID', 'IID', 'SCORE']].merge(self.pheno, 
-                                                              on=['FID', 'IID'])
-        #score.rename(columns={'SCORESUM':'PRS'}, inplace=True)
+        outfn = '%s_%.2f_%d'%(self.outpref, r2, self.window)
+        #plink = ('%s --bfile %s -clump %s --clump-p1 %g --clump-p2 1 --clump-r2'
+        #         ' %f --clump-kb %d --out %s --allow-no-sex --keep-allele-order'
+        #         ' --pheno %s')
+        if not os.path.isfile('%s.clumped'%(outfn)):
+            plink = plink%(self.plinkexe, self.bfile, self.sumstats, pval, r2,
+                           self.window, outfn, self.phenofn)
+            o, e = execute(plink)
+        ## read Clump file
+        fn = '%s.clumped'%(outfn)
+        try:
+            table = pd.read_table(fn, delim_whitespace=True)  
+        except FileNotFoundError as err:
+            # check if the error is because of lack of significant clums
+            if 'No significant --clump results' in open('%s.log'%outfn).read():
+                table = None
+            else:
+                raise FileNotFoundError(err)
+        return outfn, table    
+    
+    
+    #----------------------------------------------------------------------
+    def range_profiles(self, name, range_tuple, r2, qfiledf):
+        """
+        read single profile from the q-range option
+        """
+        range_label = range_tuple.name
+        assert float(range_tuple.name) == range_tuple.Max
+        nsps = qfiledf[qfiledf.P <= range_tuple.Max].shape[0]
+        profilefn = '%s.%s.profile' % (name, range_label)
+        score = pd.read_table(profilefn, delim_whitespace=True)    
+        score = score.loc[:,['FID', 'IID', 'SCORE']].merge(self.pheno,
+                                                           on=['FID',
+                                                               'IID'])
         score.rename(columns={'SCORE':'PRS'}, inplace=True)
         ## check if peno is binary:
         if set(score.Pheno) <= set([0,1]):
             score['pheno'] = score.Pheno - 1
-            y, X = dmatrices('pheno ~ PRS', score, return_type = 'dataframe')
+            y, X = dmatrices('pheno ~ PRS', score, return_type = 'dataframe'
+                             )
             logit = sm.Logit(y, X)
             logit = logit.fit(disp=0)
             ## get the pseudo r2 (McFadden's pseudo-R-squared.)
@@ -259,42 +265,102 @@ class PplusT:
         err = ((score.pheno - score.PRS)**2).sum()
         d = r'$\sum(Y_{AFR} - \widehat{Y}_{AFR|EUR})^{2}$'
         ## get parameter from name of clumped file
-        pref, pval, ld, window = name.split('_')
-        self.results = self.results.append([{'File':name, 'LDthresh':ld, 
-                                             'Pthresh':pval, 'pR2':pR2, 
-                                             'pval':p_value, 
-                                             'SNP kept': merge.shape[0], d:err}]
-                                           )
+        return {'File':'%s.%s' % (name, range_label), 'LDthresh':r2, 
+                'Pthresh':range_label, 'pR2':pR2,'pval':p_value,'SNP kept':nsps,
+                d:err}     
+        
+
+    #---------------------------------------------------------------------------
+    def ScoreClumped(self, clumped, r2):
+        """
+        Compute the PRS for the clumped variants
+        
+        :param str clumpPref: prefix of the clumpped file (plink format) 
+        """
+        ## merge to get specific clumps
+        name, clumped = clumped
+        if not os.path.isfile('%s.pickle' % (name)):
+            if clumped is None:
+                return 
+            merge = self.sumstatsdf[self.sumstatsdf.SNP.isin(clumped.loc[:, 
+                                                                         'SNP'])
+                                    ]
+            if not 'OR' in merge.columns:
+                cols = ['SNP', 'A1', 'BETA']
+            else:
+                cols = ['SNP', 'A1', 'OR']
+                merge['OR'] = np.log(merge.OR)
+            merge = merge.loc[:, cols]
+            ## write file for scoring
+            merge.to_csv('%s.score'%(name), sep=' ', header=False, 
+                         index=False)
+            ## Score using plink
+            qrange, qfile, qr, qf = self.qfile(clumped, r2)
+            score = ('%s --bfile %s --score %s.score '
+                     '--q-score-range %s %s --allow-no-sex --keep-allele-or'
+                     'der --out %s --pheno %s')
+            score = score%(self.plinkexe, self.bfile, name, qrange, qfile, name,
+                           self.phenofn)
+            if self.validate:
+                score += ' --keep %s_test.keep' % self.bfile            
+            o,e = execute(score)
+            l = [self.range_profiles(name, range_label,r2,qf) for range_label in 
+                 qr.itertuples()]
+            with open('%s.pickle' % name, 'wb') as f:
+                pickle.dump(l, f)
+        else:
+            with open('%s.pickle' % name, 'rb') as f:
+                l = pickle.load(f)
+        self.results = self.results.append(l).reset_index(drop=True)
+        top = glob('%s.profile' % self.results.nlargest(1, 'pR2').File.tolist(
+            )[0])
+        with tarfile.open('Profiles_%.2f.tar.gz' % r2, mode='w:gz') as t:
+            for fn in glob('*.profile'):
+                if fn not in top:
+                    t.add(fn)
+                    os.remove(fn)        
     
     #----------------------------------------------------------------------
-    def qfile(self):
+    def qfile(self, clumped, r2):
         """
         generate the qfile for --q-score-range
         """
-        df = pd.DataFrame({'name':[str(x) for x in self.Ps], 'min'=np.zeros(len(
-            self.Ps)), 'max': self.Ps})
-        
+        qrange = '%s_%.2f.qrange' % (self.outpref, r2)
+        qfile = '%s%.2f.qfile' % (self.outpref, r2)
+        qr = pd.DataFrame({'name':[str(x) for x in self.Ps], 'Min':np.zeros(len(
+            self.Ps)), 'Max': self.Ps})
+        order = ['name', 'Min', 'Max']
+        qr.loc[:, order].to_csv(qrange, header=False, index=False, sep =' ')
+        qf = clumped.loc[:,['SNP','P']]
+        qf.to_csv(qfile, header=False, index=False, sep=' ')
+        return qrange, qfile, qr, qf
     
     #---------------------------------------------------------------------------
     def executeRange(self):
         """
         perform the grid optimization
         """
-        combos = ((x, y) for y in self.Ps for x in self.LDs)
+        #combos = ((x, y) for y in self.Ps for x in self.LDs)
         print('Performing clumping in %s...' % self.outpref)
-        for r2, pval in tqdm(combos, total=(len(self.Ps)*len(self.LDs))):
-            self.ScoreClumped(self.clumpVars(pval, r2))
+        #for r2, pval in tqdm(combos, total=(len(self.Ps)*len(self.LDs))):
+        for r2 in tqdm(self.LDs, total=len(self.LDs)):
+            self.ScoreClumped(self.clumpVars(1.0, r2), r2)
         self.results.sort_values('pR2', inplace=True, ascending=False)
         self.results.to_csv('%s.results'%(self.outpref), sep='\t', index=False)
-        top10 = self.results.nlargest(10, 'pR2')
+        # plot results for comparisons
+        piv = self.results.pivot_table(index='SNP kept', values=['pval', 'pR2'])
+        piv.plot()
+        plt.savefig('%s_PpT.pdf' % self.outpref)
+        
+        top10 = self.results.nlargest(10, 'pR2').reset_index(drop=True)
         top = top10.nlargest(1, 'pR2')
-        for i in G(top.File[0]):
+        for i in glob('%s.*' % top.File[0]):
             shutil.copy(i, '%s.BEST'%(i))        
         if self.clean:
             self.cleanup(top10)
         if not os.path.isdir('LOGs'):
             os.mkdir('LOGs')
-        for f in G('*.log'):
+        for f in glob('*.log'):
             shutil.move(f, 'LOGs')
         
     #----------------------------------------------------------------------
@@ -302,10 +368,11 @@ class PplusT:
         """
         cleanup files and report the top 10 predictions
         """
+        print('Cleaning up ...')
         files = self.results.File
         tocle = files[~files.isin(top10.File)]
-        tocle = [x for y in tocle for x in G('%s*' % y)]
-        print('Cleaning up ...')
+        tocle = [x for y in tocle for x in glob('%s*' % y)]
+        profiles = glob('*.profile')                
         for fi in tqdm(tocle, total=len(tocle)):
             if os.path.isfile(fi):
                 os.remove(fi)
@@ -367,6 +434,7 @@ def plotPRSvsPheno(profilefn, label='EUR', pheno=None, plottype='png'):
     """
     Read the P+T best result and plot it against the phenotype
     """
+    prefix = profilefn[:profilefn.rfind('.')]
     df = pd.read_table(profilefn, delim_whitespace=True)
     if pheno:
         phe = pd.read_table(pheno, header=None, names=['FID', 'IID', 'PHENO'],
@@ -375,13 +443,14 @@ def plotPRSvsPheno(profilefn, label='EUR', pheno=None, plottype='png'):
     score = 'SCORESUM' if 'SCORESUM' in df.columns else 'SCORE'
     df = df.rename(columns={'PHENO':'$Y_{%s}$' % label, 
                             score:'$PRS_{%s}$' % label})
-    slope, intercept, r2, p_value, std_err = stats.linregress(
+    slope, intercept, r, p_value, std_err = stats.linregress(
         df.loc[:,'$Y_{%s}$' % label], df.loc[:,'$PRS_{%s}$' % label])      
+    r2 = r**2
     ax = df.plot.scatter(x='$Y_{%s}$' % label, y='$PRS_{%s}$' % label)
     ax.add_artist(AnchoredText('$R^{2} = %.3f $' % r2, 2))  
     plt.tight_layout()
     label = label.replace('|', '-')
-    plt.savefig('PhenoVsPRS_%s.%s' % (label, plottype))
+    plt.savefig('%s_PhenoVsPRS_%s.%s' % (prefix, label, plottype))
            
 #----------------------------------------------------------------------
 def main(args):
@@ -393,9 +462,12 @@ def main(args):
     else:
         PpT = PplusT(args.bfile, args.plinkexe, args.prefix, args.LDwindow, 
                  args.sumstats, args.pheno, args.rstart, args.rstop, args.rstep,
-                 args.pstart, args.pstop, args.customP, args.clean)
+                 args.pstart, args.pstop, args.customP, args.clean, 
+                 args.validate)
         res = PpT.results
-    profilefn = '%s.profile' % res.nlargest(1,'pR2').File[0]
+    fil = res.nlargest(1,'pR2').reset_index(drop=True).loc[0,['File','Pthresh']
+                                                           ].tolist()
+    profilefn = '%s.%s.profile' % tuple(fil)
     plotPRSvsPheno(profilefn, label=args.label)
 
 if __name__ == '__main__':
@@ -439,7 +511,11 @@ if __name__ == '__main__':
     parser.add_argument('-z', '--clean', help='Cleanup the clump and profiles', 
                         default=False, action='store_true')    
     parser.add_argument('-L', '--label', help='Label of the populations being' +
-                        ' analyzed.', default='EUR')      
+                        ' analyzed.', default='EUR')     
+    parser.add_argument('-S', '--validate', help=('Filename of individuals to '
+                                                  'validate with in plink forma'
+                                                  't for the --keep flag'), 
+                                            default=None)      
     
     args = parser.parse_args()
     main(args)

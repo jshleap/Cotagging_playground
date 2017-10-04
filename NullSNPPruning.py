@@ -4,6 +4,7 @@ Null model of SNP pruning
 import os
 import shutil
 import pickle
+import tarfile
 import argparse
 import numpy as np
 import pandas as pd
@@ -83,8 +84,9 @@ def scoreit(bfile, gwasfn, outpref, phenofile, plinkexe):
     compute the PRS or profile given <score> betas and <bfile> genotype
     """
     #score = ('%s --bfile %s --score %s.score sum --allow-no-sex '
-    score = ('%s --bfile %s --extract %s.extract --score %s 2 4 7 header --allo'
-             'w-no-sex --keep-allele-order --pheno %s --out %s')
+    score = ('%s --bfile %s --extract %s.extract --score %s 2 4 7 header no-mea'
+             'n-imputation --allow-no-sex --keep-allele-order --pheno %s --out '
+             '%s')
     score = score%(plinkexe, bfile, outpref, gwasfn, phenofile, outpref)
     #print('executing %s' % score)
     o,e = execute(score)  
@@ -104,7 +106,7 @@ def smartcotagsort(prefix, gwaswcotag, column='Cotagging'):
         tail = pd.DataFrame()
         grouped = gwaswcotag.groupby(column)
         keys = sorted(grouped.groups.keys(), reverse=True)
-        for key in tqdm(keys,total=len(keys)):
+        for key in tqdm(keys, total=len(keys)):
             df = grouped.get_group(key)
             sorteddf = sorteddf.append(df.loc[df.index[0],:])
             tail = tail.append(df.loc[df.index[1:],:])
@@ -120,8 +122,9 @@ def set_first_step(nsnps, step):
     Define the range starting by adding one snp up the the first step
     """
     onesnp = 100/nsnps
-    initial = np.arange(onesnp, step + onesnp, onesnp)
-    rest = np.arange(step + onesnp, 100 + step, step)
+    # just include the first 200 snps
+    initial = np.arange(onesnp, (200 * onesnp) + onesnp, onesnp)
+    rest = np.arange(initial[-1] + onesnp, 100 + step, step)
     full = np.concatenate((initial, rest))
     if full[-1] < 100:
         full[-1] = 100
@@ -181,8 +184,8 @@ def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
     percentages = set_first_step(nsnps, step)
     order = ['label', 'Min', 'Max']
     qr = pd.DataFrame({'label':percentages, 'Min':np.zeros(len(percentages)),
-                      'Max':(np.array(percentages, dtype=float)*(nsnps/100)
-                             ).astype(int)}).loc[:, order]
+                      'Max':np.around(np.array(percentages, dtype=float)*(
+                          nsnps/100)).astype(int)}).loc[:, order]
     qr.to_csv(qrange, header=False, index=False, sep =' ')    
     qfile = '%s_%s.qfile'    
     c = qfile % (prefix, 'cotag')
@@ -199,11 +202,12 @@ def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
                                               index=False)    
     out = (qr, c, t, r, a) 
     if clumped is not None:
-        p = qfile % (prefix, 'clum')
-        out += (p,)
-        clumped = clumped[clumped.SNP.isin(sortedcota.SNP)]  
-        clumped.loc[:,['SNP', 'Index']].to_csv(p, sep=' ', header=False, 
-                                               index=False)
+        for clumped, kind in clumped:
+            p = qfile % (prefix, 'clum%s' % kind)
+            out += (p,)
+            clumped = clumped[clumped.SNP.isin(sortedcota.SNP)]  
+            clumped.loc[:,['SNP', 'Index']].to_csv(p, sep=' ', header=False, 
+                                                   index=False)
     return out 
     
 def cleanup():
@@ -248,7 +252,6 @@ def process_profile_qr(bfile, gwasfn, qrdf, dataframe, phenofile, plinkexe
     """
     produce and process the profile file with the ---q-score-range
     """
-    
     if not os.path.isfile(profilefn):
         fn = profilefn[: profilefn.rfind('.')]
         dataframe.to_csv('%s.extract' % fn, sep=' ', index=False, header=False)
@@ -365,12 +368,12 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag,
         qr = out[0]
         qrange = '%s.qrange' % prefix
         frames = []
-        for qfile in out[1:]:
+        for qfile in tqdm(out[1:], total=len(out[1:])):
             suf = qfile[qfile.find('_') +1 : qfile.rfind('.')]
             ou = '%s_%s' % (prefix, suf)
-            score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s '
-                     '%s --allow-no-sex --keep-allele-order --pheno %s --out %s'
-                     )
+            score = ('%s --bfile %s --score %s 2 4 7 header '
+                     '--q-score-range %s %s --allow-no-sex --keep-allele-order '
+                     '--pheno %s --out %s')
             score = score%(plinkexe, bfile, gwasfn, qrange, qfile,  phenofile, 
                            ou)
             o,e = execute(score)       
@@ -380,6 +383,11 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag,
                                               tar_label, ref_label)
                                for x in qr.itertuples()])
             frames.append(df)
+            with tarfile.open('Profiles_%s.tar.gz' % ou, mode='w:gz') as t:
+                for fn in glob('*.profile'):
+                    if os.path.isfile(fn):
+                        t.add(fn)
+                        os.remove(fn)             
         merge = reduce(lambda x, y: pd.merge(x, y, on = 'SNP kept'), frames)
         merge['Percentage of SNPs used'] = (merge.loc[:, 'SNP kept']/merge.loc[
             :, 'SNP kept'].max()) * 100
@@ -452,10 +460,12 @@ def plotit(prefix, merge, col, labels, ppt=None, line=False, vline=None,
                            c='c', s=2, alpha=0.5)   
         merge.plot.scatter(x=x, y=col+'_tagr', label='Tagging %s' % ref, ax=ax, 
                            c='m', s=2, alpha=0.5)  
-        if isinstance(ppt, str):
-            merge.plot.scatter(x=x, y=col+'_clum', label='Sorted Clump', ax=ax, 
-                               c='k', s=2, alpha=0.5)             
-        elif ppt is not None:
+        #if isinstance(ppt, str):
+        merge.plot.scatter(x=x, y=col+'_clum%s' % ref , ax=ax, c='0.5', s=2, 
+                           alpha=0.5, label='Sorted Clump %s' % ref, marker='*')             
+        merge.plot.scatter(x=x, y=col+'_clum%s' % tar , ax=ax, c='k', s=2, 
+                           alpha=0.5, label='Sorted Clump %s' % tar)        
+        if ppt is not None:
             for ppt, lab, color in ppt:
                 includePPT(ppt, lab, col, ax, x, color)
         
