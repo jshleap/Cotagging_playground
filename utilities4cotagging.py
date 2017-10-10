@@ -41,7 +41,7 @@ def read_BimFam(prefix):
 
 
 #----------------------------------------------------------------------
-def read_freq(bfile, plinkexe, freq_threshold=0.1):
+def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     """
     Generate and read frequency files and filter based on threshold
     
@@ -53,8 +53,9 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1):
     low = freq_threshold
     if not os.path.isfile('%s.frq.gz' % bfile):
         nname = os.path.split(bfile)[-1]
-        frq = '%s --bfile %s --freq gz --keep-allele-order --out %s'
-        line = frq % (plinkexe, bfile, nname)
+        frq = ('%s --bfile %s --freq gz --keep-allele-order --out %s --memory '
+               '%d --threads %d')
+        line = frq % (plinkexe, bfile, nname, maxmem, threads)
         o,e = executeLine(line)
         frq = pd.read_table('%s.frq.gz' % nname, delim_whitespace=True)
     else:
@@ -63,7 +64,7 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1):
     return frq[(frq.MAF < high) & (frq.MAF > low)]
 
 #----------------------------------------------------------------------
-def train_test(prefix, bfile, plinkexe, splits=10):
+def train_test(prefix, bfile, plinkexe, splits=10, maxmem=1700, threads=1):
     """
     Generate a list of individuals for training and a list for validation.
     The list is to be passed to plink. It will take one split as validation and
@@ -75,22 +76,21 @@ def train_test(prefix, bfile, plinkexe, splits=10):
     :param int splits: Number of splits to be done
     """
     trainthresh = (splits - 1) / splits
-    if not os.path.isfile('%s_train.keep' % (bfile)) and not os.path.isfile(
-        '%s_test.keep' % (bfile)):
-        fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, 
-                            header=None,names=['FID', 'IID', 'a', 'b', 'c', 'd']
-                            )
-        msk = np.random.rand(len(fam)) < trainthresh
-        fam.loc[msk, ['FID', 'IID']].to_csv(keeps['train'], header=False, 
-                                            index=False, sep=' ')
-        fam.loc[~msk,['FID', 'IID']].to_csv(keeps['test'], header=False, 
-                                            index=False, sep=' ')
-    keeps= {'%s_test'% prefix:os.path.join(os.getcwd(),'%s_train.keep' % bfile), 
-            '%s_train'% prefix: os.path.join(os.getcwd(),'%s_test.keep' % bfile)
-            }    
-    make_bed = '%s --bfile %s --keep %s --make-bed --out %s'
-    for k,v in keeps.items():
-        executeLine(make_bed % (plinkexe, bfile, v, k))
+    fn = os.path.split(bfile)[-1]
+    keeps= {'%s_train'% prefix:os.path.join(os.getcwd(),'%s_train.keep' % fn), 
+            '%s_test'% prefix: os.path.join(os.getcwd(),'%s_test.keep' % fn)
+            }      
+    fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, header=None,
+                        names=['FID', 'IID', 'a', 'b', 'c', 'd'])
+    msk = np.random.rand(len(fam)) < trainthresh
+    fam.loc[msk, ['FID', 'IID']].to_csv(keeps['%s_train'% prefix], header=False, 
+                                        index=False, sep=' ')
+    fam.loc[~msk,['FID', 'IID']].to_csv(keeps['%s_test' % prefix], header=False, 
+                                        index=False, sep=' ')
+    make_bed = ('%s --bfile %s --keep %s --make-bed --out %s --memory %d '
+                '--threads %d')
+    for k, v in keeps.items():
+        executeLine(make_bed % (plinkexe, bfile, v, k, maxmem, threads))
     return list(keeps.keys())
 
 #----------------------------------------------------------------------
@@ -147,6 +147,7 @@ def parse_sort_clump(fn, allsnps):
     tail = [x.split('(')[0] for y in SNPs for x in y.split(',') if x.split('(')[
         0] != 'NONE']
     full = pd.DataFrame(df.SNP.tolist() + tail, columns=['SNP'])
+    full = full[full.SNP.isin(allsnps)]
     rest = allsnps[~allsnps.isin(full.SNP)]
     df = pd.concat((full.SNP,rest)).reset_index(drop=False)
     df.rename(columns={'index':'Index'}, inplace=True)   
@@ -185,7 +186,7 @@ def smartcotagsort(prefix, gwaswcotag, column='Cotagging'):
 
 
 #---------------------------------------------------------------------------
-def set_first_step(nsnps, step):
+def set_first_step(nsnps, step, init_step=2, every=False):
     """
     Define the range starting by adding one snp up the the first step
     
@@ -193,10 +194,13 @@ def set_first_step(nsnps, step):
     :param float step: step for the snp range
     """
     onesnp = 100/nsnps
-    # just include the first 200 snps
-    initial = np.arange(onesnp, (200 * onesnp) + onesnp, onesnp)
-    rest = np.arange(initial[-1] + onesnp, 100 + step, step)
-    full = np.concatenate((initial, rest))
+    if every:
+        full = np.arange(onesnp, 100 + onesnp, onesnp)
+    else:
+        # just include the first 200 snps in step of 2
+        initial = np.arange(onesnp, (200 * onesnp) + onesnp, (init_step*onesnp))
+        rest = np.arange(initial[-1] + onesnp, 100 + step, step)
+        full = np.concatenate((initial, rest))
     if full[-1] < 100:
         full[-1] = 100
-    return ['%.2f' % x for x in full]
+    return full
