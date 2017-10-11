@@ -293,7 +293,8 @@ if __name__ == '__main__':
                         default=0, type=int)     
     parser.add_argument('-S', '--alpha_step', help=('Step for the granularity of'
                                                    ' the grid search. Default: '
-                                                   '.1'), default=1, type=float) 
+                                                   '.1'), default=0.1, 
+                                              type=float) 
     parser.add_argument('-E', '--step', help=('Percentage of snps to be tested '
                                               'at each step is 0.1'),
                                         default=0.1, type=float)      

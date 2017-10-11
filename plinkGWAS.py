@@ -5,13 +5,16 @@
   Purpose: Run plink gwas analyses
   Created: 09/30/17
 """
+import os
 import argparse
+import matplotlib
 import numpy as np
 import pandas as pd
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import train_test, executeLine
-
 plt.style.use('ggplot')
+
 #----------------------------------------------------------------------
 def gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False, 
          threads=False, maxmem=False, validsnpsfile=None):
@@ -22,9 +25,12 @@ def gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
     :param str plinkexe: Path and executable of plink
     :param str bfile: Prefix for the bed fileset
     :param str outprefix: Prefix for the outputs
+    :param str pheno: Filename to phenotype in plink format
     :param bool nosex: If option --allow-no-sex should be used
     :param str covs: Filename with the covariates to use
     :param str validsnpsfile: file with valid snps to pass to --extract 
+    :param int maxmem: Maximum allowed memory
+    :param int trheads: Maximum number of threads to use
     """   
     ## for plinkgwas string:
     ## 1) plink path and executable
@@ -33,24 +39,32 @@ def gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
     ## 4) names of the columns to use in the covariance file separated by "," 
     ## or '-' if range
     ## 5) prefix for outputs
+    # Format CLA
     plinkgwas = "%s --bfile %s --assoc fisher-midp --linear --pheno %s"
     plinkgwas+= " --prune --out %s_gwas --ci 0.95 --keep-allele-order --vif 100"
     plinkgwas = plinkgwas%(plinkexe, bfile, pheno, outprefix)
+    # Include a subset of snps file if required
     if validsnpsfile is not None:
         plinkgwas+= " --extract %s" % validsnpsfile
+    # Include Covariates
     if covs:
         plinkgwas += " --covar %s keep-pheno-on-missing-cov" % covs
+    # Ignore sex
     if nosex:
         plinkgwas += ' --allow-no-sex'
     else:
         plinkgwas += ' --sex'
+    # Inlcude threads and memory
     if threads:
         plinkgwas += ' --threads %s' % threads
     if maxmem:
         plinkgwas += ' --memory %s' % maxmem 
+    # execulte CLA
     out = executeLine(plinkgwas)  
-    return pd.read_table('%s_gwas.assoc.linear' % outprefix, 
-                         delim_whitespace=True)
+    # Set the Outfile
+    fn = '%s_gwas.assoc.linear' % outprefix
+    # Return the dataframe of the GWAS and its filename
+    return pd.read_table(fn, delim_whitespace=True), fn
 
 
 #----------------------------------------------------------------------
@@ -59,32 +73,36 @@ def manhattan_plot(outfn, p_values, causal_pos=None, alpha = 0.05, title=''):
     Generates a manhattan plot for a list of p-values. Overlays a horizontal 
     line indicating the Bonferroni significance threshold assuming all p-values 
     derive from independent test.
-    p-values: a list of single-test p-values
-    alpha: the single-site significance threshold
+    
+    :param str outfn: Outfilename
+    :param list causal_pos: List with floats to include vertical lines as causal
+    :param list p-values: A list of single-test p-values
+    :param float alpha: The single-site significance threshold
+    :param str title: Include a title in the plot
     """
-    ## get the lenght of the p-values array
+    # Get the lenght of the p-values array
     L = len(p_values)
-    ## compute the bonferrony corrected threshold
+    # Compute the bonferrony corrected threshold
     bonferroni_threshold = alpha / L 
-    ## make it log
+    # Make it log
     logBT = -np.log10(bonferroni_threshold)
-    ## fix infinites
+    # Fix infinites
     p_values = np.array(p_values)
     p_values[np.where(p_values < 1E-10)] = 1E-10
-    ## make the values logaritm
+    # Make the values logaritm
     vals = -np.log10(p_values)
-    ## plot it
+    # Plot it
     fig = plt.figure()
     ax2 = fig.add_subplot(111)
-    ## add threshold line
+    # Add threshold line
     ax2.axhline(y=logBT, linewidth=1, color='r', ls='--')
-    ## add shaded regions on the causal positions
+    # Add shaded regions on the causal positions
     if causal_pos is not None:
         [ax2.axvspan(x-0.2,x+0.2, facecolor='0.8', alpha=0.8) for x in 
          causal_pos]
-    ## plot one point per value
+    # Plot one point per value
     ax2.plot(vals, '.', ms=1)
-    ## zoom-in / limit the view to different portions of the data
+    # Zoom-in / limit the view to different portions of the data
     Ymin = min(vals)
     Ymax = max(vals)
     ax2.set_ylim(0, Ymax+0.2)  # most of the data
@@ -101,23 +119,29 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
     """
     execute the gwas
     
-        :param str plinkexe: Path and executable of plink
+    :param str plinkexe: Path and executable of plink
     :param str bfile: Prefix for the bed fileset
     :param str outprefix: Prefix for the outputs
     :param bool nosex: If option --allow-no-sex should be used
     :param str covs: Filename with the covariates to use
     :param int/bool validate: To split the bed into test and training 
     """
+    # Create a test/train validation sets
     if validate is not None:
-        train, test = train_test(outprefix, bfile, plinkexe, splits=validate)
+        train, test = train_test(outprefix, bfile, plinkexe, validate, maxmem,
+                                 threads)
     else:
-        train = bfile
-    gws = gwas(plinkexe, train, outprefix, pheno, covs=covs, nosex=nosex, 
+        train, test = bfile, None   
+    # Run the GWAS
+    gws, fn = gwas(plinkexe, train, outprefix, pheno, covs=covs, nosex=nosex, 
                threads=threads, maxmem=maxmem, validsnpsfile=validsnpsfile)
+    # Make a manhatan plot
     if plot:
         manhattan_plot('%s.manhatan.pdf' % outprefix, gws.P, causal_pos, 
                        alpha=0.05)
-    return gws
+    # Return the gwas dataframe, its filename, and the train and test sets 
+    # prefix
+    return gws, os.path.join(os.getcwd(), fn), train, test
     
 
 if __name__ == '__main__':
@@ -134,8 +158,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--nosex', default=False, action='store_true')
     parser.add_argument('-l', '--plot', help=('Generate a manhatan plot'),
                         default=False, action='store_true') 
-    parser.add_argument('-t', '--threads', default=False, action='store')
-    parser.add_argument('-M', '--maxmem', default=False, action='store')    
+    parser.add_argument('-t', '--threads', default=1, type=int)
+    parser.add_argument('-M', '--maxmem', default=1700, type=int)    
     args = parser.parse_args()
     plink_gwas(args.plinkexe, args.bfile, args.prefix,args.pheno,covs=args.covs, 
                nosex=args.nosex, threads=args.threads, maxmem=args.maxmem,
