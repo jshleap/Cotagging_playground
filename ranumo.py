@@ -27,7 +27,7 @@ plt.style.use('ggplot')
 
 
 #---------------------------------------------------------------------------
-def read_scored_qr(profilefn, phenofile, kind, nsnps):
+def read_scored_qr(profilefn, phenofile, kind, nsnps, profiles):
     """
     Read the profile file a.k.a. PRS file or scoresum
     
@@ -36,6 +36,8 @@ def read_scored_qr(profilefn, phenofile, kind, nsnps):
     :param str kind: label to match the scoring type (e.g cotag, clump, etc..)
     :param int nsps: number of snps that were used to score the profile fn
     """
+    if not profilefn in profiles:
+        return {}
     # Read the profile into a pandas dataframe
     sc = pd.read_table(profilefn, delim_whitespace=True)
     # Read the phenotype file into a pandas dataframe
@@ -101,7 +103,14 @@ def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
     # Get a series with the percentages to be explore with emphasis in the first
     # 200
     percentages = set_first_step(nsnps, step, every=every)
-    snps = (percentages*allsnp)/100
+    snps = np.around((percentages*allsnp)/100).astype(int)
+    try:
+        # Check if there are repeats in ths set of SNPS
+        assert sorted(snps) == sorted(set(snps))
+    except AssertionError:
+        snps = ((percentages * allsnp) / 100).astype(int)
+        assert sorted(snps) == sorted(set(snps))
+
     labels = ['%.2f' % x for x in percentages]
     # Generate the qrange file?
     order = ['label', 'Min', 'Max']
@@ -176,10 +185,11 @@ def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
              '--memory %d --threads %d')
     score = score%(plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
                    maxmem, threads)
-    o,e = executeLine(score)       
+    o,e = executeLine(score)
+    profs = read_log(ou)
     df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label), 
                                       phenofile, suf, 
-                                      round(float(x.label) * frac_snps))
+                                      round(float(x.label) * frac_snps), profs)
                        for x in qr.itertuples()])
     #frames.append(df)    
     with tarfile.open('Profiles_%s.tar.gz' % ou, mode='w:gz') as t:
@@ -244,6 +254,7 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
     if os.path.isfile('pbp.pickle'):
         with open('pbp.pickle', 'rb') as f:
             merge = pickle.load(f)
+            qrangefn = '%s.qrange' % prefix
     else:
         print('Performing prunning ...')
         # Execute the qrange scoring and read it into a dataframe
@@ -284,6 +295,9 @@ def plotit(prefix, merge, col, labels, ppt=None, line=False, vline=None,
     :param str plottype: Format to save the plot in (follows matplotlib formats)
     :param str x: Name of column to be use in x axis
     """
+    # ensure numeric
+    for c in merge.columns:
+        merge.loc[:, c] = pd.to_numeric(merge.loc[:, c])
     # Unpack the labels
     ref, tar = labels
     if line:

@@ -117,17 +117,19 @@ def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats,
     score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s '
              '%s --allow-no-sex --keep-allele-order --pheno %s --out %s '
              '--memory %d --threads %d')
-    score = score%(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, 
-                   maxmem, threads)        
+    score = score % (plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou,
+                     maxmem, threads)
     o,e = executeLine(score) 
     # Get the results in dataframe
+    profs_written = read_log(ou)
     df  = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
-                                       phenofile, alpha, x.Max)
-                        for x in qr.itertuples()])  
+                                       phenofile, alpha, x.Max) if (
+        '%s.%.2f.profile' % (ou, float(x.label)) in profs_written) else {}
+                        for x in qr.itertuples()]).dropna()
     # Cleanup
     with tarfile.open('Profiles_%s_%.2f.tar.gz' % (prefix, alpha), mode='w:gz'
                       ) as t:
-        for fn in glob('*.profile'):
+        for fn in glob('%s*.profile' % ou):
             if os.path.isfile(fn):
                 try:
                 # it has a weird behaviour
@@ -162,18 +164,24 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
     :param bool every: test one snp at a time
     """
     # Generate the alpha-space
-    space = np.concatenate((np.array([0.05]), np.arange(0.1, 0.9 + alphastep, 
+    space = np.concatenate((np.array([0, 0.05]), np.arange(0.1, 1 + alphastep,
                                                         alphastep)))
     # Get the number of valid snps fdrom the sorted cotag dataframe
     nsnps = sorted_cotag.shape[0]
-    # Define the number of snps per percentage point and generate the range
-    frac_snps = nsnps/100
-    percentages = set_first_step(nsnps, prunestep, every=every)
-    snps = np.around((percentages*nsnps)/100).astype(int)
-    labels = ['%.2f' % x for x in percentages]
+    frac_snps = nsnps / 100
     # Generate the qrange file?
     order = ['label', 'Min', 'Max']
     if qrangefn is None:
+        # Define the number of snps per percentage point and generate the range
+        percentages = set_first_step(nsnps, prunestep, every=every)
+        snps = np.around((percentages * nsnps) / 100).astype(int)
+        try:
+            # Check if there are repeats in ths set of SNPS
+            assert sorted(snps) == sorted(set(snps))
+        except AssertionError:
+            snps = ((percentages * allsnp) / 100).astype(int)
+            assert sorted(snps) == sorted(set(snps))
+        labels = ['%.2f' % x for x in percentages]
         # Generate the qrange file
         qrange = '%s.qrange' % prefix
         qr = pd.DataFrame({'label':labels, 'Min':np.zeros(len(percentages)),
@@ -253,6 +261,10 @@ def read_n_sort_cotag(prefix, cotagfn, freq):
     # Read cotag
     cotags = pd.read_table(cotagfn, sep='\t')
     # Smart sort it
+    # Check for previous sort
+    prev = glob('*Cotagging.pickle')
+    if prev != []:
+        shutil.copy(prev[0], '%s_Cotagging.pickle' % prefix)
     df, _ = smartcotagsort(prefix, cotags[cotags.SNP.isin(freq.SNP)])
     # Returned the sorted dataframe
     return df.reset_index()
@@ -293,7 +305,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     # Get frequencies of both populations and merge them
     f1 = read_freq(referencebed, plinkexe, freq_threshold=freq_threshold)
     f2 = read_freq(targetbed, plinkexe, freq_threshold=freq_threshold)
-    frqs = f1.merge(f2, on=['CHR', 'SNP'], suffixes=['_%s' % ref, '_%s' % tar])  
+    frqs = f1.merge(f2, on=['CHR', 'SNP'], suffixes=['_%s' % ref,
+                                                         '_%s' % tar])
     # Read the cotag scores
     if os.path.isfile('%s.sorted_cotag' % prefix):
         sorted_cotag = pd.read_table('%s.sorted_cotag' % prefix, sep='\t')
@@ -303,20 +316,20 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                             index=False)    
     # Read and sort the P + T results
     clumpetar = read_n_sort_clumped(ppt_results_tar, frqs.SNP)
-    clumpetar = clumpetar[clumpetar.SNP.isin(frqs.SNP)]
+    #clumpetar = clumpetar[clumpetar.SNP.isin(frqs.SNP)]
     clumperef = read_n_sort_clumped(ppt_results_ref, frqs.SNP)
-    clumperef = clumperef[clumperef.SNP.isin(frqs.SNP)] 
+    #clumperef = clumperef[clumperef.SNP.isin(frqs.SNP)]
     clumpe = [(clumpetar, tar), (clumperef, ref)]
     # Read summary statisctics
-    if isinstance(sumstats, str):
-        ss = pd.read_table(sumstats, delim_whitespace=True)  
-    else:
-        assert isinstance(sumstats, pd.DataFrame)
-        ss = sumstats
+    # if isinstance(sumstats, str):
+    #     ss = pd.read_table(sumstats, delim_whitespace=True)
+    # else:
+    #     assert isinstance(sumstats, pd.DataFrame)
+    #     ss = sumstats
     # Optimize the alphas
-    df = optimize_alpha(prefix, targetbed, sorted_cotag, clumpe, sumstats, 
-                        pheno, plinkexe, alpha_step, tar, prune_step, 
-                        qrangefn, maxmem, threads, strategy, every)
+    df = optimize_alpha(prefix, targetbed, sorted_cotag, clumpe, sumstats,  pheno,
+                        plinkexe, alpha_step, tar, prune_step, qrangefn, maxmem,
+                        threads, strategy, every)
     # Get the best alpha of the optimization
     grouped = df.groupby('alpha')
     best = grouped.get_group(df.loc[0,'alpha'])
@@ -352,10 +365,10 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--target', help=('prefix of the bed fileset in '
                                                 'target'), required=True)
     parser.add_argument('-L', '--labels', help=('Space separated string with '
-                                                'labels of reference and target '
-                                                'populations'), nargs=2)
-    parser.add_argument('-T', '--target_ppt', help=('Filename of the results of '
-                                                    'a PPT run'), default=None) 
+                                                'labels of reference and target'
+                                                ' populations'), nargs=2)
+    parser.add_argument('-T', '--target_ppt', help=('Filename of the results of'
+                                                    ' a PPT run'), default=None)
     parser.add_argument('-r', '--ref_ppt', help=('Filename with results for the'
                                                  ' P+Toptimization in the refer'
                                                  'ence population'), 
@@ -372,9 +385,9 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--pheno', help=('filename of the true phenotype '
                                                'of the target population'), 
                                          required=True)      
-    parser.add_argument('-S', '--alpha_step', help=('Step for the granularity of'
-                                                    ' the grid search. Default: '
-                                                    '.1'), default=0.1, 
+    parser.add_argument('-S', '--alpha_step', help=('Step for the granularity '
+                                                    'of the grid search. Defau'
+                                                    'lt: .1'), default=0.1,
                                               type=float) 
     parser.add_argument('-E', '--prune_step', help=('Percentage of snps to be '
                                                     'tested at each step is 1'

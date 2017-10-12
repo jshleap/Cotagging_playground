@@ -215,10 +215,10 @@ def cleanup(results, clean):
         for fi in tqdm(tocle, total=len(tocle)):
             if os.path.isfile(fi):
                 os.remove(fi)
-    if not os.path.isdir('LOGs'):
-        os.mkdir('LOGs')
-    for f in glob('*.log'):
-        shutil.move(f, 'LOGs')    
+    #if not os.path.isdir('LOGs'):
+    #    os.mkdir('LOGs')
+    #for f in glob('*.log'):
+    #    shutil.move(f, 'LOGs')
 
 #----------------------------------------------------------------------
 def plotppt(outpref, results):

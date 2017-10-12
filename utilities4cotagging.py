@@ -13,6 +13,23 @@ import numpy as np
 import pickle
 import os
 
+#---------------------------------------------------------------------------
+def read_log(prefix):
+    """
+    Read logfile with the profiles written
+
+    :param prefix: prefix of the logfile
+    :return: List of files writtenß
+    """
+    l = []
+    with open('%s.log' % prefix) as F:
+        for line in F:
+            if 'profile written' not in line:
+                continue
+            else:
+                l.append(line.split()[0])
+    return l
+
 #----------------------------------------------------------------------
 def executeLine(line):
     """
