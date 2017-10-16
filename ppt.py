@@ -18,7 +18,7 @@ from tqdm import tqdm
 from glob import glob
 from scipy import stats
 import matplotlib.pyplot as plt
-from utilities4cotagging import executeLine, read_pheno
+from utilities4cotagging import executeLine, read_pheno, parse_sort_clump
 plt.style.use('ggplot')
 
 
@@ -264,6 +264,7 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
     """
+    print('Performing ppt')
     # Read the summary statistics file
     sumstatsdf = pd.read_table(sumstats, delim_whitespace=True)
     # Ensure the phenotype file contains only individuals from the bfile
@@ -288,6 +289,7 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
     # Sort the results by R2 and write them to file
     results.sort_values('R2', inplace=True, ascending=False)
     results.to_csv('%s.results'%(outpref), sep='\t', index=False)
+    #clumped = parse_sort_clump(results.iloc[0], sumstatsdf.SNP)
     # Plot results if necessary
     if plot:
         plotppt(outpref, results)
@@ -330,6 +332,8 @@ if __name__ == '__main__':
                         ' analyzed.', default='EUR')   
     parser.add_argument('-t', '--plot', help='Plot results of analysis', 
                         default=False, action='store_true')      
+    parser.add_argument('-T', '--threads', default=1, type=int)
+    parser.add_argument('-M', '--maxmem', default=3000, type=int)       
     args = parser.parse_args()
     
     LDs = [x if x <= 0.99 else 0.99 for x in sorted(
@@ -343,4 +347,5 @@ if __name__ == '__main__':
             (np.arange(sta, sto), [sto]), axis=0)]
     Ps = sorted(Ps, reverse=True)    
     pplust(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow, 
-           args.pheno, args.plinkexe, plot=args.plot, clean=args.clean)
+           args.pheno, args.plinkexe, plot=args.plot, clean=args.clean, 
+           maxmem=args.maxmem, threads=args.threads)

@@ -18,7 +18,8 @@ plt.style.use('ggplot')
 from utilities4cotagging import read_freq, executeLine
 
 def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None, 
-            causaleff=None, freqthreshold=0.1, maxmem=1700, threads=1):
+            causaleff=None, bfile2=None, freqthreshold=0.1, maxmem=1700, 
+            threads=1, seed=None):
     """
     Generate TRUE causal effects and PRS. Also, subset the SNPs based on 
     frequency
@@ -31,14 +32,21 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
     :param :class pd.Series snps: Series with the names of causal snps
     :param :class pd.DataFrame frq: DataFrame with the MAF frequencies
     :param :class pd.DataFrame causaleff: DataFrame with the true causal effects
+    :param str bfile2: prefix of the plink bedfileset on a second population
     :param float freqthreshold: Lower threshold to filter MAF by
     """
+    # set the seed
+    seed = np.random.randint(1e4) if seed is None else seed
+    print('using seed %d' % seed)
+    np.random.seed(seed=seed)
     # Get the per snp heritability
     h2_snp = h2/ncausal
     if not os.path.isfile('%s.full'%(outprefix)):
         # Read bim file
         if frq is None:
             frq = read_freq(bfile, plinkexe)
+            if bfile2 is not None:
+                frq = frq.merge(read_freq(bfile2, plinkexe), on=['CHR', 'SNP'])
         allsnps = frq.shape[0]
         print ('Total Number of variants available: %d' % allsnps)
         totalsnps = '%s.totalsnps' % outprefix
@@ -51,7 +59,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
             causals = frq[frq.SNP.isin(causaleff.SNP)]
             causals = causals.merge(causaleff, on='SNP')
         elif snps is None:
-            causals = frq.sample(ncausal, replace=False)
+            causals = frq.sample(ncausal, replace=False, random_state=seed)
         else:
             causals = frq[frq.SNP.isin(snps)]
         # If causal effects are provided use them, otherwise get them
@@ -59,11 +67,12 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
             causals['eff'] = np.random.normal(loc=0, scale=np.sqrt(h2_snp), 
                                               size=ncausal)
         # write snps and effect to score file
-        causals.loc[:, 'norm'] = np.sqrt((2 * causals.MAF) * (1 - causals.MAF))
+        causals.loc[:, 'norm'] = np.sqrt((2 * causals.MAF_x) * (
+            1 - causals.MAF_x))
         causals.loc[:, 'beta'] = causals.loc[:, 'eff']/causals.norm      
         scfile = causals.sort_index()
         # Write score to file
-        scfile.loc[:, ['SNP', 'A1', 'beta']].to_csv('%s.score'%(outprefix), 
+        scfile.loc[:, ['SNP', 'A1_x', 'beta']].to_csv('%s.score'%(outprefix), 
                                                     sep=' ', header=False, 
                                                     index=False)
         scfile.to_csv('%s.full'%(outprefix), sep=' ', index=False)        
@@ -127,7 +136,8 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
     
 def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None, 
                        frq=None, causaleff=None, noenv=False, plothist=False,
-                       freqthreshold=0.1,quality='png', maxmem=1700, threads=1):
+                       freqthreshold=0.1, bfile2=None, quality='png', 
+                       maxmem=1700, threads=1, seed=None):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -142,10 +152,13 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None,
     :param :class pd.DataFrame causaleff: DataFrame with the true causal effects
     :param bool noenv: whether or not environmental effect should be added
     :param float freqthreshold: Lower threshold to filter MAF by
+    :param str bfile2: prefix of the plink bedfileset on a second population
     :param str quality: quality of the plot (e.g. pdf, png, jpg)
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
+    :param int seed: random seed to use in samplinh
     """
+    print('Performing qtraits_simulation on %s' % outprefix)
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s'%(causaleff), delim_whitespace=True)
@@ -155,7 +168,9 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None,
         geneff, truebeta , validsnpfile = TruePRS(outprefix, bfile, h2, ncausal, 
                                                   plinkexe, snps=snps, frq=frq, 
                                                   causaleff=causaleff,
-                                                  freqthreshold=freqthreshold)
+                                                  bfile2=bfile2,
+                                                  freqthreshold=freqthreshold, 
+                                                  seed=seed)
     else:
         truebeta = pd.read_table('%s.full' % outprefix, delim_whitespace=True) 
         validsnpfile = '%s.totalsnps' % outprefix   
@@ -188,12 +203,20 @@ if __name__ == '__main__':
                                               'produced by a previous run of '
                                               'this code with the extension '
                                               'full'), default=None)  
+    parser.add_argument('-f', '--freqthreshold', help=('Lower threshold to filt'
+                                                       'er MAF by'),
+                        default=0.1, type=float)
+    parser.add_argument('-2', '--bfile2', help=('prefix of the plink bedfileset'
+                                                'o n a second population'))
+    
     parser.add_argument('-t', '--threads', default=False, action='store')
-    parser.add_argument('-M', '--maxmem', default=False, action='store')    
+    parser.add_argument('-M', '--maxmem', default=False, action='store')  
+    parser.add_argument('-s', '--seed', default=None, type=int)  
     
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal, 
                        args.plinkexe, plothist=args.plothist, 
                        causaleff=args.causal_eff, quality=args.quality, 
-                       maxmem=args.maxmem, threads=args.threads)     
+                       freqthreshold=args.freqthreshold, bfile2=args.bfile2,
+                       maxmem=args.maxmem, threads=args.threads, seed=args.seed)     
     

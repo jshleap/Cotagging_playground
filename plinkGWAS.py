@@ -16,14 +16,14 @@ from utilities4cotagging import train_test, executeLine
 plt.style.use('ggplot')
 
 #----------------------------------------------------------------------
-def gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False, 
+def gwas(plinkexe, bfile, outprefix, covs=None, nosex=False, 
          threads=False, maxmem=False, validsnpsfile=None):
     """
     Execute plink gwas. This assumes continuos phenotype and that standard qc 
     has been done already
 
     :param str plinkexe: Path and executable of plink
-    :param str bfile: Prefix for the bed fileset
+    :param str bfile: Tuple with Prefix for the bed fileset and phenotype file
     :param str outprefix: Prefix for the outputs
     :param str pheno: Filename to phenotype in plink format
     :param bool nosex: If option --allow-no-sex should be used
@@ -39,6 +39,7 @@ def gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
     ## 4) names of the columns to use in the covariance file separated by "," 
     ## or '-' if range
     ## 5) prefix for outputs
+    bfile, pheno = bfile
     # Format CLA
     plinkgwas = "%s --bfile %s --assoc fisher-midp --linear --pheno %s"
     plinkgwas+= " --prune --out %s_gwas --ci 0.95 --keep-allele-order --vif 100"
@@ -126,14 +127,23 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
     :param str covs: Filename with the covariates to use
     :param int/bool validate: To split the bed into test and training 
     """
+    print('Performing plinkGWAS')
     # Create a test/train validation sets
     if validate is not None:
-        train, test = train_test(outprefix, bfile, plinkexe, validate, maxmem,
-                                 threads)
+        keeps = train_test(outprefix, bfile, plinkexe, pheno, validate, maxmem, 
+                           threads)
+        for k, v in keeps.items():
+            if 'train' in k:
+                train = k, v[1]
+            elif 'test' in k:
+                test = k, v[1]
+            else:
+                raise TypeError
     else:
-        train, test = bfile, None   
+        train, test = (bfile, pheno),  (None, pheno)
     # Run the GWAS
-    gws, fn = gwas(plinkexe, train, outprefix, pheno, covs=covs, nosex=nosex, 
+    #training, pheno = train
+    gws, fn = gwas(plinkexe, train, outprefix, covs=covs, nosex=nosex, 
                threads=threads, maxmem=maxmem, validsnpsfile=validsnpsfile)
     # Make a manhatan plot
     if plot:

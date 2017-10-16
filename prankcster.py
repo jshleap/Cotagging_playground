@@ -64,17 +64,68 @@ def read_scored_qr(profilefn, phenofile, alpha, nsnps):
     return dic
 
 #----------------------------------------------------------------------
+def strategy_hyperbola(x, y, alpha):
+    """
+    strategy for new rank with summation
+    
+    :param :class pd.Series x: Series with the first range to be combined
+    :param :class pd.Series y: Series with the second range to be combined
+    :param float alpha: Float with the weight to be combined by
+    """
+    den = (alpha/x) + ((1-alpha)/y)
+    return 1/den
+
+#----------------------------------------------------------------------
 def strategy_sum(x, y, alpha):
     """
-    strategy for new rank
+    strategy for new rank with hypergeometry
     
     :param :class pd.Series x: Series with the first range to be combined
     :param :class pd.Series y: Series with the second range to be combined
     :param float alpha: Float with the weight to be combined by
     """
     return (alpha * x) + ((1-alpha) * y)
-    
-    
+ 
+#--------------------------------------------------------------------------- 
+def qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr, maxmem, 
+            threads, label, prefix):
+    """
+    Score using qrange
+    :param int maxmem: Maximum allowed memory
+    :param int trheads: Maximum number of threads to use
+    :param str plinkexe: Path and executable of plink
+    :param str bfile: Prefix of plink-bed fileset
+    :param str sumstats: File with the summary statistics in plink format 
+    :param str qrange: File with the ranges to be passed to the --q-score-range
+    :param str phenofile: Filename with the phenotype
+    """
+    # Score files with the new ranking
+    score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
+             '--allow-no-sex --keep-allele-order --pheno %s --out %s --memory '
+             '%d --threads %d')
+    score = score % (plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou,
+                     maxmem, threads)
+    o,e = executeLine(score) 
+    # Get the results in dataframe
+    profs_written = read_log(ou)
+    df  = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
+                                       phenofile, label, x.Max) if (
+        '%s.%.2f.profile' % (ou, float(x.label)) in profs_written) else {} 
+                        for x in qr.itertuples()]).dropna()
+    # Cleanup
+    label = label if isinstance(label, str) else '%.2f' % label
+    with tarfile.open('Profiles_%s_%s.tar.gz' % (prefix, label), mode='w:gz'
+                      ) as t:
+        for fn in glob('%s*.profile' % ou):
+            if os.path.isfile(fn):
+                try:
+                # it has a weird behaviour
+                    os.remove(fn)
+                    t.add(fn)
+                except:
+                    pass  
+    return df
+
 #---------------------------------------------------------------------------
 def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats, 
                     qrange, phenofile, frac_snps, qr, tar, maxmem=1700, 
@@ -113,30 +164,8 @@ def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats,
     # Wirte results of the new ranking to file
     new_rank.loc[:,['SNP', 'New_rank']].to_csv(qfile, sep=' ', header=False,
                                                index=False)    
-    # Score files with the new ranking
-    score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s '
-             '%s --allow-no-sex --keep-allele-order --pheno %s --out %s '
-             '--memory %d --threads %d')
-    score = score % (plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou,
-                     maxmem, threads)
-    o,e = executeLine(score) 
-    # Get the results in dataframe
-    profs_written = read_log(ou)
-    df  = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
-                                       phenofile, alpha, x.Max) if (
-        '%s.%.2f.profile' % (ou, float(x.label)) in profs_written) else {}
-                        for x in qr.itertuples()]).dropna()
-    # Cleanup
-    with tarfile.open('Profiles_%s_%.2f.tar.gz' % (prefix, alpha), mode='w:gz'
-                      ) as t:
-        for fn in glob('%s*.profile' % ou):
-            if os.path.isfile(fn):
-                try:
-                # it has a weird behaviour
-                    os.remove(fn)
-                    t.add(fn)
-                except:
-                    pass
+    df = qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr, 
+                maxmem, threads, alpha, prefix)
     # Return the results dataframe
     return df
 
@@ -205,7 +234,7 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
         prefix, alpha, merge, plinkexe, bfile, sumstats, qrange, phenofile,
         frac_snps, qr, tar, maxmem, threads, strategy) for alpha in tqdm(space))    
     # Return the list of dataframes with the optimization results
-    return df
+    return df, qrange, qr
 
 #---------------------------------------------------------------------------
 def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, 
@@ -232,31 +261,37 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
     """
     # Set output name
     outfn = '%s_optimized.tsv' % prefix
+    picklfn = '%s_optimized.pickle' % prefix
     # Execute the ranking
-    if not os.path.isfile(outfn):
-        d = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, 
-                    alphastep, plinkexe, tar, prune_step, qrangefn, maxmem, 
-                    threads, strategy, every)
+    if not os.path.isfile(picklfn):
+        d, r, qr  = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, 
+                            phenofile, alphastep, plinkexe, tar, prune_step,
+                            qrangefn, maxmem, threads, strategy, every)
         df = pd.concat(d)
         df.to_csv(outfn, sep='\t', index=False)
+        with open(picklfn, 'wb') as F:
+            pickle.dump((df, r, qr), F)
     else:
-        df = pd.read_table(outfn, sep='\t')
-    # Plor the optimazation
+        #df = pd.read_table(outfn, sep='\t')
+        with open(picklfn, 'rb') as F:
+            df, r, qr = pickle.load(F)        
+    # Plor the optimization
     piv = df.loc[:,['SNP kept','alpha', 'R2']]
     piv = piv.pivot(index='SNP kept',columns='alpha', values='R2').sort_index()
-    piv.plot()
+    piv.plot(colormap='copper', alpha=0.5)
     plt.savefig('%s_alphas.pdf'%(prefix))   
     # Returned the sorted resulr dataframe
-    return df.sort_values('R2', ascending=False).reset_index(drop=True)
+    return df.sort_values('R2', ascending=False).reset_index(drop=True), r, qr
 
 #----------------------------------------------------------------------
-def read_n_sort_cotag(prefix, cotagfn, freq):
+def read_n_sort_cotag(prefix, cotagfn, freq, threads=1, column='Cotagging'):
     """
     Smart sort the cotag file
 
     :param str prefix: Prefix for outputs
     :param str cotagfn: Filename tsv with cotag results
     :param :class pd.DataFrame freq: Dataframe with the plink formatted freqs.
+    :param str column: Column to sort by
     """
     # Read cotag
     cotags = pd.read_table(cotagfn, sep='\t')
@@ -265,17 +300,37 @@ def read_n_sort_cotag(prefix, cotagfn, freq):
     prev = glob('*Cotagging.pickle')
     if prev != []:
         shutil.copy(prev[0], '%s_Cotagging.pickle' % prefix)
-    df, _ = smartcotagsort(prefix, cotags[cotags.SNP.isin(freq.SNP)])
+    df, _ = smartcotagsort(prefix, cotags[cotags.SNP.isin(freq.SNP)], 
+                           column=column, threads=threads)
     # Returned the sorted dataframe
     return df.reset_index()
 
+#----------------------------------------------------------------------
+def weighted_squares(out, sortedcotag):
+    """
+    Perform the ranking based on the weigted squared effect sizes as an 
+    approximation for equation 4 in transferability of PRS across populations
+    :param out: prefix of outputs
+    :param sortedcotag: a dataframe with cotagging and sumstats information
+    """
+    # Compute the expected square effect
+    sortedcotag['b2'] = (sortedcotag.BETA**2) * (1 - sortedcotag.P)
+    # Compute the wieghted score
+    sortedcotag['prod'] = sortedcotag.b2 * sortedcotag.Cotagging 
+    # Sort by the newly created score
+    df, bt =  smartcotagsort(out, sortedcotag, column='prod')
+    df = df.loc[:,['SNP', 'Index']]
+    # Define qifile name and write it
+    qfile = '%s.qfile' % out     
+    df.to_csv(qfile, sep=' ', header=False, index=False)
+    return qfile 
 
 #----------------------------------------------------------------------
 def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                ppt_results_ref, sumstats, pheno, plinkexe, alpha_step, 
                labels, prune_step, sortresults, freq_threshold=0.1, h2=None,
                qrangefn=None, maxmem=1700, threads=1, strategy='sum', 
-               every=False):
+               every=False, column='Cotagging'):
     """
     Execute the code and plot the comparison
     
@@ -299,7 +354,9 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     :param int threads: Maximum number of threads to use
     :param str strategy: Suffix of the function with the selection strategy
     :param bool every: test one snp at a time
+    :param str column: Column to sort by
     """
+    print('Performing prankcster')
     # Unpack population labels
     ref, tar = labels
     # Get frequencies of both populations and merge them
@@ -311,7 +368,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     if os.path.isfile('%s.sorted_cotag' % prefix):
         sorted_cotag = pd.read_table('%s.sorted_cotag' % prefix, sep='\t')
     else:
-        sorted_cotag = read_n_sort_cotag(prefix, cotagfn, f2)
+        sorted_cotag = read_n_sort_cotag(prefix, cotagfn, f2, threads=threads,
+                                         column=column)
         sorted_cotag.to_csv('%s.sorted_cotag' % prefix, sep='\t', 
                             index=False)    
     # Read and sort the P + T results
@@ -327,9 +385,10 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     #     assert isinstance(sumstats, pd.DataFrame)
     #     ss = sumstats
     # Optimize the alphas
-    df = optimize_alpha(prefix, targetbed, sorted_cotag, clumpe, sumstats,  pheno,
-                        plinkexe, alpha_step, tar, prune_step, qrangefn, maxmem,
-                        threads, strategy, every)
+    df, qrange, qr = optimize_alpha(prefix, targetbed, sorted_cotag, clumpe, 
+                                    sumstats, pheno, plinkexe, alpha_step, tar, 
+                                    prune_step, qrangefn, maxmem, threads, 
+                                    strategy, every)
     # Get the best alpha of the optimization
     grouped = df.groupby('alpha')
     best = grouped.get_group(df.loc[0,'alpha'])
@@ -337,18 +396,31 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
         prevs = pd.read_table(sortresults, sep='\t')
     else:
         prevs = sortresults
-    merged = best.merge(prevs, on='SNP kept')
+    merged = best.merge(prevs, on='SNP kept')    
+    # Get the weighted squares
+    wout = '%s_weighted' % prefix
+    if 'BETA' not in sorted_cotag.columns:
+        gwas = pd.read_table(sumstats, delim_whitespace=True)
+        sortedcotag = sorted_cotag.merge(gwas, on='SNP')
+    else:
+        sortedcotag = sorted_cotag
+    wqfile = weighted_squares(wout, sortedcotag)
+    qdf = qrscore(plinkexe, targetbed, sumstats, qrange, wqfile, pheno, wout,qr, 
+                  maxmem, threads, 'weighted', prefix)    
+    merged = merged.merge(qdf,on='SNP kept', suffixes=['_hybrid', '_weighted'])
     f, ax = plt.subplots()
     # plot cotagging
-    merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_cotag', label='Cotagging', 
+    merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_cotag', label=column, 
                         c='r', s=2, alpha=0.5, ax=ax)
     merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_clum%s' % tar, ax=ax,
                         label='Clump Sort %s' % tar, c='k', s=2, alpha=0.5)    
     merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_clum%s' % ref, ax=ax, s=2,
                         label='Clump Sort %s' % ref, c='0.5', marker='*', 
                         alpha=0.5)    
-    merged.plot.scatter(x='SNP kept', y='R2', label='Hybrid', c='g', s=2, 
+    merged.plot.scatter(x='SNP kept', y='R2_hybrid', label='Hybrid', c='g', s=2, 
                         alpha=0.5, ax=ax) 
+    merged.plot.scatter(x='SNP kept', y='R2_weighted', label='Weighted', s=2,
+                        c='purple', alpha=0.5, ax=ax)     
     if h2 is not None:
         ax.axhline(h2, c='0.5', ls='--')
     plt.savefig('%s_compare.pdf' % prefix)
@@ -393,6 +465,8 @@ if __name__ == '__main__':
                                                     'tested at each step is 1'
                                                     ), default=1, type=float)      
     parser.add_argument('-P', '--plinkexe')
+    parser.add_argument('-C', '--column', help='Column to sort by', 
+                        default='Cotagging')
     parser.add_argument('-y', '--every', action='store_true', default=False)
     parser.add_argument('-t', '--threads', default=-1, action='store', type=int) 
     parser.add_argument('-H', '--h2', default=0.66, type=float, 
@@ -410,4 +484,4 @@ if __name__ == '__main__':
                args.plinkexe, args.alpha_step, args.labels, args.prune_step, 
                args.sortresults, h2=args.h2, freq_threshold=args.freq_threshold,
                qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
-               strategy=args.strategy, every=args.every)   
+               strategy=args.strategy, every=args.every, column=args.column)   

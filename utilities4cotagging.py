@@ -5,7 +5,7 @@
   Purpose: Utilities for cottagging
   Created: 09/30/17
 """
-
+from joblib import Parallel, delayed
 from subprocess import Popen, PIPE
 from tqdm import tqdm
 import pandas as pd
@@ -81,7 +81,8 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     return frq[(frq.MAF < high) & (frq.MAF > low)]
 
 #----------------------------------------------------------------------
-def train_test(prefix, bfile, plinkexe, splits=10, maxmem=1700, threads=1):
+def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700, 
+               threads=1):
     """
     Generate a list of individuals for training and a list for validation.
     The list is to be passed to plink. It will take one split as validation and
@@ -92,23 +93,35 @@ def train_test(prefix, bfile, plinkexe, splits=10, maxmem=1700, threads=1):
     :param str plinkexe: path to plink executable
     :param int splits: Number of splits to be done
     """
+    pheno = read_pheno(pheno)
     trainthresh = (splits - 1) / splits
     fn = os.path.split(bfile)[-1]
-    keeps= {'%s_train'% prefix:os.path.join(os.getcwd(),'%s_train.keep' % fn), 
-            '%s_test'% prefix: os.path.join(os.getcwd(),'%s_test.keep' % fn)
-            }      
+    keeps= {'%s_train'% prefix:(os.path.join(os.getcwd(),'%s_train.keep' % fn), 
+                                             os.path.join(os.getcwd(),
+                                                          '%s_train.pheno' % fn)
+                                             ), 
+            '%s_test'% prefix: (os.path.join(os.getcwd(),'%s_test.keep' % fn),
+                                os.path.join(os.getcwd(),'%s_test.pheno' % fn))}      
     fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, header=None,
                         names=['FID', 'IID', 'a', 'b', 'c', 'd'])
     msk = np.random.rand(len(fam)) < trainthresh
-    fam.loc[msk, ['FID', 'IID']].to_csv(keeps['%s_train'% prefix], header=False, 
-                                        index=False, sep=' ')
-    fam.loc[~msk,['FID', 'IID']].to_csv(keeps['%s_test' % prefix], header=False, 
-                                        index=False, sep=' ')
+    fam.loc[msk, ['FID', 'IID']].to_csv(keeps['%s_train'% prefix][0], 
+                                        header=False, index=False, sep=' ')
+    pheno.loc[msk, ['FID', 'IID', 'Pheno']].to_csv(keeps['%s_train'% prefix][1],
+                                                   header=False, index=False, 
+                                                   sep=' ')
+
+    fam.loc[~msk,['FID', 'IID']].to_csv(keeps['%s_test' % prefix][0], 
+                                        header=False, index=False, sep=' ')
+    pheno.loc[~msk,['FID', 'IID', 'Pheno']].to_csv(keeps['%s_test' % prefix][1],
+                                                   header=False, index=False, 
+                                                   sep=' ')    
     make_bed = ('%s --bfile %s --keep %s --make-bed --out %s --memory %d '
-                '--threads %d')
+                '--threads %d -pheno %s')
     for k, v in keeps.items():
-        executeLine(make_bed % (plinkexe, bfile, v, k, maxmem, threads))
-    return list(keeps.keys())
+        executeLine(make_bed % (plinkexe, bfile, v[0], k, maxmem, threads, v[1])
+                    )
+    return keeps
 
 #----------------------------------------------------------------------
 def norm(array, a=0, b=1):
@@ -170,8 +183,19 @@ def parse_sort_clump(fn, allsnps):
     df.rename(columns={'index':'Index'}, inplace=True)   
     return df
 
+
 #---------------------------------------------------------------------------
-def smartcotagsort(prefix, gwaswcotag, column='Cotagging'):
+def helper_smartsort(grouped, key):
+    """
+    helper function to parallelize smartcotagsort
+    """
+    df = grouped.get_group(key)
+    head = df.loc[df.index[0],:]
+    tail = df.loc[df.index[1:],:]
+    return head, tail
+
+#---------------------------------------------------------------------------
+def smartcotagsort(prefix, gwaswcotag, column='Cotagging', threads=1):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in 
     the last part of the dataframe
@@ -180,6 +204,7 @@ def smartcotagsort(prefix, gwaswcotag, column='Cotagging'):
     :param :class pd.DataFrame gwaswcotag: merged dataframe of cotag and gwas
     :param str column: name of the column to be sorted by in the cotag file
     """
+    gwaswcotag = gwaswcotag.sort_values(by=column, ascending=False)
     picklefile = '%s_%s.pickle' % (prefix, ''.join(column.split()))
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
@@ -194,6 +219,13 @@ def smartcotagsort(prefix, gwaswcotag, column='Cotagging'):
             df = grouped.get_group(key)
             sorteddf = sorteddf.append(df.loc[df.index[0],:])
             tail = tail.append(df.loc[df.index[1:],:])
+        #tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort)(grouped, 
+                                                                      #key)
+                                            #for key in  tqdm(keys, total=len(
+                                                #keys)))  
+        #sorteddf, tail = zip(*tup)
+        #sorteddf = pd.concat(sorteddf)
+        #tail = pd.concat(tail)
         beforetail = sorteddf.shape[0]
         df = sorteddf.append(tail.sample(frac=1)).reset_index(drop=True)
         df['Index'] = df.index.tolist()

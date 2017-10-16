@@ -20,6 +20,7 @@ from tqdm import tqdm
 from functools import reduce
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
+from itertools import filterfalse
 from scipy.stats import linregress
 from subprocess import Popen, PIPE
 from joblib import Parallel, delayed
@@ -223,7 +224,7 @@ def score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem=1700,
         prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps, maxmem, threads) 
                                            for tup in tqdm(out[1:], 
                                                            total=len(out[1:])))
-    return frames
+    return filterfalse(lambda df: df.empty, frames)
 
 #---------------------------------------------------------------------------
 def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
@@ -359,6 +360,7 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
     :param int trheads: Maximum number of threads to use
     :param bool every: test one snp at a time
     """
+    print('Performing ranumo')
     # make sure the prefix does not have any _
     prefix = prefix.replace('_','')
     # Unpack labels
@@ -378,13 +380,15 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
         gwas = gwas[gwas.SNP.isin(frq.SNP)]
     allsnp = gwas.shape[0]
     # Cotagging
-    sortedcot, beforetail = smartcotagsort(prefix, gwas)#cotags)
+    sortedcot, beforetail = smartcotagsort(prefix, gwas, threads=threads)#cotags)
     # Tagging Target
-    sortedtagT, beforetailTT = smartcotagsort(prefix, gwas,#cotags, 
-                                              column='Tagging %s' % tar)
+    sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, 
+                                              column='Tagging %s' % tar,
+                                              threads=threads)
     # Tagging Reference
     sortedtagR, beforetailTR = smartcotagsort(prefix, gwas,#cotags,
-                                              column='Tagging %s' % ref) 
+                                              column='Tagging %s' % ref,
+                                              threads=threads) 
     # Process clump if required
     clump = []
     # Include the P + T of the reference population if required
@@ -464,10 +468,12 @@ if __name__ == '__main__':
                                               default=0.1, type=float) 
     parser.add_argument('-q', '--quality', help=('type of plots (png, pdf)'), 
                         default='png')    
-    parser.add_argument('-y', '--every', action='store_true', default=False)       
+    parser.add_argument('-y', '--every', action='store_true', default=False) 
+    parser.add_argument('-T', '--threads', default=1, type=int)
+    parser.add_argument('-M', '--maxmem', default=3000, type=int)        
     args = parser.parse_args()
     ranumo(args.prefix, args.tarbed, args.refbed, args.gwas, args.cotagfile, 
            args.plinkexe, args.labels, args.phenotar, args.phenoref,  
            pptR=args.ppt_ref, pptT=args.ppt_tar, check_freqs=args.check_freq, 
-           hline=args.h2, step=args.step, quality=args.quality, every=args.every
-           )
+           hline=args.h2, step=args.step, quality=args.quality, every=args.every,
+           threads=args.threads, maxmem=args.maxmem)
