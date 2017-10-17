@@ -234,7 +234,7 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
         prefix, alpha, merge, plinkexe, bfile, sumstats, qrange, phenofile,
         frac_snps, qr, tar, maxmem, threads, strategy) for alpha in tqdm(space))    
     # Return the list of dataframes with the optimization results
-    return df, qrange, qr
+    return df, qrange, qr, merge
 
 #---------------------------------------------------------------------------
 def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, 
@@ -264,7 +264,7 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
     picklfn = '%s_optimized.pickle' % prefix
     # Execute the ranking
     if not os.path.isfile(picklfn):
-        d, r, qr  = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, 
+        d, r, qr, merge  = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, 
                             phenofile, alphastep, plinkexe, tar, prune_step,
                             qrangefn, maxmem, threads, strategy, every)
         df = pd.concat(d)
@@ -280,8 +280,9 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
     piv = piv.pivot(index='SNP kept',columns='alpha', values='R2').sort_index()
     piv.plot(colormap='copper', alpha=0.5)
     plt.savefig('%s_alphas.pdf'%(prefix))   
-    # Returned the sorted resulr dataframe
-    return df.sort_values('R2', ascending=False).reset_index(drop=True), r, qr
+    # Returned the sorted result dataframe
+    results = df.sort_values('R2', ascending=False).reset_index(drop=True)
+    return results, r, qr, merge
 
 #----------------------------------------------------------------------
 def read_n_sort_cotag(prefix, cotagfn, freq, threads=1, column='Cotagging'):
@@ -299,7 +300,8 @@ def read_n_sort_cotag(prefix, cotagfn, freq, threads=1, column='Cotagging'):
     # Check for previous sort
     prev = glob('*Cotagging.pickle')
     if prev != []:
-        shutil.copy(prev[0], '%s_Cotagging.pickle' % prefix)
+        if not os.path.isfile('%s_Cotagging.pickle' % prefix):
+            shutil.copy(prev[0], '%s_Cotagging.pickle' % prefix)
     df, _ = smartcotagsort(prefix, cotags[cotags.SNP.isin(freq.SNP)], 
                            column=column, threads=threads)
     # Returned the sorted dataframe
@@ -330,7 +332,7 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                ppt_results_ref, sumstats, pheno, plinkexe, alpha_step, 
                labels, prune_step, sortresults, freq_threshold=0.1, h2=None,
                qrangefn=None, maxmem=1700, threads=1, strategy='sum', 
-               every=False, column='Cotagging'):
+               every=False, column='Cotagging', splits=5):
     """
     Execute the code and plot the comparison
     
@@ -355,6 +357,7 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     :param str strategy: Suffix of the function with the selection strategy
     :param bool every: test one snp at a time
     :param str column: Column to sort by
+    :param str split: number of folds for crossvalidation
     """
     print('Performing prankcster')
     # Unpack population labels
@@ -372,6 +375,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                                          column=column)
         sorted_cotag.to_csv('%s.sorted_cotag' % prefix, sep='\t', 
                             index=False)    
+    nsnps = sorted_cotag.shape[0]
+    frac_snps = nsnps / 100        
     # Read and sort the P + T results
     clumpetar = read_n_sort_clumped(ppt_results_tar, frqs.SNP)
     #clumpetar = clumpetar[clumpetar.SNP.isin(frqs.SNP)]
@@ -385,13 +390,24 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     #     assert isinstance(sumstats, pd.DataFrame)
     #     ss = sumstats
     # Optimize the alphas
-    df, qrange, qr = optimize_alpha(prefix, targetbed, sorted_cotag, clumpe, 
-                                    sumstats, pheno, plinkexe, alpha_step, tar, 
-                                    prune_step, qrangefn, maxmem, threads, 
-                                    strategy, every)
+    # Create crossvalidation
+    cv = train_test(prefix, targetbed, plinkexe, pheno)
+    train, test = cv.keys()
+    phe_tr, phe_te = [x[1] for x in cv.values()]
+    df, qrange, qr, merged = optimize_alpha(prefix, train, sorted_cotag, clumpe,
+                                            sumstats, phe_tr, plinkexe, 
+                                            alpha_step, tar, prune_step, 
+                                            qrangefn, maxmem, threads, strategy,
+                                            every)
+    best_alpha = df.alpha.iloc[0]
+    # Score with test-set
+    res_pr = '%s_testset' % prefix
+    best = single_alpha_qr(res_pr, best_alpha, merged, plinkexe, test, sumstats, 
+                          qrange, phe_te, frac_snps, qr, tar, maxmem=maxmem, 
+                          threads=threads, strategy=strategy)
     # Get the best alpha of the optimization
-    grouped = df.groupby('alpha')
-    best = grouped.get_group(df.loc[0,'alpha'])
+    #grouped = df.groupby('alpha')
+    # best = grouped.get_group(df.loc[0,'alpha'])
     if isinstance(sortresults, str):
         prevs = pd.read_table(sortresults, sep='\t')
     else:
@@ -423,6 +439,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                         c='purple', alpha=0.5, ax=ax)     
     if h2 is not None:
         ax.axhline(h2, c='0.5', ls='--')
+    plt.ylabel('$R^2$')
+    plt.tight_layout()
     plt.savefig('%s_compare.pdf' % prefix)
     # Write resulted marged dataframe to file
     merged.to_csv('%s.tsv' % prefix, sep='\t', index=False)    
@@ -465,8 +483,10 @@ if __name__ == '__main__':
                                                     'tested at each step is 1'
                                                     ), default=1, type=float)      
     parser.add_argument('-P', '--plinkexe')
+    parser.add_argument('-v', '--splits', help='Number of folds for cross-val', 
+                        default=5, type=int)
     parser.add_argument('-C', '--column', help='Column to sort by', 
-                        default='Cotagging')
+                            default='Cotagging')    
     parser.add_argument('-y', '--every', action='store_true', default=False)
     parser.add_argument('-t', '--threads', default=-1, action='store', type=int) 
     parser.add_argument('-H', '--h2', default=0.66, type=float, 
@@ -484,4 +504,5 @@ if __name__ == '__main__':
                args.plinkexe, args.alpha_step, args.labels, args.prune_step, 
                args.sortresults, h2=args.h2, freq_threshold=args.freq_threshold,
                qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
-               strategy=args.strategy, every=args.every, column=args.column)   
+               strategy=args.strategy, every=args.every, column=args.column, 
+               splits=args.splits)   
