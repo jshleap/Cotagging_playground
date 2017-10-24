@@ -279,13 +279,16 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
     piv = df.loc[:,['SNP kept','alpha', 'R2']]
     piv = piv.pivot(index='SNP kept',columns='alpha', values='R2').sort_index()
     piv.plot(colormap='copper', alpha=0.5)
+    plt.ylabel('$R^2$')
+    plt.tight_layout()
     plt.savefig('%s_alphas.pdf'%(prefix))   
     # Returned the sorted result dataframe
     results = df.sort_values('R2', ascending=False).reset_index(drop=True)
     return results, r, qr, merge
 
 #----------------------------------------------------------------------
-def read_n_sort_cotag(prefix, cotagfn, freq, threads=1, column='Cotagging'):
+def read_n_sort_cotag(prefix, cotagfn, freq, threads=1, weight=None,
+                      column='Cotagging'):
     """
     Smart sort the cotag file
 
@@ -296,6 +299,10 @@ def read_n_sort_cotag(prefix, cotagfn, freq, threads=1, column='Cotagging'):
     """
     # Read cotag
     cotags = pd.read_table(cotagfn, sep='\t')
+    if weight is not None:
+        cotags= cotags.merge(weight, on='SNP')
+        cotags['weighted'] = cotags.preweighted * cotags.loc[:, column]
+        column = 'weighted'
     # Smart sort it
     # Check for previous sort
     prev = glob('*Cotagging.pickle')
@@ -332,7 +339,7 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                ppt_results_ref, sumstats, pheno, plinkexe, alpha_step, 
                labels, prune_step, sortresults, freq_threshold=0.1, h2=None,
                qrangefn=None, maxmem=1700, threads=1, strategy='sum', 
-               every=False, column='Cotagging', splits=5):
+               every=False, column='Cotagging', splits=5, weight=False):
     """
     Execute the code and plot the comparison
     
@@ -358,6 +365,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     :param bool every: test one snp at a time
     :param str column: Column to sort by
     :param str split: number of folds for crossvalidation
+    :param bool weight: Perform the sorting based on the weighted square effect
+    sizes
     """
     print('Performing prankcster')
     # Unpack population labels
@@ -367,14 +376,26 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     f2 = read_freq(targetbed, plinkexe, freq_threshold=freq_threshold)
     frqs = f1.merge(f2, on=['CHR', 'SNP'], suffixes=['_%s' % ref,
                                                          '_%s' % tar])
+    if isinstance(sumstats, str):
+        ss = pd.read_table(sumstats, delim_whitespace=True)
+    else:
+        assert isinstance(sumstats, pd.DataFrame)
+        ss = sumstats
+    # get weighted squares 
+    if weight:
+        ws = ss.loc[:,['SNP','BETA','P']]
+        ws['preweighted'] = ((ws.BETA**2) * (1 - ws.P))
+        ws = ws.loc[:,['SNP', 'preweighted']]
+        weight = ws
+    else:
+        weight = None
     # Read the cotag scores
     if os.path.isfile('%s.sorted_cotag' % prefix):
-        sorted_cotag = pd.read_table('%s.sorted_cotag' % prefix, sep='\t')
+        sorted_cotag = pd.read_table('%s.sorted_cotag' % prefix, sep='\t')     
     else:
         sorted_cotag = read_n_sort_cotag(prefix, cotagfn, f2, threads=threads,
-                                         column=column)
-        sorted_cotag.to_csv('%s.sorted_cotag' % prefix, sep='\t', 
-                            index=False)    
+                                         column=column, weight=weight)
+        sorted_cotag.to_csv('%s.sorted_cotag' % prefix, sep='\t', index=False)    
     nsnps = sorted_cotag.shape[0]
     frac_snps = nsnps / 100        
     # Read and sort the P + T results
@@ -384,11 +405,7 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     #clumperef = clumperef[clumperef.SNP.isin(frqs.SNP)]
     clumpe = [(clumpetar, tar), (clumperef, ref)]
     # Read summary statisctics
-    # if isinstance(sumstats, str):
-    #     ss = pd.read_table(sumstats, delim_whitespace=True)
-    # else:
-    #     assert isinstance(sumstats, pd.DataFrame)
-    #     ss = sumstats
+
     # Optimize the alphas
     # Create crossvalidation
     cv = train_test(prefix, targetbed, plinkexe, pheno)
@@ -446,49 +463,47 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     merged.to_csv('%s.tsv' % prefix, sep='\t', index=False)    
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-p', '--prefix', help='prefix for outputs', 
                         required=True)
-    parser.add_argument('-b', '--reference', help=('prefix of the bed fileset '
-                                                   'in reference'), 
-                                             required=True)    
-    parser.add_argument('-c', '--target', help=('prefix of the bed fileset in '
-                                                'target'), required=True)
-    parser.add_argument('-L', '--labels', help=('Space separated string with '
-                                                'labels of reference and target'
-                                                ' populations'), nargs=2)
-    parser.add_argument('-T', '--target_ppt', help=('Filename of the results of'
-                                                    ' a PPT run'), default=None)
-    parser.add_argument('-r', '--ref_ppt', help=('Filename with results for the'
-                                                 ' P+Toptimization in the refer'
-                                                 'ence population'), 
-                                           default=None)      
-    parser.add_argument('-R', '--sortresults', help=('Filename with results in '
-                                                     'the sorting inlcuding pat'
-                                                     'h'), 
-                                               required=True)      
-    parser.add_argument('-d', '--cotagfn', help=('Filename tsv with cotag '
-                                                 'results'), required=True) 
-    parser.add_argument('-s', '--sumstats', help=('Filename of the summary stat'
-                                                  'istics in plink format'), 
-                                            required=True)    
-    parser.add_argument('-f', '--pheno', help=('filename of the true phenotype '
-                                               'of the target population'), 
-                                         required=True)      
-    parser.add_argument('-S', '--alpha_step', help=('Step for the granularity '
-                                                    'of the grid search. Defau'
-                                                    'lt: .1'), default=0.1,
-                                              type=float) 
-    parser.add_argument('-E', '--prune_step', help=('Percentage of snps to be '
-                                                    'tested at each step is 1'
-                                                    ), default=1, type=float)      
+    parser.add_argument('-b', '--reference', required=True, 
+                        help=('prefix of the bed fileset in reference'))    
+    parser.add_argument('-c', '--target', required=True, 
+                        help=('prefix of the bed fileset in target'))
+    parser.add_argument('-L', '--labels', nargs=2, 
+                        help=('Space separated string with labels of reference '
+                              'and target populations'))
+    parser.add_argument('-T', '--target_ppt', default=None,
+                        help=('Filename of the results of a PPT run'))
+    parser.add_argument('-r', '--ref_ppt', default=None, 
+                        help=('Filename with results for the P+Toptimization in'
+                              ' the reference population'))      
+    parser.add_argument('-R', '--sortresults', required=True,
+                        help=('Filename with results in the sorting inlcuding '
+                              'path'))      
+    parser.add_argument('-d', '--cotagfn', required=True,
+                        help=('Filename tsv with cotag results')) 
+    parser.add_argument('-s', '--sumstats', required=True, 
+                        help=('Filename of the summary statistics in plink '
+                              'format'))    
+    parser.add_argument('-f', '--pheno', required=True, 
+                        help=('Filename of the true phenotype of the target '
+                              'population'))      
+    parser.add_argument('-S', '--alpha_step', default=0.1, type=float, 
+                        help=('Step for the granularity of the grid search.')) 
+    parser.add_argument('-E', '--prune_step', default=1, type=float, 
+                        help=('Percentage of snps to be tested at each step'))      
     parser.add_argument('-P', '--plinkexe')
     parser.add_argument('-v', '--splits', help='Number of folds for cross-val', 
                         default=5, type=int)
     parser.add_argument('-C', '--column', help='Column to sort by', 
                             default='Cotagging')    
+    parser.add_argument('-w', '--weight', default=False, action='store_true',
+                        help=('Perform the sorting based on the weighted square'
+                              ' effect sizes'))
     parser.add_argument('-y', '--every', action='store_true', default=False)
-    parser.add_argument('-t', '--threads', default=-1, action='store', type=int) 
+    parser.add_argument('-t', '--threads', default=1, action='store', type=int) 
     parser.add_argument('-H', '--h2', default=0.66, type=float, 
                         help=('Heritability of the simulated phenotype'))     
     parser.add_argument('-M', '--maxmem', default=1700, type=int) 
@@ -505,4 +520,4 @@ if __name__ == '__main__':
                args.sortresults, h2=args.h2, freq_threshold=args.freq_threshold,
                qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
                strategy=args.strategy, every=args.every, column=args.column, 
-               splits=args.splits)   
+               splits=args.splits, weight=args.weight)   

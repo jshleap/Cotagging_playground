@@ -18,7 +18,7 @@ from tqdm import tqdm
 from glob import glob
 from scipy import stats
 import matplotlib.pyplot as plt
-from utilities4cotagging import executeLine, read_pheno, parse_sort_clump
+from utilities4cotagging import *
 plt.style.use('ggplot')
 
 
@@ -175,8 +175,10 @@ def ScoreClumped(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th,
                          maxmem, threads)        
         o,e = executeLine(score)
         # read range results
+        profs_written = read_log(name)
         l = [range_profiles(name, range_label, r2, qf, phenofn) for range_label 
-             in qr.itertuples()]
+             in qr.itertuples() if '%s.%s.profile' % (name, range_label.name) in
+             profs_written]
         with open('%s.pickle' % name, 'wb') as f:
             pickle.dump(l, f)
     else:

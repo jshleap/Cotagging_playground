@@ -16,7 +16,7 @@ of causal variants:
       +-run2
 """
 from matplotlib.offsetbox import AnchoredText
-from collections import defaultdict
+from collections import defaultdict, Counter
 import matplotlib.pyplot as plt
 from glob import glob
 #import seaborn as sns
@@ -31,11 +31,15 @@ for f in files:
     eur = df.nlargest(1,'$R^{2}$_clumEUR').loc[:,'$R^{2}$_clumEUR'].iloc[0]
     hyb = df.nlargest(1,'R2_hybrid').loc[:,'R2_hybrid'].iloc[0]
     totdiff = eur - afr 
+    try:
+        assert totdiff >= 0
+    except AssertionError:
+        print('EUR P+T is SMALLER THAN AFR!!!', f)
     hybdiff = hyb - afr
-    perc = (hybdiff * 100) / totdiff
+    perc = (hybdiff * 100) / afr#totdiff
     if perc < 0:
         print('SMALL')
-        print(f)
+        print(f, perc)
     elif perc > 100:
         print('TOO BIG')
         print(f)
@@ -44,14 +48,17 @@ for f in files:
 
 
 df = pd.DataFrame([{'causals':k, 'improvement':i} for k, v in d.items() 
-                   for i in v])
-df['Index']=list(range(10))*len(set(df.causals))
+                   for i in v], columns=['causals', 'improvement', 'Index'])
+c = Counter(df.causals)
+for k, v in c.items():
+    df.loc[df.causals == k, 'Index'] = list(range(v))    
 df = df.pivot(columns='causals', values='improvement', index='Index')
 f, ax = plt.subplots()
 #ax = sns.violinplot(x="causals", y="improvement", data=df)
+plt.axhline(0, alpha=0.5, c='0.4', ls=':')
 df.plot.box(ax=ax)
 ax.add_artist(AnchoredText('Overall mean %.2f' % df.mean().mean(), 1))
 plt.xlabel('Number of causal variants')
-plt.ylabel('Percentage of improvement')
+plt.ylabel('Percentage of improvement (AFR)')
 plt.tight_layout()
 plt.savefig('Runs_boxplot.pdf')
