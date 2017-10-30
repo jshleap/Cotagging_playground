@@ -100,14 +100,14 @@ def read_lds(refld, tarld):
     """
     if not os.path.isfile('referenceLD.pickle'):
         refld = pd.read_table(refld, delim_whitespace=True)
-        refld.to_pickle('referenceLD.pickle', compression='gzip')
+        refld.to_pickle('referenceLD.pickle')#, compression='gzip')
     else:
         refld = pd.read_pickle('referenceLD.pickle', compression='gzip')
     if not os.path.isfile('targetLD.pickle'):
         tarld = pd.read_table(tarld, delim_whitespace=True)
-        tarld.to_pickle('targetLD.pickle', compression='gzip')
+        tarld.to_pickle('targetLD.pickle')#, compression='gzip')
     else:
-        tarld = pd.read_pickle('targetLD.pickle', compression='gzip')
+        tarld = pd.read_pickle('targetLD.pickle')#, compression='gzip')
     return refld, tarld
 
 #----------------------------------------------------------------------
