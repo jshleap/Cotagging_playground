@@ -8,6 +8,8 @@ import numexpr
 import numpy as np
 import pickle
 from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
 from itertools import permutations
