@@ -336,7 +336,7 @@ def plotit(prefix, merge, col, labels, ppt=None, line=False, vline=None,
     plt.close()
     
 def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar, 
-           phenoref, pptR=None, pptT=None, check_freqs=None, hline=None,
+           phenoref, pptR=None, pptT=None, check_freqs=0.1, hline=None,
            step=1, quality='png', maxmem=1700, threads=8, every=False):
     """
     execute the code  
@@ -372,12 +372,11 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
         cotags = pd.read_table(cotagfn, sep='\t')
     gwas = gwas.merge(cotags, on='SNP')
     # Filter the merged file by MAF if required
-    if check_freqs is not None:
-        frqT = read_freq(tarbed, plinkexe, freq_threshold=check_freqs)
-        frqR = read_freq(refbed, plinkexe, freq_threshold=check_freqs)
-        frq = frqT.merge(frqR, on=['CHR', 'SNP'], 
-                         suffixes=['_%s' % ref, '_%s' % tar]) 
-        gwas = gwas[gwas.SNP.isin(frq.SNP)]
+    frqT = read_freq(tarbed, plinkexe, freq_threshold=check_freqs)
+    frqR = read_freq(refbed, plinkexe, freq_threshold=check_freqs)
+    frq = frqT.merge(frqR, on=['CHR', 'SNP'], suffixes=['_%s' % ref, 
+                                                        '_%s' % tar]) 
+    gwas = gwas[gwas.SNP.isin(frq.SNP)]
     allsnp = gwas.shape[0]
     # Cotagging
     sortedcot, beforetail = smartcotagsort(prefix, gwas, threads=threads)#cotags)

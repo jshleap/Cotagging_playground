@@ -6,6 +6,7 @@ import shutil
 import argparse
 import numexpr
 import numpy as np
+from scipy.sparse import csr_matrix, triu
 import pickle
 import mmap
 from tqdm import tqdm
@@ -14,7 +15,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
 from itertools import permutations
-from joblib import delayed, parallel
+from joblib import delayed, Parallel
+import multiprocessing as mp
 #import bigfloat
 plt.style.use('ggplot')
 
@@ -108,28 +110,45 @@ def get_centimorgans(bfile, rmap, plinkexe, chromosome=None, cmthresh=1,
         locus[first_snp] = diff.SNP
     return locus
 
+CHUNK_SIZE = 3000000
+def getdf(df):
+    return df
 #----------------------------------------------------------------------
-def read_lds(refld, tarld):
+def read_one_parallel(fn, cpus):
+    """
+    Read one LD matrix but parallel
+    """
+    dtypes = {'SNP_A':str, 'SNP_B':str, 'D':float}
+    reader = pd.read_table(fn, engine='c', delim_whitespace=True, 
+                           usecols=['SNP_A', 'SNP_B', 'D'], dtype=dtypes, 
+                           chunksize=CHUNK_SIZE)    
+    res = Parallel(n_jobs=cpus)(delayed(getdf)(df) for df in reader)
+    res = pd.concat(res)
+    return res
+#----------------------------------------------------------------------
+def read_lds(refld, tarld, cpus=mp.cpu_count()):
     """
     read LD matrix
     """
     dtypes = {'SNP_A':str, 'SNP_B':str, 'D':float}
-    #if not os.path.isfile('referenceLD.pickle'):
     print('Reading reference ld from %s' % refld)
-    refld = pd.read_table(refld, engine='c', delim_whitespace=True, 
-                          usecols=['SNP_A', 'SNP_B', 'D'], dtype=dtypes,
-                          memory_map=True)
-    #    refld.to_pickle('referenceLD.pickle')#, compression='gzip')
-    #else:
-        #refld = pd.read_pickle('referenceLD.pickle')#, compression='gzip')
-    #if not os.path.isfile('targetLD.pickle'):
+    if not os.path.isfile('referenceLD.hdf'):
+        refld = read_one_parallel(refld, cpus)
+        #refld = pd.read_table(refld, engine='c', delim_whitespace=True, 
+                              #usecols=['SNP_A', 'SNP_B', 'D'], dtype=dtypes,
+                              #memory_map=True)
+        refld.to_hdf('referenceLD.hdf', 'refld')
+    else:
+        refld = pd.read_hdf('referenceLD.hdf', 'refld')
     print('Reading target ld from %s' % tarld)
-    tarld = pd.read_table(tarld, engine='c', delim_whitespace=True,
-                          usecols=['SNP_A', 'SNP_B', 'D'], dtype=dtypes,
-                          memory_map=True)
-        #tarld.to_pickle('targetLD.pickle')#, compression='gzip')
-    #else:
-        #tarld = pd.read_pickle('targetLD.pickle')#, compression='gzip')
+    if not os.path.isfile('targetLD.hdf'):  
+        tarld = read_one_parallel(tarld, cpus)
+        #tarld = pd.read_table(tarld, engine='c', delim_whitespace=True,
+                              #usecols=['SNP_A', 'SNP_B', 'D'], dtype=dtypes,
+                              #memory_map=True)
+        tarld.to_hdf('targetLD.hdf', 'tarld')
+    else:
+        tarld = pd.read_hdf('targetLD.hdf', 'tarld')
     #intersect the LDs
     refsnps = set(refld.loc[:,['SNP_A', 'SNP_B']].unstack())
     tarsnps = set(tarld.loc[:,['SNP_A', 'SNP_B']].unstack())
@@ -139,6 +158,7 @@ def read_lds(refld, tarld):
     tarld = tarld[tarld.SNP_A.isin(available_snps) & 
                   tarld.SNP_B.isin(available_snps)]    
     return refld, tarld
+
 #----------------------------------------------------------------------
 def get_all_is(ld1, ld2, avail, integral):
     """
@@ -151,21 +171,30 @@ def get_all_is(ld1, ld2, avail, integral):
     # symetrize ld matrices
     D1 = pd.DataFrame(ld1[ld1.SNP_A.isin(avail) & ld1.SNP_B.isin(avail)].pivot(
         columns='SNP_B', index='SNP_A', values='D'), index=avail, 
-                      columns=avail).fillna(0)
+                      columns=avail)#.fillna(0)
+    D1 = csr_matrix(D1.values, shape=(len(avail), len(avail)))
+    del ld1
     #D1.update(piv1)
-    D1 = pd.DataFrame((np.triu(D1) + np.triu(D1,1).T), index=D1.index, 
-                      columns=D1.columns)
-    np.fill_diagonal(D1.values, 1) 
+    D1 = (triu(D1) + triu(D1,1).T)
+    D1.setdiag(1)
+    #D1 = pd.DataFrame((np.triu(D1) + np.triu(D1,1).T), index=D1.index, 
+                      #columns=D1.columns)
+    #np.fill_diagonal(D1.values, 1) 
     D2 = pd.DataFrame(ld2[ld2.SNP_A.isin(avail) & ld2.SNP_B.isin(avail)].pivot(
         columns='SNP_B', index='SNP_A', values='D'), index=avail, 
-                      columns=avail).fillna(0)
+                      columns=avail)#.fillna(0)
+    del ld2
+    D2 = (triu(D2) + triu(D2,1).T)
+    D2.setdiag(1)
     #D2.update(piv2)
-    D2 = pd.DataFrame((np.triu(D2) + np.triu(D2, 1).T), index=D2.index, 
-                      columns=D2.columns)
-    np.fill_diagonal(D2.values, 1)
+    #D2 = pd.DataFrame((np.triu(D2) + np.triu(D2, 1).T), index=D2.index, 
+                      #columns=D2.columns)
+    #np.fill_diagonal(D2.values, 1)
     # compute the dot product for the locus
-    ec_i = (D1 * D2).dot(integral).to_frame(name='ese')
-    ec_i['SNP'] = ec_i.index.tolist() 
+    ec_i = pd.DataFrame({'SNP':avail, 'ese': list(D1.multiply(D2).dot(integral)
+                                                  )})
+    #ec_i = (D1 * D2).dot(integral).to_frame(name='ese')
+    #ec_i['SNP'] = ec_i.index.tolist() 
     return ec_i
     
 #----------------------------------------------------------------------
@@ -193,7 +222,7 @@ def get_Ds(ld1, ld2, i, avail, integral):
     s2 = s2.append(st)
     names = ['D1','D2']
     s1.name, s2.name = names
-    D = pd.concat((s1[~s1.index.duplicated()],s2[~s2.index.duplicated()]), 
+    D = pd.concat((s1[~s1.index.duplicated()], s2[~s2.index.duplicated()]), 
                   axis=1)
     D['p'] = D.D1 * D.D2
     D = pd.concat((D,integral), axis=1).dropna()
@@ -214,16 +243,16 @@ def per_locus(locus, sumstats, avh2, h2,  N, ld1, ld2):
     """
     compute the per-locus expectation
     """
-    locus = sumstats[sumstats.SNP.isin(locus)].reset_index(drop=True)
-    locus = locus.astype({'BETA':np.longfloat})
+    locus = sumstats[sumstats.SNP.isin(locus)].loc[:,['SNP', 'BETA']]
+    #locus = locus.astype({'BETA':np.longfloat})
     locus.index = locus.SNP.tolist()
     M = locus.shape[0]
     h2_l = avh2 * M
     mu = ( (N /(2 * ( 1 - h2_l ) ) ) + ( M / ( 2 * h2 ) ) )
     vjs = (( N * locus.BETA ) / (2 * ( 1 - h2_l ) ))
     I = integral_b(vjs, mu, locus.SNP)
+    del vjs
     expcovs = get_all_is(ld1, ld2, sorted(locus.SNP.tolist()), I)
-    #expcovs = [get_Ds(ld1, ld2, i, locus.SNP.tolist(), I) for i in locus.SNP]
     return expcovs
         
 #----------------------------------------------------------------------
@@ -231,21 +260,26 @@ def transferability(args):
     """
     Execute trasnferability code
     """
-    ld1, ld2 = read_lds(args.refld, args.tarld)
+    ld1, ld2 = read_lds(args.refld, args.tarld, cpus=int(args.threads))
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
-    h2 = args.h2
-    all_markers = sumstats.shape[0]
-    avh2 = h2 / all_markers
+    avh2 = args.h2 / sumstats.shape[0]
     loci = get_centimorgans(args.reference, args.rmap, args.plinkexe, 
                             args.chrom, args.cm, args.threads, args.maxmem)
     with open('loci.pickle','wb') as L:
         pickle.dump(loci, L)
     #res = pd.DataFrame(columns=['SNP', 'ese'])
     N = mapcount('%s.fam' % args.reference)
-    res = Parallel(n_jobs=int(args.threads))(delayed(per_locus)(
-        locus, sumstats, avh2, h2, N, ld1, ld2) for locus in tqdm(
-            loci.values(), total=len(loci)))    
-    res = pd.concat(res)
+    resfile = '%s_res.pickle' % args.prefix
+    if not os.path.isfile(resfile):
+        res = Parallel(n_jobs=int(args.threads))(delayed(per_locus)(
+            locus, sumstats, avh2, args.h2, N, ld1, ld2) for locus in tqdm(
+                loci.values(), total=len(loci)))    
+        res = pd.concat(res)
+        with open(resfile, 'wb') as R:
+            pickle.dump(res, R)
+    else:
+        with open(resfile, 'rb') as R:
+            res = pickle.load(R)        
     product, _ = smartcotagsort(args.prefix, res, column='ese')
     nsnps = product.shape[0]
     percentages = set_first_step(nsnps, 5, every=args.every)

@@ -24,7 +24,7 @@ plt.style.use('ggplot')
 
 #---------------------------------------------------------------------------
 def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, plinkexe, maxmem,
-               threads):
+               threads, clump_field='P'):
     """
     Use plink to clump variants based on a pval and r2 threshold 
     
@@ -41,13 +41,13 @@ def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, plinkexe, maxmem,
     # Define output name
     outfn = '%s_%.2f_%d'%(outpref, r2, window)
     # Prepare plink CLA
-    plink = ('%s --bfile %s -clump %s --clump-p1 1 --clump-p2 1 --clump-r2'
-            ' %f --clump-kb %d --out %s --allow-no-sex --keep-allele-order'
-            ' --pheno %s --memory %d --threads %d')
+    plink = ('%s --bfile %s -clump %s --clump-field %s --clump-p1 1 --clump-p2'
+             ' 1 --clump-r2 %f --clump-kb %d --out %s --allow-no-sex '
+             '--keep-allele-order --pheno %s --memory %d --threads %d')
     # If output is not there yet, execute the command
     if not os.path.isfile('%s.clumped'%(outfn)):
-        plink = plink%(plinkexe, bfile, sumstats, r2, window, outfn, phenofn,
-                       maxmem, threads)
+        plink = plink%(plinkexe, bfile, sumstats, clump_field, r2, 
+                       window, outfn, phenofn, maxmem, threads)
         o, e = executeLine(plink)
     #=# read Clump file
     fn = '%s.clumped'%(outfn)
@@ -78,7 +78,8 @@ def range_profiles(name, range_tuple, r2, qfiledf, phenofn):
     # Get the lable from the named tuple
     range_label = range_tuple.name
     # Make sure that that everything matches as it supposed to
-    assert float(range_tuple.name) == range_tuple.Max
+    assert np.around(float(range_tuple.name), 5) == np.around(range_tuple.Max,
+                                                               5)
     # Get the number of SNPs
     nsps = qfiledf[qfiledf.P <= range_tuple.Max].shape[0]
     # Set the input file name
@@ -109,7 +110,7 @@ def range_profiles(name, range_tuple, r2, qfiledf, phenofn):
             'Pthresh':range_label, 'R2':pR2,'pval':p_value,'SNP kept':nsps}     
 
 #----------------------------------------------------------------------
-def qfile_gen(outpref, clumped, r2, pvals_th):
+def qfile_gen(outpref, clumped, r2, pvals_th, clump_field='P'):
     """
     Generate the qfile for --q-score-range
     
@@ -117,6 +118,7 @@ def qfile_gen(outpref, clumped, r2, pvals_th):
     :param :class pd.DataFrame clumped: Dataframe with the clumpfile results 
     :param float r2: LD threshold for clumping
     :param list pvals_th: List with the pvalue thresholds to be tested
+    :param str clump_field: field to based the clumping on
     """
     # Set the input/output names
     qrange = '%s_%.2f.qrange' % (outpref, r2)
@@ -128,14 +130,14 @@ def qfile_gen(outpref, clumped, r2, pvals_th):
     # Write q-range to file
     qr.loc[:, order].to_csv(qrange, header=False, index=False, sep =' ')
     # Set and write qfile based on clumped values
-    qf = clumped.loc[:,['SNP','P']]
+    qf = clumped.loc[:,['SNP', clump_field]]
     qf.to_csv(qfile, header=False, index=False, sep=' ')
     # return the output filenames and the corresponding dataframes
     return qrange, qfile, qr, qf    
 
 #---------------------------------------------------------------------------
 def ScoreClumped(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th, 
-                 plinkexe, maxmem=1700, threads=8):
+                 plinkexe, clump_field='P', maxmem=1700, threads=8):
     """
     Compute the PRS for the clumped variants
     :param str outpref: Prefix for outputs
@@ -147,6 +149,7 @@ def ScoreClumped(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th,
     :param str plinkexe: Path and executable of plink
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
+    :param str clump_field: field to based the clumping on
     """
     # Create empty dataframe with predifined columns to store reults
     results = pd.DataFrame(columns=['File', 'LDthresh', 'Pthresh', 'R2'])
@@ -246,10 +249,21 @@ def plotppt(outpref, results):
     ax2.set_ylabel('-log(P-Value)', color='r')
     ax2.tick_params('y', colors='r')         
     plt.savefig('%s_PpT.pdf' % outpref)    
-    
+
+#----------------------------------------------------------------------
+def compute_prange(values, p=0.01):
+    """
+    If the range of values to clump is set to infer, set a range of thresholds
+    :param values: Sorted numpy array of values
+    :param p: porportion of thresholds to be sampled
+    """
+    n = np.around(values.shape[0] * p)
+    return values[np.linspace(0,values.shape[0], n, endpoint=False, dtype=int)]
+        
 #----------------------------------------------------------------------
 def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
-           plinkexe, plot=False, clean=False, maxmem=1700, threads=1):
+           plinkexe, clump_field='P', sort_file=None, f_thr=0.1, plot=False, 
+           clean=False, maxmem=1700, threads=1):
     """
     Execute P + T
     
@@ -265,10 +279,18 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
     :param bool clean: Whether to clean the folder or not
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
+    :param str clump_field: field in the summary stats to clump with
+    :param str sort_file: File with the values for SNP sorting
     """
     print('Performing ppt')
     # Read the summary statistics file
     sumstatsdf = pd.read_table(sumstats, delim_whitespace=True)
+    frq = read_freq(bfile, plinkexe, freq_threshold=f_thr, maxmem=maxmem, 
+                    threads=threads)
+    sumstatsdf = sumstatsdf.merge(frq, on=['SNP', 'A1', 'CHR'])
+    sumstatsdf.rename(columns={'BETA':'BETA_UNNORM'}, inplace=True)
+    sumstatsdf['norm'] = np.sqrt((2 * sumstatsdf.MAF) * (1 - sumstatsdf.MAF))
+    sumstatsdf['BETA'] = sumstatsdf.BETA_UNNORM/sumstatsdf.norm
     # Ensure the phenotype file contains only individuals from the bfile
     fn = os.path.split(bfile)[-1]
     if os.path.isfile('%s.keep' % fn):
@@ -281,10 +303,20 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
                                          index=False)
         phenofn = nphenofn
     print('Performing clumping in %s...' % outpref)
+    if prange == 'infer':
+        sort_file = pd.read_table(sort_file, delim_whitespace=True)
+        if any(sort_file.loc[:,clump_field] < 0):
+            sort_file[clump_field] = sort_file.loc[:,clump_field].abs()
+        sumstatsdf = sumstatsdf.merge(sort_file, on='SNP')
+        sumstats = '%s_abs.txt' % sumstats[:sumstats.rfind('.')]
+        vals = sumstatsdf.loc[:,clump_field].sort_values(ascending=False)
+        sumstatsdf.to_csv(sumstats, sep=' ', index=False)
+        prange = compute_prange(vals.values)
     # Execute the clumping and read the files
     results = [ScoreClumped(outpref, bfile, clump_vars(
         outpref, bfile, sumstats, r2, snpwindow, phenofn, plinkexe, maxmem, 
-        threads), phenofn, sumstatsdf, r2, prange, plinkexe, maxmem, threads) 
+        threads, clump_field=clump_field), phenofn, sumstatsdf, r2, prange, 
+                            plinkexe, clump_field, maxmem, threads) 
                for r2 in tqdm(r2range, total=len(r2range))] 
     # Concatenate the results in a single data frame
     results = pd.concat(results)
@@ -307,7 +339,7 @@ if __name__ == '__main__':
                         required=True)    
     parser.add_argument('-p', '--prefix', help='prefix for outputs',
                         required=True)
-    parser.add_argument('-s', '--sumstats', help='Filename of sumary statistics',
+    parser.add_argument('-s', '--sumstats', help='Filename of Sumstats',
                         required=True)    
     parser.add_argument('-P', '--pheno', help='Filename of phenotype file',
                         required=True)    
@@ -333,7 +365,11 @@ if __name__ == '__main__':
     parser.add_argument('-L', '--label', help='Label of the populations being' +
                         ' analyzed.', default='EUR')   
     parser.add_argument('-t', '--plot', help='Plot results of analysis', 
-                        default=False, action='store_true')      
+                        default=False, action='store_true')   
+    parser.add_argument('-f', '--clump_field', default='P', 
+                        help=('field in the summary stats to clump with'))
+    parser.add_argument('-a', '--sort_file', default=None, 
+                        help=('File to sort the snps by instead of pvalue'))    
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=3000, type=int)       
     args = parser.parse_args()
@@ -342,12 +378,16 @@ if __name__ == '__main__':
         np.arange(args.rstart, args.rstop + args.rstep, args.rstep), 
         reverse=True)]
     if args.customP:
-        Ps = [float('%.1g' % float(x)) for x in args.customP.split(',')] 
+        if args.customP != 'infer':
+            Ps = [float('%.1g' % float(x)) for x in args.customP.split(',')] 
+            Ps = sorted(Ps, reverse=True)
+        else:
+            Ps = 'infer'
     else:
         sta, sto = np.log10(pstart), np.log10(pstop)
-        Ps = [float('%.1g' % 10**(x)) for x in np.concatenate(
-            (np.arange(sta, sto), [sto]), axis=0)]
-    Ps = sorted(Ps, reverse=True)    
+        Ps = sorted([float('%.1g' % 10**(x)) for x in np.concatenate(
+            (np.arange(sta, sto), [sto]), axis=0)], reverse=True)
     pplust(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow, 
-           args.pheno, args.plinkexe, plot=args.plot, clean=args.clean, 
+           args.pheno, args.plinkexe, clump_field=args.clump_field, 
+           sort_file=args.sort_file, plot=args.plot, clean=args.clean, 
            maxmem=args.maxmem, threads=args.threads)

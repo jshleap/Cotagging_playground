@@ -41,27 +41,6 @@ def read_n_sort_clumped(resultsfn, allsnps):
     # Return the dataftame of the parse of the clumpled file
     return parse_sort_clump(clumpfn, allsnps)
 
-#---------------------------------------------------------------------------
-def read_scored_qr(profilefn, phenofile, alpha, nsnps):
-    """
-    Read the profile file a.k.a. PRS file or scoresum
-    
-    :param str profilefn: Filename of profile being read
-    :param str phenofile: Filename of phenotype
-    :param int nsnps: Number of snps that produced the profile
-    """
-    # Read the profile
-    sc = pd.read_table(profilefn, delim_whitespace=True)
-    # Read the phenotype file
-    pheno = pd.read_table(phenofile, delim_whitespace=True, header=None, names=[
-    'FID', 'IID', 'pheno'])
-    # Merge the two dataframes
-    sc = sc.merge(pheno, on=['FID', 'IID'])
-    # Compute the linear regression between the score and the phenotype
-    lr = linregress(sc.pheno, sc.SCORE)
-    # Return results in form of dictionary
-    dic = {'File':profilefn, 'alpha':alpha, 'R2':lr.rvalue**2, 'SNP kept':nsnps}
-    return dic
 
 #----------------------------------------------------------------------
 def strategy_hyperbola(x, y, alpha):
@@ -86,45 +65,6 @@ def strategy_sum(x, y, alpha):
     """
     return (alpha * x) + ((1-alpha) * y)
  
-#--------------------------------------------------------------------------- 
-def qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr, maxmem, 
-            threads, label, prefix):
-    """
-    Score using qrange
-    :param int maxmem: Maximum allowed memory
-    :param int trheads: Maximum number of threads to use
-    :param str plinkexe: Path and executable of plink
-    :param str bfile: Prefix of plink-bed fileset
-    :param str sumstats: File with the summary statistics in plink format 
-    :param str qrange: File with the ranges to be passed to the --q-score-range
-    :param str phenofile: Filename with the phenotype
-    """
-    # Score files with the new ranking
-    score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
-             '--allow-no-sex --keep-allele-order --pheno %s --out %s --memory '
-             '%d --threads %d')
-    score = score % (plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou,
-                     maxmem, threads)
-    o,e = executeLine(score) 
-    # Get the results in dataframe
-    profs_written = read_log(ou)
-    df  = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
-                                       phenofile, label, x.Max) if (
-        '%s.%.2f.profile' % (ou, float(x.label)) in profs_written) else {} 
-                        for x in qr.itertuples()]).dropna()
-    # Cleanup
-    label = label if isinstance(label, str) else '%.2f' % label
-    with tarfile.open('Profiles_%s_%s.tar.gz' % (prefix, label), mode='w:gz'
-                      ) as t:
-        for fn in glob('%s*.profile' % ou):
-            if os.path.isfile(fn):
-                try:
-                # it has a weird behaviour
-                    os.remove(fn)
-                    t.add(fn)
-                except:
-                    pass  
-    return df
 
 #---------------------------------------------------------------------------
 def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats, 
@@ -199,27 +139,8 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
     nsnps = sorted_cotag.shape[0]
     frac_snps = nsnps / 100
     # Generate the qrange file?
-    order = ['label', 'Min', 'Max']
-    if qrangefn is None:
-        # Define the number of snps per percentage point and generate the range
-        percentages = set_first_step(nsnps, prunestep, every=every)
-        snps = np.around((percentages * nsnps) / 100).astype(int)
-        try:
-            # Check if there are repeats in ths set of SNPS
-            assert sorted(snps) == sorted(set(snps))
-        except AssertionError:
-            snps = ((percentages * allsnp) / 100).astype(int)
-            assert sorted(snps) == sorted(set(snps))
-        labels = ['%.2f' % x for x in percentages]
-        # Generate the qrange file
-        qrange = '%s.qrange' % prefix
-        qr = pd.DataFrame({'label':labels, 'Min':np.zeros(len(percentages)),
-                           'Max':snps}).loc[:, order]        
-        qr.to_csv(qrange, header=False, index=False, sep =' ')   
-    else:
-        # Read the previously generate qrange
-        qrange = qrangefn
-        qr = pd.read_csv(qrange, sep=' ', header=None, names=order)
+    qr, qrange = gen_qrange(prefix, nsnps, prunestep, every=every, 
+                            qrangefn=qrangefn)
     # Deal with the P+T results
     if isinstance(clumpe, list):
         premerge = clumpe[0][0].merge(clumpe[1][0], on='SNP', suffixes=[

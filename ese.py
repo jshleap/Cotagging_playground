@@ -52,7 +52,7 @@ def get_blocks(df, available_snps, label, sliding=False, cpus=1):
     """
     print('Getting LD blocks from', label)
     group = df.groupby('SNP_A')
-    keys = group.groups.keys()
+    keys = sorted(group.groups.keys())
     ngroups = pd.Series(keys).isin(available_snps).sum()
     grouping = (x for x in keys if x in available_snps)
     if sliding:
@@ -79,25 +79,23 @@ def integral_b(vs, mu, snps):
     Compute the expected beta square
     :param vs: vector of v
     :param mu: mean
-    :param all_markers: number of markers in genome
-    :param N: Number of individuals
     :param snps: names of snps in order
     """
     exp = np.exp( np.power(vs,2) / (4 * mu) )
-    lhs = ( (2 * mu) + np.power(vs,2) ) / ( 4 * np.power(mu,2) )
+    lhs = ( ((2 * mu) + np.power(vs,2)) ) / ( 4 * np.power(mu,2) )
     rhs = exp / exp.sum()
     vec = lhs * rhs
     return pd.Series(vec, index=snps)
 
 #----------------------------------------------------------------------
-def per_locus(locus, sumstats, avh2, h2,  N, ld1, ld2):
+def per_locus(locus, sumstats, avh2, h2,  N, ld1, ld2, M):
     """
     compute the per-locus expectation
     """
     locus = sumstats[sumstats.SNP.isin(locus)].loc[:,['SNP', 'BETA']]
     locus.index = locus.SNP.tolist()
     snps = locus.SNP.tolist()
-    M = locus.shape[0]
+    #M = locus.shape[0]
     h2_l = avh2 * M
     mu = ( (N /(2 * ( 1 - h2_l ) ) ) + ( M / ( 2 * h2 ) ) )
     vjs = (( N * locus.BETA.values ) / (2 * ( 1 - h2_l ) ))
@@ -203,7 +201,7 @@ def transferability(args):
     print('Compute expected beta square per locus...')
     if not os.path.isfile(resfile):
         res = Parallel(n_jobs=int(args.threads))(delayed(per_locus)(
-            locus, sumstats, avh2, args.h2, N, ld1[i], ld2[i]
+            locus, sumstats, avh2, args.h2, N, ld1[i], ld2[i], len(loci)
             ) for i, locus in tqdm(enumerate(loci), total=len(loci)))    
         res = pd.concat(res)
         res.to_csv(resfile, index=False, sep='\t')

@@ -11,7 +11,7 @@ from tqdm import tqdm
 from LinearPipeline import *
 from NullSNPPruning import *
 from matplotlib import pyplot as plt
-from joblib import delayed, parallel
+from joblib import delayed, Parallel
 from LinearPipeline import main as lp
 plt.style.use('ggplot')
 

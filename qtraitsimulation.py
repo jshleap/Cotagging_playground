@@ -13,13 +13,24 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
-
-
 from utilities4cotagging import read_freq, executeLine
 
+
+#----------------------------------------------------------------------
+def get_SNP_dist(bfile, causals):
+    """
+    compute the distance between snps (for now only for uniformly distributed)
+    :param str bfile: prefix of the plink bedfileset
+    :param list causal: Causal variants to simulate
+    """
+    bim = pd.read_table('%s.bim' % bfile, delim_whitespace=True, header=None, 
+                        names=['CHR', 'SNP', 'cm', 'BP', 'A1', 'A2'])
+    bim = bim[bim.SNP.isin(causals)]
+    return int(bim.BP.diff().mean()/1000)
+    
 def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None, 
             causaleff=None, bfile2=None, freqthreshold=0.1, maxmem=1700, 
-            threads=1, seed=None):
+            threads=1, seed=None, uniform=False):
     """
     Generate TRUE causal effects and PRS. Also, subset the SNPs based on 
     frequency
@@ -34,6 +45,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
     :param :class pd.DataFrame causaleff: DataFrame with the true causal effects
     :param str bfile2: prefix of the plink bedfileset on a second population
     :param float freqthreshold: Lower threshold to filter MAF by
+    :param bool uniform: pick uniformingly distributed causal variants
     """
     # set the seed
     seed = np.random.randint(1e4) if seed is None else seed
@@ -42,7 +54,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
     # Get the per snp heritability
     h2_snp = h2/ncausal
     if not os.path.isfile('%s.full'%(outprefix)):
-        # Read bim file
+        # Read freq file
         if frq is None:
             frq = read_freq(bfile, plinkexe)
             if bfile2 is not None:
@@ -53,11 +65,18 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
         frq.to_csv(totalsnps, sep=' ', header=False, index=False)
         # Get causal mutation indices randomly distributed
         if ncausal > allsnps:
-            print('More causals than available snps. Setting it to %d' %allsnps)
+            print('More causals than available snps. Setting it to %d' % 
+                  allsnps)
             ncausal = allsnps        
         if causaleff is not None:
             causals = frq[frq.SNP.isin(causaleff.SNP)]
             causals = causals.merge(causaleff, on='SNP')
+        elif uniform:
+            causals = frq.SNP.values[np.linspace(0, frq.shape[0] - 1, 
+                                                 num=ncausal, dtype=int)]
+            av_dist = get_SNP_dist(bfile, causals)
+            causals = frq[frq.SNP.isin(causals)]
+            print('Causal SNPs are %d bp apart on average' % av_dist)
         elif snps is None:
             causals = frq.sample(ncausal, replace=False, random_state=seed)
         else:
@@ -113,6 +132,8 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     prs_true['env_eff'] = env_effect
     # Generate the phenotype from the model Phenotype = genetics + environment
     prs_true['PHENO'] = prs_true.gen_eff + prs_true.env_eff
+    est_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
+    np.testing.assert_allclose(h2, est_h2, rtol=0.05)
     # Write it to file
     prs_true.to_csv('%s.prs_pheno.gz'%(prefix), sep='\t', compression='gzip',
                     index=False)
@@ -137,7 +158,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None, 
                        frq=None, causaleff=None, noenv=False, plothist=False,
                        freqthreshold=0.1, bfile2=None, quality='png', 
-                       maxmem=1700, threads=1, seed=None):
+                       maxmem=1700, threads=1, seed=None, uniform=False):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -156,7 +177,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None,
     :param str quality: quality of the plot (e.g. pdf, png, jpg)
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
-    :param int seed: random seed to use in samplinh
+    :param int seed: random seed to use in sampling
+    :param bool uniform: pick uniformingly distributed causal variants
     """
     print('Performing qtraits_simulation on %s' % outprefix)
     if causaleff is not None:
@@ -170,7 +192,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None,
                                                   causaleff=causaleff,
                                                   bfile2=bfile2,
                                                   freqthreshold=freqthreshold, 
-                                                  seed=seed)
+                                                  seed=seed, uniform=uniform)
     else:
         truebeta = pd.read_table('%s.full' % outprefix, delim_whitespace=True) 
         validsnpfile = '%s.totalsnps' % outprefix   
@@ -208,7 +230,7 @@ if __name__ == '__main__':
                         default=0.1, type=float)
     parser.add_argument('-2', '--bfile2', help=('prefix of the plink bedfileset'
                                                 'o n a second population'))
-    
+    parser.add_argument('-u', '--uniform', default=False, action='store_true')
     parser.add_argument('-t', '--threads', default=False, action='store')
     parser.add_argument('-M', '--maxmem', default=False, action='store')  
     parser.add_argument('-s', '--seed', default=None, type=int)  
@@ -218,5 +240,6 @@ if __name__ == '__main__':
                        args.plinkexe, plothist=args.plothist, 
                        causaleff=args.causal_eff, quality=args.quality, 
                        freqthreshold=args.freqthreshold, bfile2=args.bfile2,
-                       maxmem=args.maxmem, threads=args.threads, seed=args.seed)     
+                       maxmem=args.maxmem, threads=args.threads, 
+                       seed=args.seed, uniform=args.uniform)     
     
