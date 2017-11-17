@@ -47,7 +47,7 @@ def read_scored_qr(profilefn, phenofile, kind, nsnps, profiles):
     # Merge the two data frames
     mer = sc.merge(pheno, on=['FID','IID'])
     # Compute the linear regression between the phenotype and the scored PRS
-    lr = linregress(mer.pheno, mer.SCORE)
+    lr = linregress(mer.pheno, mer.SCORESUM)
     # Store and return result in dictionary format
     dic = {'SNP kept':nsnps, '-log(P)_%s' % kind : -np.log10(lr.pvalue), 
            r'$R^{2}$_%s' % kind : lr.rvalue**2, 'Slope_%s' % kind: lr.slope}
@@ -184,7 +184,7 @@ def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
     # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
     #          '--allow-no-sex --keep-allele-order --pheno %s --out %s '
     #          '--memory %d --threads %d')
-    score = ('%s --bfile %s --score %s --q-score-range %s %s --allow-no-sex '
+    score = ('%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
              '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
     score = score%(plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
                    maxmem, threads)

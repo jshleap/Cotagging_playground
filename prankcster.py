@@ -69,7 +69,7 @@ def strategy_sum(x, y, alpha):
 #---------------------------------------------------------------------------
 def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats, 
                     qrange, phenofile, frac_snps, qr, tar, maxmem=1700, 
-                    threads=8, strategy='sum'):
+                    threads=8, strategy='sum', score_type='SUM'):
     """
     Single execution of the alpha loop for paralellization
     
@@ -105,15 +105,16 @@ def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats,
     new_rank.loc[:,['SNP', 'New_rank']].to_csv(qfile, sep=' ', header=False,
                                                index=False)
     #scorefile = '%s.score' % prefix
+    normalize_geno = True if score_type == 'SUM' else False
     df = qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr,
-                maxmem, threads, alpha, prefix)
+                maxmem, threads, alpha, prefix, normalized_geno=normalize_geno)
     # Return the results dataframe
     return df
 
 #---------------------------------------------------------------------------
 def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
             plinkexe, tar, prunestep=1, qrangefn=None, maxmem=1700,
-            threads=1, strategy='sum', every=False):
+            threads=1, strategy='sum', every=False, score_type='SUM'):
     """
     Estimate the new rank based on the combination of the cotagging and P+T rank
     
@@ -154,14 +155,16 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
     # Execute the optimization
     df = Parallel(n_jobs=int(threads))(delayed(single_alpha_qr)(
         prefix, alpha, merge, plinkexe, bfile, sumstats, qrange, phenofile,
-        frac_snps, qr, tar, maxmem, threads, strategy) for alpha in tqdm(space))    
+        frac_snps, qr, tar, maxmem, threads, strategy, score_type)
+                                       for alpha in tqdm(space))
     # Return the list of dataframes with the optimization results
     return df, qrange, qr, merge
 
 #---------------------------------------------------------------------------
 def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, 
                    plinkexe, alphastep, tar, prune_step=1, qrangefn=None,
-                   maxmem=1700, threads=1, strategy='sum', every=False):
+                   maxmem=1700, threads=1, strategy='sum', every=False,
+                   score_type='SUM'):
     """
     Do a line search for the best alpha in nrank = alpha*rankP+T + (1-alpha)*cot
     
@@ -188,7 +191,8 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
     if not os.path.isfile(picklfn):
         d, r, qr, merge  = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, 
                             phenofile, alphastep, plinkexe, tar, prune_step,
-                            qrangefn, maxmem, threads, strategy, every)
+                            qrangefn, maxmem, threads, strategy, every,
+                                   score_type)
         df = pd.concat(d)
         df.to_csv(outfn, sep='\t', index=False)
         with open(picklfn, 'wb') as F:
@@ -261,7 +265,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                ppt_results_ref, sumstats, pheno, plinkexe, alpha_step, 
                labels, prune_step, sortresults, freq_threshold=0.1, h2=None,
                qrangefn=None, maxmem=1700, threads=1, strategy='sum', 
-               every=False, column='Cotagging', splits=5, weight=False):
+               every=False, column='Cotagging', splits=5, weight=False,
+               score_type='SUM'):
     """
     Execute the code and plot the comparison
     
@@ -345,13 +350,14 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                                             scorefn, phe_tr, plinkexe,
                                             alpha_step, tar, prune_step, 
                                             qrangefn, maxmem, threads, strategy,
-                                            every)
+                                            every, score_type=score_type)
     best_alpha = df.alpha.iloc[0]
     # Score with test-set
     res_pr = '%s_testset' % prefix
     best = single_alpha_qr(res_pr, best_alpha, merged, plinkexe, test, scorefn,
                           qrange, phe_te, frac_snps, qr, tar, maxmem=maxmem, 
-                          threads=threads, strategy=strategy)
+                          threads=threads, strategy=strategy,
+                           score_type=score_type)
     # Get the best alpha of the optimization
     #grouped = df.groupby('alpha')
     # best = grouped.get_group(df.loc[0,'alpha'])

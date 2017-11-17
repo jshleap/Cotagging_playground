@@ -16,7 +16,7 @@ from utilities4cotagging import train_test, executeLine
 plt.style.use('ggplot')
 
 #----------------------------------------------------------------------
-def gwas(plinkexe, bfile, outprefix, covs=None, nosex=False, 
+def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
          threads=False, maxmem=False, validsnpsfile=None):
     """
     Execute plink gwas. This assumes continuos phenotype and that standard qc 
@@ -41,9 +41,9 @@ def gwas(plinkexe, bfile, outprefix, covs=None, nosex=False,
     ## 5) prefix for outputs
     bfile, pheno = bfile
     # Format CLA
-    plinkgwas = "%s --bfile %s --assoc fisher-midp --linear --pheno %s"
-    plinkgwas+= " --prune --out %s_gwas --ci 0.95 --keep-allele-order --vif 100"
-    plinkgwas = plinkgwas%(plinkexe, bfile, pheno, outprefix)
+    plinkgwas = ("%s --bfile %s --assoc fisher-midp --linear --pheno %s --prune"
+                 " --out %s_gwas --ci 0.95 --a1-allele %s 3 2 --vif 100")
+    plinkgwas = plinkgwas%(plinkexe, bfile, pheno, outprefix, allele_file)
     # Include a subset of snps file if required
     if validsnpsfile is not None:
         plinkgwas+= " --extract %s" % validsnpsfile
@@ -114,9 +114,9 @@ def manhattan_plot(outfn, p_values, causal_pos=None, alpha = 0.05, title=''):
     plt.savefig(outfn)
     
 #----------------------------------------------------------------------
-def plink_gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
-               threads=False, maxmem=False, validate=None, validsnpsfile=None, 
-               plot=False, causal_pos=None):
+def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
+               nosex=False, threads=False, maxmem=False, validate=None,
+               validsnpsfile=None, plot=False, causal_pos=None):
     """
     execute the gwas
     
@@ -143,7 +143,7 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, covs=None, nosex=False,
         train, test = (bfile, pheno),  (None, pheno)
     # Run the GWAS
     #training, pheno = train
-    gws, fn = gwas(plinkexe, train, outprefix, covs=covs, nosex=nosex, 
+    gws, fn = gwas(plinkexe, train, outprefix, allele_file, covs, nosex=nosex,
                threads=threads, maxmem=maxmem, validsnpsfile=validsnpsfile)
     # Make a manhatan plot
     if plot:
@@ -162,6 +162,9 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--pheno', help='Phenotype file', required=True)
     parser.add_argument('-P', '--plinkexe', default='~/Programs/plink_mac/plink'
                         )
+    parser.add_argument('-a', '--allele_file', default='EUR.allele',
+                        help='File with the allele order. A1 in position 3 and '
+                             'id in position2', required=True)
     parser.add_argument('-v', '--validate', default=None, type=int)
     parser.add_argument('-V', '--validsnpsfile', default=None)
     parser.add_argument('-C', '--covs', default=None, action='store')
@@ -171,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=1700, type=int)    
     args = parser.parse_args()
-    plink_gwas(args.plinkexe, args.bfile, args.prefix,args.pheno,covs=args.covs, 
-               nosex=args.nosex, threads=args.threads, maxmem=args.maxmem,
-               validate=args.validate, validsnpsfile=args.validsnpsfile, 
-               plot=args.plot)     
+    plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
+               args.allele_file,  covs=args.covs, nosex=args.nosex,
+               threads=args.threads, maxmem=args.maxmem, validate=args.validate,
+               validsnpsfile=args.validsnpsfile, plot=args.plot)

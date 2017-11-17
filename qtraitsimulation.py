@@ -61,8 +61,10 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
                 frq = frq.merge(read_freq(bfile2, plinkexe), on=['CHR', 'SNP'])
         allsnps = frq.shape[0]
         print ('Total Number of variants available: %d' % allsnps)
+        allele = '%s.alleles' % outprefix
         totalsnps = '%s.totalsnps' % outprefix
-        frq.to_csv(totalsnps, sep=' ', header=False, index=False)
+        frq.SNP.to_csv(totalsnps, sep=' ', header=False, index=False)
+        frq.to_csv(allele, sep=' ', header=False, index=False)
         # Get causal mutation indices randomly distributed
         if ncausal > allsnps:
             print('More causals than available snps. Setting it to %d' % 
@@ -91,20 +93,20 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
         causals.loc[:, 'beta'] = causals.loc[:, 'eff']/causals.norm      
         scfile = causals.sort_index()
         # Write score to file
-        scfile.loc[:, ['SNP', 'A1_x', 'beta']].to_csv('%s.score'%(outprefix), 
-                                                    sep=' ', header=False, 
-                                                    index=False)
+        scfile.loc[:, ['SNP', 'A1_x', 'beta']].to_csv('%s.score' % (outprefix),
+                                                      sep=' ', header=False,
+                                                      index=False)
         scfile.to_csv('%s.full'%(outprefix), sep=' ', index=False)        
     else:
         scfile = pd.read_table('%s.full'%(outprefix), delim_whitespace=True, 
                                header=None, names=['SNP', 'Allele', 'beta'])
     # Score using plink
     score = ('%s --bfile %s --score %s.score sum --allow-no-sex --extract %s '
-             '--keep-allele-order --out %s --memory %d --threads '
+             '--a1-allele %s 3 2 --out %s --memory %d --threads '
              '%d')
     if not os.path.isfile('%s.profile'%(outprefix)):
-        executeLine(score%(plinkexe, bfile, outprefix, totalsnps, outprefix,
-                           maxmem, threads))
+        executeLine(score%(plinkexe, bfile, outprefix, totalsnps, allele,
+                           outprefix, maxmem, threads))
     # Read scored and rename SCORE column,
     score = pd.read_table('%s.profile'%(outprefix), delim_whitespace=True)
     score = score.rename(columns={'SCORESUM':'gen_eff'})
@@ -133,6 +135,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     # Generate the phenotype from the model Phenotype = genetics + environment
     prs_true['PHENO'] = prs_true.gen_eff + prs_true.env_eff
     est_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
+    print('Estimated heritability: %.4f' % est_h2)
     np.testing.assert_allclose(h2, est_h2, rtol=0.05)
     # Write it to file
     prs_true.to_csv('%s.prs_pheno.gz'%(prefix), sep='\t', compression='gzip',

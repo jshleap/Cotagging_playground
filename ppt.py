@@ -23,11 +23,12 @@ plt.style.use('ggplot')
 
 
 #---------------------------------------------------------------------------
-def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, plinkexe, maxmem,
-               threads, clump_field='P'):
+def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, al_file, plinkexe,
+               maxmem, threads, clump_field='P'):
     """
     Use plink to clump variants based on a pval and r2 threshold 
     
+    :param al_file: File with the allele order
     :param str outpref: Prefix for outputs
     :param str bfile: Prefix of plink-bed fileset
     :param str sumstats: File with the summary statistics in plink format 
@@ -43,11 +44,11 @@ def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, plinkexe, maxmem,
     # Prepare plink CLA
     plink = ('%s --bfile %s -clump %s --clump-field %s --clump-p1 1 --clump-p2'
              ' 1 --clump-r2 %f --clump-kb %d --out %s --allow-no-sex '
-             '--keep-allele-order --pheno %s --memory %d --threads %d')
+             '--a1-allele %s 3 2 --pheno %s --memory %d --threads %d')
     # If output is not there yet, execute the command
     if not os.path.isfile('%s.clumped'%(outfn)):
         plink = plink%(plinkexe, bfile, sumstats, clump_field, r2, 
-                       window, outfn, phenofn, maxmem, threads)
+                       window, outfn, al_file, phenofn, maxmem, threads)
         o, e = executeLine(plink)
     #=# read Clump file
     fn = '%s.clumped'%(outfn)
@@ -63,7 +64,7 @@ def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, plinkexe, maxmem,
     return outfn, table      
 
 #----------------------------------------------------------------------
-def range_profiles(name, range_tuple, r2, qfiledf, phenofn):
+def range_profiles(name, range_tuple, r2, qfiledf, phenofn, score_type='sum'):
     """
     Read single profile from the q-range option
     
@@ -73,6 +74,10 @@ def range_profiles(name, range_tuple, r2, qfiledf, phenofn):
     :param :class pd.DataFrame qfiledf: Data frame with the qfile information
     :param str phenofn: File with the phenotype in plink format
     """
+    if score_type == 'sum':
+        col = 'SCORESUM'
+    else:
+        col = 'SCORE'
     # Read phenotype into a pandas dataframe
     pheno = read_pheno(phenofn)
     # Get the lable from the named tuple
@@ -87,9 +92,9 @@ def range_profiles(name, range_tuple, r2, qfiledf, phenofn):
     # Read the profile
     score = pd.read_table(profilefn, delim_whitespace=True)    
     # Merge score and pheno by individual (IID) and family (FID) IDs 
-    score = score.loc[:,['FID', 'IID', 'SCORE']].merge(pheno, on=['FID','IID'])
+    score = score.loc[:,['FID', 'IID', col]].merge(pheno, on=['FID','IID'])
     # Rename SCORE to PRS
-    score.rename(columns={'SCORE':'PRS'}, inplace=True)
+    score.rename(columns={col:'PRS'}, inplace=True)
     # check if peno is binary:
     if set(score.Pheno) <= set([0,1]):
         score['pheno'] = score.Pheno - 1
@@ -137,9 +142,11 @@ def qfile_gen(outpref, clumped, r2, pvals_th, clump_field='P'):
 
 #---------------------------------------------------------------------------
 def ScoreClumped(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th, 
-                 plinkexe, clump_field='P', maxmem=1700, threads=8):
+                 plinkexe, allele_file, clump_field='P', maxmem=1700, threads=8,
+                 score_type='sum'):
     """
     Compute the PRS for the clumped variants
+    :param allele_file: A1 allele file
     :param str outpref: Prefix for outputs
     :param str bfile: Prefix of plink-bed fileset
     :param tuple clumped: tuple with name and Pandas Data Frame with clump data
@@ -170,18 +177,20 @@ def ScoreClumped(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th,
         merge.to_csv('%s.score'%(name), sep=' ', header=False, 
                      index=False)
         # Score using plink
+        if score_type != 'sum':
+            score_type = ''
         qrange, qfile, qr, qf = qfile_gen(outpref, clumped, r2, pvals_th)
-        score = ('%s --bfile %s --score %s.score --q-score-range %s %s '
-                 '--allow-no-sex --keep-allele-order --out %s --pheno %s '
+        score = ('%s --bfile %s --score %s.score %s --q-score-range %s %s '
+                 '--allow-no-sex --a1-allele %s 3 2 --out %s --pheno %s '
                  '--memory %d --threads %d')
-        score = score % (plinkexe, bfile, name, qrange, qfile, name, phenofn,
-                         maxmem, threads)        
+        score = score % (plinkexe, bfile, name, score_type, qrange, qfile,
+                         allele_file, name, phenofn, maxmem, threads)
         o,e = executeLine(score)
         # read range results
         profs_written = read_log(name)
-        l = [range_profiles(name, range_label, r2, qf, phenofn) for range_label 
-             in qr.itertuples() if '%s.%s.profile' % (name, range_label.name) in
-             profs_written]
+        l = [range_profiles(name, range_label, r2, qf, phenofn, score_type)
+             for range_label in qr.itertuples() if '%s.%s.profile' % (
+                 name, range_label.name) in profs_written]
         with open('%s.pickle' % name, 'wb') as f:
             pickle.dump(l, f)
     else:
@@ -262,8 +271,8 @@ def compute_prange(values, p=0.01):
         
 #----------------------------------------------------------------------
 def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
-           plinkexe, clump_field='P', sort_file=None, f_thr=0.1, plot=False, 
-           clean=False, maxmem=1700, threads=1):
+           plinkexe, allele_file, clump_field='P', sort_file=None, f_thr=0.1,
+           plot=False, clean=False, maxmem=1700, threads=1, score_type='sum'):
     """
     Execute P + T
     
@@ -314,9 +323,10 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
         prange = compute_prange(vals.values)
     # Execute the clumping and read the files
     results = [ScoreClumped(outpref, bfile, clump_vars(
-        outpref, bfile, sumstats, r2, snpwindow, phenofn, plinkexe, maxmem, 
-        threads, clump_field=clump_field), phenofn, sumstatsdf, r2, prange, 
-                            plinkexe, clump_field, maxmem, threads) 
+        outpref, bfile, sumstats, r2, snpwindow, phenofn, allele_file, plinkexe,
+        maxmem, threads, clump_field=clump_field), phenofn, sumstatsdf, r2,
+                            prange, plinkexe, allele_file, clump_field, maxmem,
+                            threads, score_type)
                for r2 in tqdm(r2range, total=len(r2range))] 
     # Concatenate the results in a single data frame
     results = pd.concat(results)
@@ -342,7 +352,10 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--sumstats', help='Filename of Sumstats',
                         required=True)    
     parser.add_argument('-P', '--pheno', help='Filename of phenotype file',
-                        required=True)    
+                        required=True)
+    parser.add_argument('-A', '--allele_file', default='EUR.allele',
+                        help='File with the allele order. A1 in position 3 and '
+                             'id in position2', required=True)
     parser.add_argument('-n', '--plinkexe', help=('Path and executable file of '
                                                   'plink'), required=True) 
     parser.add_argument('-l', '--LDwindow', help='Physical distance threshold '+
@@ -371,7 +384,8 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--sort_file', default=None, 
                         help=('File to sort the snps by instead of pvalue'))    
     parser.add_argument('-T', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=3000, type=int)       
+    parser.add_argument('-M', '--maxmem', default=3000, type=int)
+    parser.add_argument('-S', '--score_type', default='sum')
     args = parser.parse_args()
     
     LDs = [x if x <= 0.99 else 0.99 for x in sorted(
@@ -388,6 +402,7 @@ if __name__ == '__main__':
         Ps = sorted([float('%.1g' % 10**(x)) for x in np.concatenate(
             (np.arange(sta, sto), [sto]), axis=0)], reverse=True)
     pplust(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow, 
-           args.pheno, args.plinkexe, clump_field=args.clump_field, 
-           sort_file=args.sort_file, plot=args.plot, clean=args.clean, 
-           maxmem=args.maxmem, threads=args.threads)
+           args.pheno, args.plinkexe, args.allele_file,
+           clump_field=args.clump_field, sort_file=args.sort_file,
+           plot=args.plot, clean=args.clean, maxmem=args.maxmem,
+           threads=args.threads, score_type=args.score_type)

@@ -312,7 +312,7 @@ def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
         qr = pd.read_csv(qrange, sep=' ', header=None, names=order)
     return qr, qrange
 #---------------------------------------------------------------------------
-def read_scored_qr(profilefn, phenofile, alpha, nsnps):
+def read_scored_qr(profilefn, phenofile, alpha, nsnps, score_type='sum'):
     """
     Read the profile file a.k.a. PRS file or scoresum
     
@@ -320,6 +320,10 @@ def read_scored_qr(profilefn, phenofile, alpha, nsnps):
     :param str phenofile: Filename of phenotype
     :param int nsnps: Number of snps that produced the profile
     """
+    if score_type == 'sum':
+        col = 'SCORESUM'
+    else:
+        col = 'SCORE'
     # Read the profile
     sc = pd.read_table(profilefn, delim_whitespace=True)
     # Read the phenotype file
@@ -328,14 +332,14 @@ def read_scored_qr(profilefn, phenofile, alpha, nsnps):
     # Merge the two dataframes
     sc = sc.merge(pheno, on=['FID', 'IID'])
     # Compute the linear regression between the score and the phenotype
-    lr = linregress(sc.pheno, sc.SCORE)
+    lr = linregress(sc.pheno, sc.loc[:, col])
     # Return results in form of dictionary
     dic = {'File':profilefn, 'alpha':alpha, 'R2':lr.rvalue**2, 'SNP kept':nsnps}
     return dic
 
 #--------------------------------------------------------------------------- 
 def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr, maxmem,
-            threads, label, prefix):
+            threads, label, prefix, normalized_geno=True):
     """
     Score using qrange
     :param int maxmem: Maximum allowed memory
@@ -350,15 +354,19 @@ def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr, maxmem
     # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
     #          '--allow-no-sex --keep-allele-order --pheno %s --out %s --memory '
     #          '%d --threads %d')
+    if normalized_geno:
+        sc_type = 'sum'
+    else:
+        sc_type = ''
     score = ('%s --bfile %s --score %s --q-score-range %s %s --allow-no-sex '
              '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
-    score = score % (plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou,
-                     maxmem, threads)
+    score = score % (plinkexe, bfile, '%s %s' % (scorefile, sc_type), qrange,
+                     qfile, phenofile, ou, maxmem, threads)
     o,e = executeLine(score) 
     # Get the results in dataframe
     profs_written = read_log(ou)
     df  = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
-                                       phenofile, label, x.Max) if 
+                                       phenofile, label, x.Max, sc_type) if
                         ('%s.%.2f.profile' % (ou, float(x.label)) in 
                          profs_written) else {} 
                         for x in qr.itertuples()]).dropna()
