@@ -76,7 +76,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
                                                  num=ncausal, dtype=int)]
             av_dist = get_SNP_dist(bfile, causals)
             causals = frq[frq.SNP.isin(causals)]
-            print('Causal SNPs are %d bp apart on average' % av_dist)
+            print('Causal SNPs are %d kbp apart on average' % av_dist)
         elif snps is None:
             causals = frq.sample(ncausal, replace=False, random_state=seed)
         else:

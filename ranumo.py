@@ -181,16 +181,18 @@ def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
     qfile, phenofile, bfile = tup
     suf = qfile[qfile.find('_') +1 : qfile.rfind('.')]
     ou = '%s_%s' % (prefix, suf)
-    score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
-             '--allow-no-sex --keep-allele-order --pheno %s --out %s '
-             '--memory %d --threads %d')
+    # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
+    #          '--allow-no-sex --keep-allele-order --pheno %s --out %s '
+    #          '--memory %d --threads %d')
+    score = ('%s --bfile %s --score %s --q-score-range %s %s --allow-no-sex '
+             '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
     score = score%(plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
                    maxmem, threads)
     o,e = executeLine(score)
     profs = read_log(ou)
     df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label), 
-                                      phenofile, suf, 
-                                      round(float(x.label) * frac_snps), profs)
+                                      phenofile, suf, round(float(x.label)
+                                                            * frac_snps), profs)
                        for x in qr.itertuples()])
     #frames.append(df)    
     with tarfile.open('Profiles_%s.tar.gz' % ou, mode='w:gz') as t:
@@ -259,7 +261,7 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
     else:
         print('Performing prunning ...')
         # Execute the qrange scoring and read it into a dataframe
-        out, qrangefn = subsetter_qrange(prefix, sortedcotag,sortedtagT, 
+        out, qrangefn = subsetter_qrange(prefix, sortedcotag, sortedtagT,
                                          sortedtagR, step, phenofile, bfile, 
                                          allsnp, clumped=clumped, every=every) 
         frames = score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem,
@@ -377,6 +379,15 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
     frq = frqT.merge(frqR, on=['CHR', 'SNP'], suffixes=['_%s' % ref, 
                                                         '_%s' % tar]) 
     gwas = gwas[gwas.SNP.isin(frq.SNP)]
+    # normalize betas and write a scoring file
+    maf = 'MAF_%s' % tar
+    a1 = 'A1_%s' % tar
+    mer = frq.loc[:,['SNP', a1, maf]].merge(gwas, on='SNP')
+    mer['norm'] = np.sqrt((2 * mer.loc[:,maf]) * (1 - mer.loc[:,maf]))
+    mer['BETA_norm'] = mer.BETA / mer.norm
+    scorefn = '%s.score' % prefix
+    mer.loc[:, ['SNP', a1, 'BETA_norm']].to_csv(scorefn, sep=' ', index=False,
+                                                header=False)
     allsnp = gwas.shape[0]
     # Cotagging
     sortedcot, beforetail = smartcotagsort(prefix, gwas, threads=threads)#cotags)
@@ -413,16 +424,17 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
         pptT = os.path.join(os.path.split(phenotar)[0], 
                                             '%s.clumped' % best_clumpT)            
         clumT = parse_sort_clump(pptT, gwas.SNP)
-        clump.append((clumT, tar, phenotar, tarbed))     
+        clump.append((clumT, tar, phenotar, tarbed))
+
     # Perform the prunning and scoring
-    merge, qrangefn = prunebypercentage_qr(prefix, tarbed, gwasfn, phenotar, 
+    merge, qrangefn = prunebypercentage_qr(prefix, tarbed, scorefn, phenotar,
                                            sortedcot, allsnp, sortedtagT, 
                                            sortedtagR, plinkexe, clumped=clump, 
                                            step=step, tar_label=tar, 
                                            ref_label=ref, maxmem=maxmem, 
                                            threads=threads, every=every)      
     # Plot reults
-    plotit(prefix+'_rval', merge, r'$R^{2}$', labels, ppt=clump, 
+    plotit(prefix+'_rval', merge, r'$R^{2}$', labels, ppt=clump,
            plottype=quality, hline=hline)
     # Return the merged data frame
     return merge, qrangefn

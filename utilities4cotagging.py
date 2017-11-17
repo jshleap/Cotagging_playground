@@ -334,7 +334,7 @@ def read_scored_qr(profilefn, phenofile, alpha, nsnps):
     return dic
 
 #--------------------------------------------------------------------------- 
-def qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr, maxmem, 
+def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr, maxmem,
             threads, label, prefix):
     """
     Score using qrange
@@ -342,15 +342,17 @@ def qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr, maxmem,
     :param int trheads: Maximum number of threads to use
     :param str plinkexe: Path and executable of plink
     :param str bfile: Prefix of plink-bed fileset
-    :param str sumstats: File with the summary statistics in plink format 
+    :param str scorefile: File with the summary statistics in plink format
     :param str qrange: File with the ranges to be passed to the --q-score-range
     :param str phenofile: Filename with the phenotype
     """
     # Score files with the new ranking
-    score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
-             '--allow-no-sex --keep-allele-order --pheno %s --out %s --memory '
-             '%d --threads %d')
-    score = score % (plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou,
+    # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
+    #          '--allow-no-sex --keep-allele-order --pheno %s --out %s --memory '
+    #          '%d --threads %d')
+    score = ('%s --bfile %s --score %s --q-score-range %s %s --allow-no-sex '
+             '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
+    score = score % (plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou,
                      maxmem, threads)
     o,e = executeLine(score) 
     # Get the results in dataframe

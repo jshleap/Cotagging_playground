@@ -103,8 +103,9 @@ def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats,
     new_rank['New_rank'] = new_rank.reset_index(drop=True).index.tolist()         
     # Wirte results of the new ranking to file
     new_rank.loc[:,['SNP', 'New_rank']].to_csv(qfile, sep=' ', header=False,
-                                               index=False)    
-    df = qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr, 
+                                               index=False)
+    #scorefile = '%s.score' % prefix
+    df = qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr,
                 maxmem, threads, alpha, prefix)
     # Return the results dataframe
     return df
@@ -191,12 +192,12 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
         df = pd.concat(d)
         df.to_csv(outfn, sep='\t', index=False)
         with open(picklfn, 'wb') as F:
-            pickle.dump((df, r, qr), F)
+            pickle.dump((df, r, qr, merge), F)
     else:
         #df = pd.read_table(outfn, sep='\t')
         with open(picklfn, 'rb') as F:
-            df, r, qr = pickle.load(F)        
-    # Plor the optimization
+            df, r, qr, merge = pickle.load(F)
+    # Plot the optimization
     piv = df.loc[:,['SNP kept','alpha', 'R2']]
     piv = piv.pivot(index='SNP kept',columns='alpha', values='R2').sort_index()
     piv.plot(colormap='copper', alpha=0.5)
@@ -297,15 +298,25 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     f2 = read_freq(targetbed, plinkexe, freq_threshold=freq_threshold)
     frqs = f1.merge(f2, on=['CHR', 'SNP'], suffixes=['_%s' % ref,
                                                          '_%s' % tar])
+    # Read summary statistics
     if isinstance(sumstats, str):
         ss = pd.read_table(sumstats, delim_whitespace=True)
     else:
         assert isinstance(sumstats, pd.DataFrame)
         ss = sumstats
+    # Normalize betas and create score file
+    maf = 'MAF_%s' % tar
+    a1 = 'A1_%s' % tar
+    ss = ss.merge(frqs.loc[:, ['SNP', a1, maf]], on='SNP')
+    ss['norm'] = np.sqrt((2 * ss.loc[:, maf]) * (1 - ss.loc[:, maf]))
+    ss['BETA_norm'] = ss.BETA / ss.norm
+    scorefn = '%s.score' % prefix
+    ss.loc[:, ['SNP', a1, 'BETA_norm']].to_csv(scorefn, sep=' ', index=False,
+                                               header=False)
     # get weighted squares 
     if weight:
-        ws = ss.loc[:,['SNP','BETA','P']]
-        ws['preweighted'] = ((ws.BETA**2) * (1 - ws.P))
+        ws = ss.loc[:,['SNP','BETA_norm','P']]
+        ws['preweighted'] = ((ws.BETA_norm**2) * (1 - ws.P))
         ws = ws.loc[:,['SNP', 'preweighted']]
         weight = ws
     else:
@@ -325,22 +336,20 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     clumperef = read_n_sort_clumped(ppt_results_ref, frqs.SNP)
     #clumperef = clumperef[clumperef.SNP.isin(frqs.SNP)]
     clumpe = [(clumpetar, tar), (clumperef, ref)]
-    # Read summary statisctics
-
-    # Optimize the alphas
     # Create crossvalidation
     cv = train_test(prefix, targetbed, plinkexe, pheno)
     train, test = cv.keys()
     phe_tr, phe_te = [x[1] for x in cv.values()]
+    # Optimize the alphas
     df, qrange, qr, merged = optimize_alpha(prefix, train, sorted_cotag, clumpe,
-                                            sumstats, phe_tr, plinkexe, 
+                                            scorefn, phe_tr, plinkexe,
                                             alpha_step, tar, prune_step, 
                                             qrangefn, maxmem, threads, strategy,
                                             every)
     best_alpha = df.alpha.iloc[0]
     # Score with test-set
     res_pr = '%s_testset' % prefix
-    best = single_alpha_qr(res_pr, best_alpha, merged, plinkexe, test, sumstats, 
+    best = single_alpha_qr(res_pr, best_alpha, merged, plinkexe, test, scorefn,
                           qrange, phe_te, frac_snps, qr, tar, maxmem=maxmem, 
                           threads=threads, strategy=strategy)
     # Get the best alpha of the optimization
@@ -359,7 +368,7 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     else:
         sortedcotag = sorted_cotag
     wqfile = weighted_squares(wout, sortedcotag)
-    qdf = qrscore(plinkexe, targetbed, sumstats, qrange, wqfile, pheno, wout,qr, 
+    qdf = qrscore(plinkexe, targetbed, scorefn, qrange, wqfile, pheno, wout,qr,
                   maxmem, threads, 'weighted', prefix)    
     merged = merged.merge(qdf,on='SNP kept', suffixes=['_hybrid', '_weighted'])
     f, ax = plt.subplots()

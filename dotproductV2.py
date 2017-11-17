@@ -21,7 +21,7 @@ except:
 from matplotlib.ticker import NullFormatter
 
 #----------------------------------------------------------------------
-def read_LD(fn, verbose=True, stack=False):
+def read_LD(fn, freq_thresh=0.01, verbose=True, stack=False):
     '''
     read the LD file as outputted by plink
     '''
@@ -31,8 +31,10 @@ def read_LD(fn, verbose=True, stack=False):
     ## Drop Nans
     df = df.dropna()
     ## Drop MAFs
-    df = df[(df.MAF_A > 0.01) & (df.MAF_A < 0.99) & 
-            (df.MAF_B > 0.01) & (df.MAF_B < 0.99)]
+    low = freq_thresh
+    high= 1 - low
+    df = df[(df.MAF_A > low) & (df.MAF_A < high) &
+            (df.MAF_B > low) & (df.MAF_B < high)]
     ## compute the distance
     df.loc[:,'Distance (Bp)'] = abs(df.BP_A - df.BP_B)
     if stack:
@@ -82,18 +84,18 @@ def from_dataframes(df1, df2, label1, label2, prefix, typ='R', verbose=True):
               snps1))
         print('\t  Dataframe 2 with %d entries and %d snps' % (df2.shape[0], 
               snps2))
-    dot = df1.merge(df2,on=['SNP_A', 'SNP_B']).loc[:,['SNP_A', 'SNP_B', 'D_x', 
-                                                      'D_y','%s_x'%(typ), 
+    dot = df1.merge(df2,on=['SNP_A', 'SNP_B']).loc[:,['SNP_A', 'SNP_B', 'DP_x',
+                                                      'DP_y','%s_x'%(typ),
                                                       '%s_y'%(typ)]]  
     if verbose:
         snps12 = pd.unique(pd.concat((dot.SNP_A, dot.SNP_B))).shape[0]
         print('\t  Resulting dataframe with %d entries and %d snps' % (
             dot.shape[0], snps12))
     ## include the product of the individual populations
-    dot.loc[:,'DtD'] = dot.D_x * dot.D_y
+    dot.loc[:,'DtD'] = dot.DP_x * dot.DP_y
     ## include the tagging within each population
-    dot.loc[:,'D1'] = dot.D_x**2
-    dot.loc[:,'D2'] = dot.D_y**2
+    dot.loc[:,'D1'] = dot.DP_x**2
+    dot.loc[:,'D2'] = dot.DP_y**2
     ## get the dot product and snp density for the merged set
     if verbose: print('\tComputing dot products (LDscores) ...')
     count = [0, []]
@@ -121,8 +123,8 @@ def from_dataframes(df1, df2, label1, label2, prefix, typ='R', verbose=True):
         print ('%d rows and %d snps processed' % (count[0], len(set(count[1]))))
         print ('dp has %d entries' % len(dp.keys() ))
     ## rename the columns to track ancestries
-    cols = {'D_x':'%s D' % label1, 'D_y':'%s D' % label2, '%s_x' % typ:'%s %s'%(
-        label1, typ), '%s_y' % typ :'%s %s' % (label2, typ), 
+    cols = {'DP_x':'%s Dprime' % label1, 'DP_y':'%s Dprime' % label2,
+            '%s_x' % typ:'%s %s'%(label1, typ), '%s_y' % typ :'%s %s' % (label2, typ),
             'D1': '$D_{%s}^{2}$'% label1, 'D2': '$D_{%s}^{2}$'% label2}
     dot = dot.rename(columns=cols)    
     dps=(dp, dpA, dpB)
@@ -145,11 +147,13 @@ def plot_DtDhist(merged, dot, labels, prefix, bns):
     """
     Plot histogram of the dot product
     """
-    titles =['%s D'%(labels[0]), '%s D'%(labels[1]), 'Dot Product']
+    titles =['%s Dprime'%(labels[0]), '%s Dprime'%(labels[1]), 'Dot Product']
     ser = pd.Series(list(dot.values()))
     f, axarr = plt.subplots(3, sharex=True)
-    merged.loc[:,'%s D'%(labels[0])].plot.hist(bins=bns, alpha=0.5, ax=axarr[0])
-    merged.loc[:,'%s D'%(labels[1])].plot.hist(bins=bns, alpha=0.5, ax=axarr[1])
+    merged.loc[:,'%s Dprime'%(labels[0])].plot.hist(bins=bns, alpha=0.5,
+                                                    ax=axarr[0])
+    merged.loc[:,'%s Dprime'%(labels[1])].plot.hist(bins=bns, alpha=0.5,
+                                                    ax=axarr[1])
     ser.plot.hist(bins=bns, alpha=0.5, ax=axarr[2])
     for i, ax in enumerate(axarr): 
         ax.set_yscale('log')    
@@ -158,7 +162,7 @@ def plot_DtDhist(merged, dot, labels, prefix, bns):
     plt.close()
 
 #----------------------------------------------------------------------
-def plot_decay(df, label, typ='D'):
+def plot_decay(df, label, typ='DP'):
     """
     Plot decay pattern of LD
     """
@@ -410,7 +414,7 @@ def binD(df1, df2, labels, prefix):
     fig, axes = plt.subplots(ncols=3, nrows=nrows, sharey=True, sharex=True)
     axs = axes.ravel()
     cNorm  = plt.matplotlib.colors.Normalize(vmin=0, vmax=1)
-    x, y ='D%s'%(suffixes[0]), 'D%s'%(suffixes[1])
+    x, y ='Dprime%s'%(suffixes[0]), 'Dprime%s'%(suffixes[1])
     for p, subset in enumerate(subs):
         subset.plot(kind='scatter', x=x, y=y, c='mean2', colormap='inferno', 
                     ax=axs[p])
@@ -668,14 +672,14 @@ def main(args):
     ## Plot decay
     if (args.plot == 'decay') or (args.plot == 'all'):
         if v: print('Plotting decay')
-        plot_decay(df1, labels[0], typ='D')
+        plot_decay(df1, labels[0], typ='DP')
         plot_decay(df1, labels[0], typ=args.type)
-        plot_decay(df2, labels[1], typ='D')
+        plot_decay(df2, labels[1], typ='DP')
         plot_decay(df2, labels[1], typ=args.type)
         if v: print('\tDONE')
     ## plot binned version of D
     if (args.plot == 'binned') or (args.plot == 'all'):
-        if v: print('Plotting binned D')
+        if v: print('Plotting binned Dprime')
         binD(df1, df2, labels, args.prefix)
         if v: print('\tDONE')
     ## plot Hexbins for R, R2 and D
