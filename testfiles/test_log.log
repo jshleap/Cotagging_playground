@@ -1,0 +1,228 @@
+PLINK v1.90b4.4 64-bit (21 May 2017)
+Options in effect:
+  --allow-no-sex
+  --bfile prancster_train
+  --keep-allele-order
+  --memory 1700
+  --out prancster_0.40
+  --pheno /lb/project/gravel/hleap_projects/Cotagging/newsim/test/multiSNP/Linear10K/abacus_runs/EUR/COT/run1/200/AFR10K_5K_train.pheno
+  --q-score-range Null.qrange prancster_0.40.qfile
+  --score EUR_gwas.assoc.linear 2 4 7 header
+  --threads 1
+
+Hostname: f3c07
+Working directory: /lb/project/gravel/hleap_projects/Cotagging/newsim/test/multiSNP/Linear10K/abacus_runs/EUR/COT/run1/200
+Start time: Tue Oct 17 14:09:43 2017
+
+Random number seed: 1508263783
+258299 MB RAM detected; reserving 1700 MB for main workspace.
+10000 variants loaded from .bim file.
+4502 people (0 males, 0 females, 4502 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to prancster_0.40.nosex .
+4502 phenotype values present after --pheno.
+Using 1 thread.
+Before main variant filters, 4502 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+10000 variants and 4502 people pass filters and QC.
+Phenotype data is quantitative.
+--score: 4659 valid predictors loaded.
+prancster_0.40.0.02.profile written.
+prancster_0.40.0.06.profile written.
+prancster_0.40.0.11.profile written.
+prancster_0.40.0.15.profile written.
+prancster_0.40.0.19.profile written.
+prancster_0.40.0.24.profile written.
+prancster_0.40.0.28.profile written.
+prancster_0.40.0.32.profile written.
+prancster_0.40.0.37.profile written.
+prancster_0.40.0.41.profile written.
+prancster_0.40.0.45.profile written.
+prancster_0.40.0.50.profile written.
+prancster_0.40.0.54.profile written.
+prancster_0.40.0.58.profile written.
+prancster_0.40.0.63.profile written.
+prancster_0.40.0.67.profile written.
+prancster_0.40.0.71.profile written.
+prancster_0.40.0.76.profile written.
+prancster_0.40.0.80.profile written.
+prancster_0.40.0.84.profile written.
+prancster_0.40.0.89.profile written.
+prancster_0.40.0.93.profile written.
+prancster_0.40.0.97.profile written.
+prancster_0.40.1.02.profile written.
+prancster_0.40.1.06.profile written.
+prancster_0.40.1.10.profile written.
+prancster_0.40.1.14.profile written.
+prancster_0.40.1.19.profile written.
+prancster_0.40.1.23.profile written.
+prancster_0.40.1.27.profile written.
+prancster_0.40.1.32.profile written.
+prancster_0.40.1.36.profile written.
+prancster_0.40.1.40.profile written.
+prancster_0.40.1.45.profile written.
+prancster_0.40.1.49.profile written.
+prancster_0.40.1.53.profile written.
+prancster_0.40.1.58.profile written.
+prancster_0.40.1.62.profile written.
+prancster_0.40.1.66.profile written.
+prancster_0.40.1.71.profile written.
+prancster_0.40.1.75.profile written.
+prancster_0.40.1.79.profile written.
+prancster_0.40.1.84.profile written.
+prancster_0.40.1.88.profile written.
+prancster_0.40.1.92.profile written.
+prancster_0.40.1.97.profile written.
+prancster_0.40.2.01.profile written.
+prancster_0.40.2.05.profile written.
+prancster_0.40.2.10.profile written.
+prancster_0.40.2.14.profile written.
+prancster_0.40.2.18.profile written.
+prancster_0.40.2.22.profile written.
+prancster_0.40.2.27.profile written.
+prancster_0.40.2.31.profile written.
+prancster_0.40.2.35.profile written.
+prancster_0.40.2.40.profile written.
+prancster_0.40.2.44.profile written.
+prancster_0.40.2.48.profile written.
+prancster_0.40.2.53.profile written.
+prancster_0.40.2.57.profile written.
+prancster_0.40.2.61.profile written.
+prancster_0.40.2.66.profile written.
+prancster_0.40.2.70.profile written.
+prancster_0.40.2.74.profile written.
+prancster_0.40.2.79.profile written.
+prancster_0.40.2.83.profile written.
+prancster_0.40.2.87.profile written.
+prancster_0.40.2.92.profile written.
+prancster_0.40.2.96.profile written.
+prancster_0.40.3.00.profile written.
+prancster_0.40.3.05.profile written.
+prancster_0.40.3.09.profile written.
+prancster_0.40.3.13.profile written.
+prancster_0.40.3.17.profile written.
+prancster_0.40.3.22.profile written.
+prancster_0.40.3.26.profile written.
+prancster_0.40.3.30.profile written.
+prancster_0.40.3.35.profile written.
+prancster_0.40.3.39.profile written.
+prancster_0.40.3.43.profile written.
+prancster_0.40.3.48.profile written.
+prancster_0.40.3.52.profile written.
+prancster_0.40.3.56.profile written.
+prancster_0.40.3.61.profile written.
+prancster_0.40.3.65.profile written.
+prancster_0.40.3.69.profile written.
+prancster_0.40.3.74.profile written.
+prancster_0.40.3.78.profile written.
+prancster_0.40.3.82.profile written.
+prancster_0.40.3.87.profile written.
+prancster_0.40.3.91.profile written.
+prancster_0.40.3.95.profile written.
+prancster_0.40.4.00.profile written.
+prancster_0.40.4.04.profile written.
+prancster_0.40.4.08.profile written.
+prancster_0.40.4.13.profile written.
+prancster_0.40.4.17.profile written.
+prancster_0.40.4.21.profile written.
+prancster_0.40.4.25.profile written.
+prancster_0.40.4.30.profile written.
+prancster_0.40.4.32.profile written.
+prancster_0.40.5.32.profile written.
+prancster_0.40.6.32.profile written.
+prancster_0.40.7.32.profile written.
+prancster_0.40.8.32.profile written.
+prancster_0.40.9.32.profile written.
+prancster_0.40.10.32.profile written.
+prancster_0.40.11.32.profile written.
+prancster_0.40.12.32.profile written.
+prancster_0.40.13.32.profile written.
+prancster_0.40.14.32.profile written.
+prancster_0.40.15.32.profile written.
+prancster_0.40.16.32.profile written.
+prancster_0.40.17.32.profile written.
+prancster_0.40.18.32.profile written.
+prancster_0.40.19.32.profile written.
+prancster_0.40.20.32.profile written.
+prancster_0.40.21.32.profile written.
+prancster_0.40.22.32.profile written.
+prancster_0.40.23.32.profile written.
+prancster_0.40.24.32.profile written.
+prancster_0.40.25.32.profile written.
+prancster_0.40.26.32.profile written.
+prancster_0.40.27.32.profile written.
+prancster_0.40.28.32.profile written.
+prancster_0.40.29.32.profile written.
+prancster_0.40.30.32.profile written.
+prancster_0.40.31.32.profile written.
+prancster_0.40.32.32.profile written.
+prancster_0.40.33.32.profile written.
+prancster_0.40.34.32.profile written.
+prancster_0.40.35.32.profile written.
+prancster_0.40.36.32.profile written.
+prancster_0.40.37.32.profile written.
+prancster_0.40.38.32.profile written.
+prancster_0.40.39.32.profile written.
+prancster_0.40.40.32.profile written.
+prancster_0.40.41.32.profile written.
+prancster_0.40.42.32.profile written.
+prancster_0.40.43.32.profile written.
+prancster_0.40.44.32.profile written.
+prancster_0.40.45.32.profile written.
+prancster_0.40.46.32.profile written.
+prancster_0.40.47.32.profile written.
+prancster_0.40.48.32.profile written.
+prancster_0.40.49.32.profile written.
+prancster_0.40.50.32.profile written.
+prancster_0.40.51.32.profile written.
+prancster_0.40.52.32.profile written.
+prancster_0.40.53.32.profile written.
+prancster_0.40.54.32.profile written.
+prancster_0.40.55.32.profile written.
+prancster_0.40.56.32.profile written.
+prancster_0.40.57.32.profile written.
+prancster_0.40.58.32.profile written.
+prancster_0.40.59.32.profile written.
+prancster_0.40.60.32.profile written.
+prancster_0.40.61.32.profile written.
+prancster_0.40.62.32.profile written.
+prancster_0.40.63.32.profile written.
+prancster_0.40.64.32.profile written.
+prancster_0.40.65.32.profile written.
+prancster_0.40.66.32.profile written.
+prancster_0.40.67.32.profile written.
+prancster_0.40.68.32.profile written.
+prancster_0.40.69.32.profile written.
+prancster_0.40.70.32.profile written.
+prancster_0.40.71.32.profile written.
+prancster_0.40.72.32.profile written.
+prancster_0.40.73.32.profile written.
+prancster_0.40.74.32.profile written.
+prancster_0.40.75.32.profile written.
+prancster_0.40.76.32.profile written.
+prancster_0.40.77.32.profile written.
+prancster_0.40.78.32.profile written.
+prancster_0.40.79.32.profile written.
+prancster_0.40.80.32.profile written.
+prancster_0.40.81.32.profile written.
+prancster_0.40.82.32.profile written.
+prancster_0.40.83.32.profile written.
+prancster_0.40.84.32.profile written.
+prancster_0.40.85.32.profile written.
+prancster_0.40.86.32.profile written.
+prancster_0.40.87.32.profile written.
+prancster_0.40.88.32.profile written.
+prancster_0.40.89.32.profile written.
+prancster_0.40.90.32.profile written.
+prancster_0.40.91.32.profile written.
+prancster_0.40.92.32.profile written.
+prancster_0.40.93.32.profile written.
+prancster_0.40.94.32.profile written.
+prancster_0.40.95.32.profile written.
+prancster_0.40.96.32.profile written.
+prancster_0.40.97.32.profile written.
+prancster_0.40.98.32.profile written.
+prancster_0.40.99.32.profile written.
+prancster_0.40.100.32.profile written.
+--score: 197 ranges processed.
+
+End time: Tue Oct 17 14:09:50 2017
