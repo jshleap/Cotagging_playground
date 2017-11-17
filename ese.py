@@ -111,8 +111,8 @@ def compute_ld(bfile, prefix, plinkexe, window=1000):
     """
     print('Computing LD matrix for file', bfile)
     out = prefix if 'ld.gz' not in prefix else prefix.split('.')[0]
-    plink = ('%s --bfile %s -r gz d with-freqs --ld-window-kb %d --ld-window '
-             '%d --out %s')
+    plink = ('%s --bfile %s -r gz dprime-signed with-freqs --ld-window-kb %d '
+             '--ld-window %d --out %s')
     plink = plink % (plinkexe, bfile, window, int(window*1E3) + 1, out)
     o, e = executeLine(plink)
 

@@ -97,6 +97,34 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     #filter MAFs greater than 1 - freq_threshold and smaller than freq_threshold
     return frq[(frq.MAF < high) & (frq.MAF > low)]
 
+
+# ----------------------------------------------------------------------
+def train_test_gen_only(prefix, bfile, plinkexe, splits=10, maxmem=1700,
+                        threads=1):
+    """
+    Generate a list of individuals for training and a list for validation.
+    The list is to be passed to plink. It will take one split as validation and
+    the rest as training.
+
+    :param str prefix: profix of output
+    :param str bfile: prefix for the bed fileset
+    :param str plinkexe: path to plink executable
+    :param int splits: Number of splits to be done
+    """
+    trainthresh = (splits - 1) / splits
+    fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, header=None,
+                        names=['FID', 'IID', 'a', 'b', 'c', 'd'])
+    msk = np.random.rand(len(fam)) < trainthresh
+    train, test = '%s_train' % prefix, '%s_test' % prefix
+    opts = dict(header=False, index=False, sep=' ')
+    fam.loc[msk, ['FID', 'IID']].to_csv('%s.keep' % train, **opts)
+    fam.loc[~msk, ['FID', 'IID']].to_csv('%s.keep' % test, **opts)
+    make_bed = ('%s --bfile %s --keep %s.keep --make-bed --out %s --memory %d '
+                '--threads %d')
+    for i in [train, test]:
+        executeLine(make_bed % (plinkexe, bfile, i, i, maxmem, threads))
+    return train, test
+
 #----------------------------------------------------------------------
 def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700, 
                threads=1):

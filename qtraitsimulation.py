@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
-from utilities4cotagging import read_freq, executeLine
+from utilities4cotagging import *
 
 
 #----------------------------------------------------------------------
@@ -161,11 +161,13 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None, 
                        frq=None, causaleff=None, noenv=False, plothist=False,
                        freqthreshold=0.1, bfile2=None, quality='png', 
-                       maxmem=1700, threads=1, seed=None, uniform=False):
+                       maxmem=1700, threads=1, seed=None, uniform=False,
+                       validate=5):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
     
+    :param validate: prepare train/test sets for crossvalidation
     :param str outprefix: Prefix for outputs
     :param str bfile: prefix of the plink bedfileset
     :param float h2: Desired heritability
@@ -184,18 +186,24 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, plinkexe, snps=None,
     :param bool uniform: pick uniformingly distributed causal variants
     """
     print('Performing qtraits_simulation on %s' % outprefix)
+    if validate:
+        print('\tCreating test/training sets...')
+        prefs = train_test_gen_only(outprefix, bfile, plinkexe, splits=validate,
+                                     maxmem=maxmem, threads=threads)
+        print('%s, %s created' % prefs)
+    else:
+        prefs = [outprefix]
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s'%(causaleff), delim_whitespace=True)
         causaleff = causaleff.loc[:, ['SNP', 'eff']]
         assert causaleff.shape[0] == ncausal
-    if not os.path.isfile('%s.full'%(outprefix)):
-        geneff, truebeta , validsnpfile = TruePRS(outprefix, bfile, h2, ncausal, 
-                                                  plinkexe, snps=snps, frq=frq, 
-                                                  causaleff=causaleff,
-                                                  bfile2=bfile2,
-                                                  freqthreshold=freqthreshold, 
-                                                  seed=seed, uniform=uniform)
+    if not os.path.isfile('%s.full' % prefs[0]):
+        trues = [TruePRS(pref, pref, h2, ncausal, plinkexe, snps=snps, frq=frq,
+                         causaleff=causaleff, bfile2=bfile2, seed=seed,
+                         freqthreshold=freqthreshold, uniform=uniform)
+                  for pref in prefs]
+        #    geneff, truebeta , validsnpfile = trues[0] or trues[1]
     else:
         truebeta = pd.read_table('%s.full' % outprefix, delim_whitespace=True) 
         validsnpfile = '%s.totalsnps' % outprefix   
