@@ -82,6 +82,9 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     :param str bfile: prefix of the plink bedfileset
     :param str plinkexe: path to plink executable
     :param float freq_threshold: Lower threshold to filter MAF by
+    :param int maxmem: Maximum allowed memory
+    :param int trheads: Maximum number of threads to use
+
     """
     high = 1 - freq_threshold
     low = freq_threshold
@@ -90,7 +93,7 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
         frq = ('%s --bfile %s --freq gz --keep-allele-order --out %s --memory '
                '%d --threads %d')
         line = frq % (plinkexe, bfile, nname, maxmem, threads)
-        o,e = executeLine(line)
+        o, e = executeLine(line)
         frq = pd.read_table('%s.frq.gz' % nname, delim_whitespace=True)
     else:
         frq = pd.read_table('%s.frq.gz' % bfile, delim_whitespace=True)  
@@ -111,14 +114,14 @@ def train_test_gen_only(prefix, bfile, plinkexe, splits=10, maxmem=1700,
     :param str plinkexe: path to plink executable
     :param int splits: Number of splits to be done
     """
-    trainthresh = (splits - 1) / splits
     fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, header=None,
                         names=['FID', 'IID', 'a', 'b', 'c', 'd'])
-    msk = np.random.rand(len(fam)) < trainthresh
+    fold = int(np.ceil(fam.shape[0] / splits))
+    msk = fam.IID.isin(fam.IID.sample(n=fold))
     train, test = '%s_train' % prefix, '%s_test' % prefix
     opts = dict(header=False, index=False, sep=' ')
-    fam.loc[msk, ['FID', 'IID']].to_csv('%s.keep' % train, **opts)
-    fam.loc[~msk, ['FID', 'IID']].to_csv('%s.keep' % test, **opts)
+    fam.loc[~msk, ['FID', 'IID']].to_csv('%s.keep' % train, **opts)
+    fam.loc[msk, ['FID', 'IID']].to_csv('%s.keep' % test, **opts)
     make_bed = ('%s --bfile %s --keep %s.keep --make-bed --out %s --memory %d '
                 '--threads %d')
     for i in [train, test]:
@@ -139,9 +142,9 @@ def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700,
     :param int splits: Number of splits to be done
     """
     pheno = read_pheno(pheno)
-    trainthresh = (splits - 1) / splits
+    #trainthresh = (splits - 1) / splits
     fn = os.path.split(bfile)[-1]
-    keeps= {'%s_train'% prefix:(os.path.join(os.getcwd(),'%s_train.keep' % fn), 
+    keeps= {'%s_train'% prefix: (os.path.join(os.getcwd(),'%s_train.keep' % fn),
                                              os.path.join(os.getcwd(),
                                                           '%s_train.pheno' % fn)
                                              ), 
@@ -149,18 +152,16 @@ def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700,
                                 os.path.join(os.getcwd(),'%s_test.pheno' % fn))}      
     fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, header=None,
                         names=['FID', 'IID', 'a', 'b', 'c', 'd'])
-    msk = np.random.rand(len(fam)) < trainthresh
-    fam.loc[msk, ['FID', 'IID']].to_csv(keeps['%s_train'% prefix][0], 
-                                        header=False, index=False, sep=' ')
-    pheno.loc[msk, ['FID', 'IID', 'Pheno']].to_csv(keeps['%s_train'% prefix][1],
-                                                   header=False, index=False, 
-                                                   sep=' ')
-
-    fam.loc[~msk,['FID', 'IID']].to_csv(keeps['%s_test' % prefix][0], 
-                                        header=False, index=False, sep=' ')
-    pheno.loc[~msk,['FID', 'IID', 'Pheno']].to_csv(keeps['%s_test' % prefix][1],
-                                                   header=False, index=False, 
-                                                   sep=' ')    
+    fold = int(np.ceil(fam.shape[0] / splits))
+    #msk = np.random.rand(len(fam)) < trainthresh
+    msk = fam.IID.isin(fam.IID.sample(n=fold))
+    opts = dict(header=False, index=False, sep=' ')
+    fam.loc[~msk, ['FID', 'IID']].to_csv(keeps['%s_train'% prefix][0], **opts)
+    pheno.loc[~msk, ['FID', 'IID', 'Pheno']].to_csv(keeps['%s_train' % prefix][1
+                                                    ], **opts)
+    fam.loc[msk,['FID', 'IID']].to_csv(keeps['%s_test' % prefix][0], **opts)
+    pheno.loc[msk,['FID', 'IID', 'Pheno']].to_csv(keeps['%s_test' % prefix][1],
+                                                   **opts)
     make_bed = ('%s --bfile %s --keep %s --make-bed --out %s --memory %d '
                 '--threads %d -pheno %s')
     for k, v in keeps.items():
@@ -173,6 +174,8 @@ def norm(array, a=0, b=1):
     '''
     normalize an array between a and b
     '''
+    # make sure is an array
+    array = np.array(array, dtype=float)
     ## normilize 0-1
     rang = max(array) - min(array)
     A = (array - min(array)) / rang
@@ -206,6 +209,8 @@ def parse_sort_clump(fn, allsnps):
     :param str fn: clump file name
     :param :class pd.Series allsnps: Series with all snps being analyzed
     """
+    # make sure allsnps is a series
+    allsnps = pd.Series(allsnps)
     try:
         df = pd.read_table(fn, delim_whitespace=True)
     except FileNotFoundError:
@@ -248,40 +253,31 @@ def helper_smartsort2(grouped, key):
     return df.loc[df.index[0],:]
 
 #---------------------------------------------------------------------------
-def smartcotagsort(prefix, gwaswcotag, column='Cotagging', threads=1):
+def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in 
     the last part of the dataframe
     
-    :param str prefix: prefix for oututs
-    :param :class pd.DataFrame gwaswcotag: merged dataframe of cotag and gwas
+    :param str prefix: prefix for outputs
+    :param :class pd.DataFrame gwascotag: merged dataframe of cotag and gwas
     :param str column: name of the column to be sorted by in the cotag file
     """
-    gwaswcotag = gwaswcotag.sort_values(by=column, ascending=False)
+    gwascotag = gwascotag.sort_values(by=column, ascending=False)
     picklefile = '%s_%s.pickle' % (prefix, ''.join(column.split()))
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        #sorteddf = pd.DataFrame()
-        #tail = pd.DataFrame()
-        grouped = gwaswcotag.groupby(column)
+        grouped = gwascotag.groupby(column)
         keys = sorted(grouped.groups.keys(), reverse=True)
-        #for key in tqdm(keys, total=len(keys)):
-            #df = grouped.get_group(key)
-            #sorteddf = sorteddf.append(df.loc[df.index[0],:])
-            #tail = tail.append(df.loc[df.index[1:],:])
         tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
             grouped, key) for key in  tqdm(keys, total=len(keys)))
         if isinstance(tup[0], pd.core.series.Series):
             sorteddf = pd.concat(tup, axis=1).transpose()
         else:
             sorteddf = pd.concat(tup)
-        tail = gwaswcotag[~gwaswcotag.index.isin(sorteddf.index)]
-        #sorteddf, tail = zip(*tup)
-        #sorteddf = pd.concat(sorteddf)
-        #tail = pd.concat(tail)
+        tail = gwascotag[~gwascotag.index.isin(sorteddf.index)]
         beforetail = sorteddf.shape[0]
         df = sorteddf.copy()
         if not tail.empty:
