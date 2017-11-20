@@ -134,9 +134,49 @@ def test_parse_sort_clump(test_input, expected):
      os.path.join(test_folder, 'toy_taggingscores.tsv'),
      os.path.join(test_folder, 'toy_smartsort_res'))])
 def test_smartcotagsort(test_input_stats, test_input_cotag, expected):
-    result = pd.read_hdf('./testfiles/toy_smartsort_res', key='a')
+    result = pd.read_hdf(expected, key='a')
     sumstats = pd.read_table(test_input_stats, delim_whitespace=True)
     cotag =  pd.read_table(test_input_cotag, sep='\t')
     gwascotag = sumstats.merge(cotag, on='SNP')
     df, tail = smartcotagsort('toy', gwascotag)
     assert all([df.equals(result), tail == 9])
+
+
+@pytest.mark.parametrize("nsnps,step,init_step,every,expected", [
+    (10, 1, 1, True, np.arange(10, 110, 10, dtype=float)),
+    (10, 2, 2, False, np.arange(10, 110, 10, dtype=float)),
+    (100, 2, 1, False, np.array([1., 2., 3., 4., 5., 6., 8., 10., 12., 14., 16.,
+                                 18., 20., 22., 24., 26., 28., 30., 32., 34.,
+                                 36., 38., 40., 42., 44., 46., 48., 50., 52.,
+                                 54., 56., 58., 60., 62., 64., 66., 68., 70.,
+                                 72., 74., 76., 78., 80., 82., 84., 86., 88.,
+                                 90., 92., 94., 96., 98., 100.])),
+    (200, 5, 2, False, np.array([0.5, 1.5, 2.5, 3.5, 4.5, 5., 10. , 15., 20.,
+                                 25., 30., 35., 40., 45., 50., 55., 60., 65.,
+                                 70., 75., 80., 85., 90., 95., 100.]))
+])
+def test_set_first_step(nsnps, step, init_step, every, expected):
+    arr = set_first_step(nsnps, step, init_step=init_step, every=every)
+    assert  (arr == expected).all()
+
+
+@pytest.mark.parametrize("nsnps,step,every,qrangefn,expected", [
+    (200, 2, False, None, os.path.join(test_folder, 'toy_200_2.qrange')),
+    (400, 5, False, None, os.path.join(test_folder, 'toy_400_5.qrange')),
+    (100, 5, True, None, os.path.join(test_folder, 'toy_100_5_every.qrange')),
+    (1000, 10, False, os.path.join(test_folder, 'toy_400_5.qrange'),
+     os.path.join(test_folder, 'toy_400_5.qrange'))])
+def test_gen_qrange(nsnps,step,every,qrangefn,expected):
+    order = ['label', 'Min', 'Max']
+    dtype = {'label':object, 'Min':float, 'Max':float}
+    expected = pd.read_csv(expected, sep=' ', header=None, names=order,
+                           dtype=dtype)
+    qr, qrange = gen_qrange('toy', nsnps, step, every=every, qrangefn=qrangefn
+                            )
+    in_path = os.path.isfile('toy.qrange') if qrangefn is None else True
+    #compare = expected.values == qr.values
+    #asserts = [expected.equals(qr), in_path]
+    #assert all(asserts)
+    pd.testing.assert_frame_equal(qr, expected)
+
+

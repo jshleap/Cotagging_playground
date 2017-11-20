@@ -5,19 +5,21 @@
   Purpose: Utilities for cottagging
   Created: 09/30/17
 """
-from scipy.stats import linregress
-from joblib import Parallel, delayed
-from subprocess import Popen, PIPE
-from tqdm import tqdm
-from glob import glob
-import pandas as pd
-import numpy as np
-import tarfile
-import pickle
-import mmap
 import os
+import pickle
+import tarfile
+from glob import glob
+from subprocess import Popen, PIPE
 
-#----------------------------------------------------------------------
+import mmap
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+from scipy.stats import linregress
+from tqdm import tqdm
+
+
+# ----------------------------------------------------------------------
 def mapcount(filename):
     """
     Efficient line counter courtesy of Ryan Ginstrom answer in stack overflow
@@ -30,7 +32,8 @@ def mapcount(filename):
         lines += 1
     return lines    
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def read_log(prefix):
     """
     Read logfile with the profiles written
@@ -47,7 +50,8 @@ def read_log(prefix):
                 l.append(line.split()[0])
     return l
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def executeLine(line):
     """
     Execute line with subprocess
@@ -59,7 +63,7 @@ def executeLine(line):
     return o, e
 
 
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 def read_BimFam(prefix):
     """
     Read a bim/fam files from the plink fileset
@@ -74,7 +78,7 @@ def read_BimFam(prefix):
     return bim, fam
 
 
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     """
     Generate and read frequency files and filter based on threshold
@@ -128,7 +132,8 @@ def train_test_gen_only(prefix, bfile, plinkexe, splits=10, maxmem=1700,
         executeLine(make_bed % (plinkexe, bfile, i, i, maxmem, threads))
     return train, test
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700, 
                threads=1):
     """
@@ -169,7 +174,8 @@ def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700,
                     )
     return keeps
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def norm(array, a=0, b=1):
     '''
     normalize an array between a and b
@@ -183,7 +189,8 @@ def norm(array, a=0, b=1):
     range2 = b - a
     return (A * range2) + a    
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def read_pheno(pheno):
     """
     Read a phenotype file with plink profile format
@@ -201,7 +208,8 @@ def read_pheno(pheno):
                               names=Pnames)
     return pheno
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def parse_sort_clump(fn, allsnps):
     """
     Parse and sort clumped file
@@ -234,7 +242,7 @@ def parse_sort_clump(fn, allsnps):
     return df
 
 
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 def helper_smartsort(grouped, key):
     """
     helper function to parallelize smartcotagsort
@@ -244,7 +252,8 @@ def helper_smartsort(grouped, key):
     tail = df.loc[df.index[1:],:]
     return head, tail
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def helper_smartsort2(grouped, key):
     """
     helper function to parallelize smartcotagsort
@@ -252,7 +261,8 @@ def helper_smartsort2(grouped, key):
     df = grouped.get_group(key)
     return df.loc[df.index[0],:]
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in 
@@ -289,7 +299,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
     return df, beforetail
 
 
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 def set_first_step(nsnps, step, init_step=2, every=False):
     """
     Define the range starting by adding one snp up the the first step
@@ -297,24 +307,39 @@ def set_first_step(nsnps, step, init_step=2, every=False):
     :param int nsnps: Total number of snps
     :param float step: step for the snp range
     """
+    # Fool proofing
+    if nsnps < 20:
+        print('Really? running with less than 20 snps? I am setting your step '
+              'to 1, and making every equals True')
+        every = True
+        step = 1
+        init_step = 1
     onesnp = 100./float(nsnps)
     if every:
         full = np.arange(onesnp, 100 + onesnp, onesnp)
     else:
-        # just include the first 200 snps in step of 2
-        initial = np.arange(onesnp, (200 * onesnp) + onesnp, (init_step*onesnp))
+        # just include the first 5% snps in step of init_step
+        initial = np.arange(onesnp, (nsnps * 0.05 * onesnp) + onesnp,
+                            (init_step * onesnp))
         rest = np.arange(initial[-1] + onesnp, 100 + step, step)
         full = np.concatenate((initial, rest))
     if full[-1] < 100:
         full[-1] = 100
     return full
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
     """
     Generate qrange file to be used with plink qrange
+    :param prefix: prefix for output
+    :param nsnps: Total number of SNPs being analyzed
+    :param prunestep: percentage to test at a time
+    :param every: test one snp at a time
+    :param qrangefn: Name for a pre-ran rangefile
     """
     order = ['label', 'Min', 'Max']
+    dtype = {'label':object, 'Min':float, 'Max':float}
     if qrangefn is None:
         # Define the number of snps per percentage point and generate the range
         percentages = set_first_step(nsnps, prunestep, every=every)
@@ -329,13 +354,17 @@ def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
         # Generate the qrange file
         qrange = '%s.qrange' % prefix
         qr = pd.DataFrame({'label':labels, 'Min':np.zeros(len(percentages)),
-                           'Max':snps}).loc[:, order]        
-        qr.to_csv(qrange, header=False, index=False, sep =' ')      
+                           'Max':snps}).loc[:, order]
+        qr.Min = qr.Min.astype(float)
+        qr.Min = qr.Max.astype(float)
+        qr.to_csv(qrange, header=False, index=False, sep =' ')
     else:
         qrange = qrangefn
-        qr = pd.read_csv(qrange, sep=' ', header=None, names=order)
+        qr = pd.read_csv(qrange, sep=' ', header=None, names=order, dtype=dtype)
     return qr, qrange
-#---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
 def read_scored_qr(profilefn, phenofile, alpha, nsnps, score_type='sum'):
     """
     Read the profile file a.k.a. PRS file or scoresum
@@ -361,7 +390,7 @@ def read_scored_qr(profilefn, phenofile, alpha, nsnps, score_type='sum'):
     dic = {'File':profilefn, 'alpha':alpha, 'R2':lr.rvalue**2, 'SNP kept':nsnps}
     return dic
 
-#--------------------------------------------------------------------------- 
+# --------------------------------------------------------------------------- 
 def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr, maxmem,
             threads, label, prefix, normalized_geno=True):
     """
