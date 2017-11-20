@@ -1,0 +1,27 @@
+PLINK v1.90b4.7 64-bit (7 Oct 2017)
+Options in effect:
+  --bfile /Users/jshleap/Work/msprime/EUR10K_5K
+  --extract /Users/jshleap/Work/msprime/toy.extract
+  --keep /Users/jshleap/Work/msprime/toy.keep
+  --make-bed
+  --out toy_bed
+
+Hostname: Joses-Air.lan
+Working directory: /Users/jshleap/my_gits/Cottagging_playground/testfiles
+Start time: Fri Nov 17 19:40:42 2017
+
+Random number seed: 1510965642
+8192 MB RAM detected; reserving 4096 MB for main workspace.
+10000 variants loaded from .bim file.
+5000 people (0 males, 0 females, 5000 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to toy_bed.nosex .
+--extract: 10 variants remaining.
+--keep: 10 people remaining.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 10 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+10 variants and 10 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to toy_bed.bed + toy_bed.bim + toy_bed.fam ... done.
+
+End time: Fri Nov 17 19:40:42 2017

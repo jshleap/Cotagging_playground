@@ -1,0 +1,38 @@
+PLINK v1.90b4.7 64-bit (7 Oct 2017)
+Options in effect:
+  --a1-allele ./testfiles/toy.alleles 3 2
+  --allow-no-sex
+  --bfile ./testfiles/toy_bed
+  --clump ./testfiles/toy.sumstats
+  --clump-field P
+  --clump-kb 250
+  --clump-p1 1
+  --clump-p2 1
+  --clump-r2 0.8
+  --out ./testfiles/toy
+  --pheno ./testfiles/toy.pheno
+
+Hostname: Joses-Air.lan
+Working directory: /Users/jshleap/my_gits/Cottagging_playground
+Start time: Sun Nov 19 18:31:24 2017
+
+Random number seed: 1511134284
+8192 MB RAM detected; reserving 4096 MB for main workspace.
+10 variants loaded from .bim file.
+10 people (0 males, 0 females, 10 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to ./testfiles/toy.nosex .
+10 phenotype values present after --pheno.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 10 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+--a1-allele: 5 assignments made.
+10 variants and 10 people pass filters and QC.
+Phenotype data is quantitative.
+Warning: 'SNP147' is missing from the main dataset, and is a top variant.
+Warning: 'SNP160' is missing from the main dataset, and is a top variant.
+Warning: 'SNP174' is missing from the main dataset, and is a top variant.
+Warning: 'SNP134' is missing from the main dataset, and is a top variant.
+--clump: 4 clumps formed from 5 top variants.
+Results written to ./testfiles/toy.clumped .
+
+End time: Sun Nov 19 18:31:24 2017
