@@ -339,7 +339,7 @@ def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
     :param qrangefn: Name for a pre-ran rangefile
     """
     order = ['label', 'Min', 'Max']
-    dtype = {'label':object, 'Min':float, 'Max':float}
+    #dtype = {'label': object, 'Min': float, 'Max': float}
     if qrangefn is None:
         # Define the number of snps per percentage point and generate the range
         percentages = set_first_step(nsnps, prunestep, every=every)
@@ -355,12 +355,10 @@ def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
         qrange = '%s.qrange' % prefix
         qr = pd.DataFrame({'label':labels, 'Min':np.zeros(len(percentages)),
                            'Max':snps}).loc[:, order]
-        qr.Min = qr.Min.astype(float)
-        qr.Min = qr.Max.astype(float)
         qr.to_csv(qrange, header=False, index=False, sep =' ')
     else:
         qrange = qrangefn
-        qr = pd.read_csv(qrange, sep=' ', header=None, names=order, dtype=dtype)
+        qr = pd.read_csv(qrange, sep=' ', header=None, names=order)#, dtype=dtype)
     return qr, qrange
 
 

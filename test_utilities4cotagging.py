@@ -2,6 +2,7 @@
 Unit testing for utilities4cotagging
 """
 import pytest
+import filecmp
 from utilities4cotagging import *
 
 script_path = os.path.dirname(os.path.realpath(__file__))
@@ -165,18 +166,32 @@ def test_set_first_step(nsnps, step, init_step, every, expected):
     (400, 5, False, None, os.path.join(test_folder, 'toy_400_5.qrange')),
     (100, 5, True, None, os.path.join(test_folder, 'toy_100_5_every.qrange')),
     (1000, 10, False, os.path.join(test_folder, 'toy_400_5.qrange'),
-     os.path.join(test_folder, 'toy_400_5.qrange'))])
-def test_gen_qrange(nsnps,step,every,qrangefn,expected):
+     os.path.join(test_folder, 'toy_400_5.qrange'))
+])
+def test_gen_qrange(nsnps, step, every, qrangefn, expected):
     order = ['label', 'Min', 'Max']
-    dtype = {'label':object, 'Min':float, 'Max':float}
-    expected = pd.read_csv(expected, sep=' ', header=None, names=order,
-                           dtype=dtype)
+    expecteddf = pd.read_csv(expected, sep=' ', header=None, names=order)
+    print('toy', nsnps, step, every, qrangefn)
     qr, qrange = gen_qrange('toy', nsnps, step, every=every, qrangefn=qrangefn
                             )
-    in_path = os.path.isfile('toy.qrange') if qrangefn is None else True
-    #compare = expected.values == qr.values
-    #asserts = [expected.equals(qr), in_path]
-    #assert all(asserts)
-    pd.testing.assert_frame_equal(qr, expected)
+    expecteddf.Max = expecteddf.Max.astype(qr.Max.dtype)
+    expecteddf.Min = expecteddf.Min.astype(qr.Min.dtype)
+    expecteddf.label = expecteddf.label.astype(qr.label.dtype)
+    boo = filecmp.cmp(qrange, expected)
+    print(expecteddf)
+    for i in glob('toy*'):
+        os.remove(i)
+    assert boo
 
 
+@pytest.mark.parametrize("scoretype,profilefn,expected", [
+    (' ', os.path.join(test_folder, 'toy.profile'), {
+        'File': os.path.join(test_folder, 'toy.profile'),
+        'R2': 0.37902598903634782, 'SNP kept': 200, 'alpha': 0.1}),
+    ('sum', os.path.join(test_folder, 'toy_sum.profile'), {
+        'File': os.path.join(test_folder, 'toy_sum.profile'),
+        'R2':  0.37902598903634782, 'SNP kept': 200, 'alpha': 0.1})])
+def test_read_scored_qr(scoretype, profilefn, expected):
+    phenofile, alpha, nsnps =  os.path.join(test_folder,'toy.pheno'), 0.1, 200
+    d = read_scored_qr(profilefn, phenofile, alpha, nsnps, score_type=scoretype)
+    assert d == expected
