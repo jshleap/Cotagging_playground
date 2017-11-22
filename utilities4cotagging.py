@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 """
   Author:  Jose Sergio Hleap --<>
   Purpose: Utilities for cottagging
@@ -30,7 +30,7 @@ def mapcount(filename):
     readline = buf.readline
     while readline():
         lines += 1
-    return lines    
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +70,11 @@ def read_BimFam(prefix):
     :param str prefix: prefix of the plink bedfileset
     """
     Bnames = ['CHR', 'SNP', 'cM', 'BP', 'A1', 'A2']
-    bim = pd.read_table('%s.bim'%(prefix), delim_whitespace=True, header=None,
+    bim = pd.read_table('%s.bim' % (prefix), delim_whitespace=True, header=None,
                         names=Bnames)
-    Fnames = ['FID', 'IID', 'father', 'mother', 'Sex', 'Phenotype']    
-    fam = pd.read_table('%s.fam'%(prefix), delim_whitespace=True, header=None,
-                        names=Bnames)    
+    Fnames = ['FID', 'IID', 'father', 'mother', 'Sex', 'Phenotype']
+    fam = pd.read_table('%s.fam' % (prefix), delim_whitespace=True, header=None,
+                        names=Bnames)
     return bim, fam
 
 
@@ -87,7 +87,7 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     :param str plinkexe: path to plink executable
     :param float freq_threshold: Lower threshold to filter MAF by
     :param int maxmem: Maximum allowed memory
-    :param int trheads: Maximum number of threads to use
+    :param int threads: Maximum number of threads to use
 
     """
     high = 1 - freq_threshold
@@ -100,8 +100,8 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
         o, e = executeLine(line)
         frq = pd.read_table('%s.frq.gz' % nname, delim_whitespace=True)
     else:
-        frq = pd.read_table('%s.frq.gz' % bfile, delim_whitespace=True)  
-    #filter MAFs greater than 1 - freq_threshold and smaller than freq_threshold
+        frq = pd.read_table('%s.frq.gz' % bfile, delim_whitespace=True)
+        # filter MAFs greater than 1 - freq_threshold and smaller than freq_threshold
     return frq[(frq.MAF < high) & (frq.MAF > low)]
 
 
@@ -134,7 +134,7 @@ def train_test_gen_only(prefix, bfile, plinkexe, splits=10, maxmem=1700,
 
 
 # ----------------------------------------------------------------------
-def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700, 
+def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700,
                threads=1):
     """
     Generate a list of individuals for training and a list for validation.
@@ -147,25 +147,26 @@ def train_test(prefix, bfile, plinkexe, pheno, splits=10, maxmem=1700,
     :param int splits: Number of splits to be done
     """
     pheno = read_pheno(pheno)
-    #trainthresh = (splits - 1) / splits
+    # trainthresh = (splits - 1) / splits
     fn = os.path.split(bfile)[-1]
-    keeps= {'%s_train'% prefix: (os.path.join(os.getcwd(),'%s_train.keep' % fn),
-                                             os.path.join(os.getcwd(),
-                                                          '%s_train.pheno' % fn)
-                                             ), 
-            '%s_test'% prefix: (os.path.join(os.getcwd(),'%s_test.keep' % fn),
-                                os.path.join(os.getcwd(),'%s_test.pheno' % fn))}      
+    keeps = {
+        '%s_train' % prefix: (os.path.join(os.getcwd(), '%s_train.keep' % fn),
+                              os.path.join(os.getcwd(),
+                                           '%s_train.pheno' % fn)
+                              ),
+        '%s_test' % prefix: (os.path.join(os.getcwd(), '%s_test.keep' % fn),
+                             os.path.join(os.getcwd(), '%s_test.pheno' % fn))}
     fam = pd.read_table('%s.fam' % bfile, delim_whitespace=True, header=None,
                         names=['FID', 'IID', 'a', 'b', 'c', 'd'])
     fold = int(np.ceil(fam.shape[0] / splits))
-    #msk = np.random.rand(len(fam)) < trainthresh
+    # msk = np.random.rand(len(fam)) < trainthresh
     msk = fam.IID.isin(fam.IID.sample(n=fold))
     opts = dict(header=False, index=False, sep=' ')
-    fam.loc[~msk, ['FID', 'IID']].to_csv(keeps['%s_train'% prefix][0], **opts)
+    fam.loc[~msk, ['FID', 'IID']].to_csv(keeps['%s_train' % prefix][0], **opts)
     pheno.loc[~msk, ['FID', 'IID', 'Pheno']].to_csv(keeps['%s_train' % prefix][1
                                                     ], **opts)
-    fam.loc[msk,['FID', 'IID']].to_csv(keeps['%s_test' % prefix][0], **opts)
-    pheno.loc[msk,['FID', 'IID', 'Pheno']].to_csv(keeps['%s_test' % prefix][1],
+    fam.loc[msk, ['FID', 'IID']].to_csv(keeps['%s_test' % prefix][0], **opts)
+    pheno.loc[msk, ['FID', 'IID', 'Pheno']].to_csv(keeps['%s_test' % prefix][1],
                                                    **opts)
     make_bed = ('%s --bfile %s --keep %s --make-bed --out %s --memory %d '
                 '--threads %d -pheno %s')
@@ -187,7 +188,7 @@ def norm(array, a=0, b=1):
     A = (array - min(array)) / rang
     ## scale
     range2 = b - a
-    return (A * range2) + a    
+    return (A * range2) + a
 
 
 # ----------------------------------------------------------------------
@@ -224,21 +225,21 @@ def parse_sort_clump(fn, allsnps):
     except FileNotFoundError:
         spl = fn.split('.')
         if spl[0] == '':
-            idx=1
+            idx = 1
         else:
-            idx=0
-        fn = '.'.join(np.array(spl)[[idx,1+idx,-1]])
+            idx = 0
+        fn = '.'.join(np.array(spl)[[idx, 1 + idx, -1]])
         if idx == 1:
             fn = '.%s' % fn
         df = pd.read_table(fn, delim_whitespace=True)
-    SNPs = df.loc[:,'SP2']
+    SNPs = df.loc[:, 'SP2']
     tail = [x.split('(')[0] for y in SNPs for x in y.split(',') if x.split('(')[
         0] != 'NONE']
     full = pd.DataFrame(df.SNP.tolist() + tail, columns=['SNP'])
     full = full[full.SNP.isin(allsnps)]
     rest = allsnps[~allsnps.isin(full.SNP)]
-    df = pd.concat((full.SNP,rest)).reset_index(drop=False)
-    df.rename(columns={'index':'Index'}, inplace=True)   
+    df = pd.concat((full.SNP, rest)).reset_index(drop=False)
+    df.rename(columns={'index': 'Index'}, inplace=True)
     return df
 
 
@@ -248,8 +249,8 @@ def helper_smartsort(grouped, key):
     helper function to parallelize smartcotagsort
     """
     df = grouped.get_group(key)
-    head = df.loc[df.index[0],:]
-    tail = df.loc[df.index[1:],:]
+    head = df.loc[df.index[0], :]
+    tail = df.loc[df.index[1:], :]
     return head, tail
 
 
@@ -257,9 +258,9 @@ def helper_smartsort(grouped, key):
 def helper_smartsort2(grouped, key):
     """
     helper function to parallelize smartcotagsort
-    """  
+    """
     df = grouped.get_group(key)
-    return df.loc[df.index[0],:]
+    return df.loc[df.index[0], :]
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +283,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
         grouped = gwascotag.groupby(column)
         keys = sorted(grouped.groups.keys(), reverse=True)
         tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
-            grouped, key) for key in  tqdm(keys, total=len(keys)))
+            grouped, key) for key in tqdm(keys, total=len(keys)))
         if isinstance(tup[0], pd.core.series.Series):
             sorteddf = pd.concat(tup, axis=1).transpose()
         else:
@@ -295,7 +296,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
         df = df.reset_index(drop=True)
         df['Index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
-            pickle.dump((df,beforetail), F)
+            pickle.dump((df, beforetail), F)
     return df, beforetail
 
 
@@ -314,7 +315,7 @@ def set_first_step(nsnps, step, init_step=2, every=False):
         every = True
         step = 1
         init_step = 1
-    onesnp = 100./float(nsnps)
+    onesnp = 100. / float(nsnps)
     if every:
         full = np.arange(onesnp, 100 + onesnp, onesnp)
     else:
@@ -339,7 +340,7 @@ def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
     :param qrangefn: Name for a pre-ran rangefile
     """
     order = ['label', 'Min', 'Max']
-    #dtype = {'label': object, 'Min': float, 'Max': float}
+    # dtype = {'label': object, 'Min': float, 'Max': float}
     if qrangefn is None:
         # Define the number of snps per percentage point and generate the range
         percentages = set_first_step(nsnps, prunestep, every=every)
@@ -351,14 +352,21 @@ def gen_qrange(prefix, nsnps, prunestep, every=False, qrangefn=None):
             snps = ((percentages * nsnps) / 100).astype(int)
             assert sorted(snps) == sorted(set(snps))
         labels = ['%.2f' % x for x in percentages]
+        if float(labels[-1]) > 100.:
+            labels[-1] = '100.00'
+        if snps[-1] != nsnps:
+            snps[-1] = nsnps
+        assert snps[-1] == nsnps
+        assert labels[-1] == '100.00'
         # Generate the qrange file
         qrange = '%s.qrange' % prefix
-        qr = pd.DataFrame({'label':labels, 'Min':np.zeros(len(percentages)),
-                           'Max':snps}).loc[:, order]
-        qr.to_csv(qrange, header=False, index=False, sep =' ')
+        qr = pd.DataFrame({'label': labels, 'Min': np.zeros(len(percentages)),
+                           'Max': snps}).loc[:, order]
+        qr.to_csv(qrange, header=False, index=False, sep=' ')
     else:
         qrange = qrangefn
-        qr = pd.read_csv(qrange, sep=' ', header=None, names=order)#, dtype=dtype)
+        qr = pd.read_csv(qrange, sep=' ', header=None,
+                         names=order)  # , dtype=dtype)
     return qr, qrange
 
 
@@ -379,61 +387,69 @@ def read_scored_qr(profilefn, phenofile, alpha, nsnps, score_type='sum'):
     sc = pd.read_table(profilefn, delim_whitespace=True)
     # Read the phenotype file
     pheno = pd.read_table(phenofile, delim_whitespace=True, header=None, names=[
-    'FID', 'IID', 'pheno'])
+        'FID', 'IID', 'pheno'])
     # Merge the two dataframes
     sc = sc.merge(pheno, on=['FID', 'IID'])
     # Compute the linear regression between the score and the phenotype
     lr = linregress(sc.pheno, sc.loc[:, col])
     # Return results in form of dictionary
-    dic = {'File':profilefn, 'alpha':alpha, 'R2':lr.rvalue**2, 'SNP kept':nsnps}
+    dic = {'File': profilefn, 'alpha': alpha, 'R2': lr.rvalue ** 2,
+           'SNP kept': nsnps}
     return dic
 
-# --------------------------------------------------------------------------- 
-def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr, maxmem,
-            threads, label, prefix, normalized_geno=True):
+
+# ---------------------------------------------------------------------------
+def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr,
+            maxmem, threads, label, prefix, allele_file, normalized_geno=True):
     """
     Score using qrange
+
+    :param qr: Dataframe with qrange information
+    :param str ou: output prefix for scoring
+    :param str prefix: Prefix for outputs
+    :param bool normalized_geno: If normalizing the genotype is required
+    :param str label: Label of population being analyzed
+    :param str allele_file: Filename with allelic info. VarID pos 3, A1 pos 2
     :param int maxmem: Maximum allowed memory
-    :param int trheads: Maximum number of threads to use
+    :param int threads: Maximum number of threads to use
     :param str plinkexe: Path and executable of plink
     :param str bfile: Prefix of plink-bed fileset
     :param str scorefile: File with the summary statistics in plink format
     :param str qrange: File with the ranges to be passed to the --q-score-range
     :param str phenofile: Filename with the phenotype
     """
-    # Score files with the new ranking
-    # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
-    #          '--allow-no-sex --keep-allele-order --pheno %s --out %s --memory '
-    #          '%d --threads %d')
+    # Score files with the new ranking score = ('%s --bfile %s --score %s 2 4
+    #  7 header --q-score-range %s %s ' '--allow-no-sex --keep-allele-order
+    # --pheno %s --out %s --memory ' '%d --threads %d')
     if normalized_geno:
         sc_type = 'sum'
     else:
         sc_type = ''
     score = ('%s --bfile %s --score %s --q-score-range %s %s --allow-no-sex '
-             '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
+             '--a1-allele %s 3 2 --pheno %s --out %s --memory %d --threads %d')
     score = score % (plinkexe, bfile, '%s %s' % (scorefile, sc_type), qrange,
-                     qfile, phenofile, ou, maxmem, threads)
-    o,e = executeLine(score) 
+                     qfile, allele_file, phenofile, ou, maxmem, threads)
+    _, _ = executeLine(score)
     # Get the results in dataframe
     profs_written = read_log(ou)
-    df  = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
-                                       phenofile, label, x.Max, sc_type) if
-                        ('%s.%.2f.profile' % (ou, float(x.label)) in 
-                         profs_written) else {} 
-                        for x in qr.itertuples()]).dropna()
+    df = pd.DataFrame([read_scored_qr('%s.%.2f.profile' % (ou, float(x.label)),
+                                      phenofile, label, x.Max, sc_type) if
+                       ('%s.%.2f.profile' % (ou, float(x.label)) in
+                        profs_written) else {}
+                       for x in qr.itertuples()]).dropna()
     # Cleanup
     try:
         label = label if isinstance(label, str) else '%.2f' % label
         tarfn = 'Profiles_%s_%s.tar.gz' % (prefix, label)
     except TypeError:
-        tarfn = 'Profiles_%s.tar.gz' % (prefix)
+        tarfn = 'Profiles_%s.tar.gz' % prefix
     with tarfile.open(tarfn, mode='w:gz') as t:
         for fn in glob('%s*.profile' % ou):
             if os.path.isfile(fn):
                 try:
-                # it has a weird behaviour
+                    # it has a weird behaviour
                     os.remove(fn)
                     t.add(fn)
                 except:
-                    pass  
+                    pass
     return df
