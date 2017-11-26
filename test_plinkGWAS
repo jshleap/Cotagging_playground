@@ -1,0 +1,7 @@
+"""
+Unittesting for plinkGWAS module
+"""
+import pytest
+from plinkGWAS import *
+
+@pytest.mark.parametrize("causals,expected", [])

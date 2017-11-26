@@ -10,6 +10,7 @@ import argparse
 import matplotlib
 import numpy as np
 import pandas as pd
+from pandas_plink import read_plink
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import train_test, executeLine
@@ -152,7 +153,16 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
     # Return the gwas dataframe, its filename, and the train and test sets 
     # prefix
     return gws, os.path.join(os.getcwd(), fn), train, test
-    
+
+#----------------------------------------------------------------------
+def plink_free_gwas(pheno, **kwargs):
+    """
+    Compute the least square regression for a genotype in a phenotype
+    :param pheno: phenotype file or dataframe
+    :param kwargs: key word arguments with either bfile or array parameters
+    :return: betas and pvalues
+    """
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
