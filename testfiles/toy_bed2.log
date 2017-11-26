@@ -1,0 +1,31 @@
+PLINK v1.90b3.45 64-bit (13 Jan 2017)
+Options in effect:
+  --bfile AFR10K_5K
+  --extract toy.extract
+  --keep toy.keep
+  --make-bed
+  --out /Users/jshleap/my_gits/Cottagging_playground/testfiles/toy_bed2
+
+Hostname: scabiosa.local
+Working directory: /Volumes/project/gravel/hleap_projects/Cotagging/newsim/test/multiSNP/Linear10K
+Start time: Tue Nov 21 17:44:46 2017
+
+Random number seed: 1511304286
+32768 MB RAM detected; reserving 16384 MB for main workspace.
+10000 variants loaded from .bim file.
+5000 people (0 males, 0 females, 5000 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy_bed2.nosex .
+--extract: 10 variants remaining.
+--keep: 10 people remaining.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 10 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+10 variants and 10 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy_bed2.bed +
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy_bed2.bim +
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy_bed2.fam ... done.
+
+End time: Tue Nov 21 17:44:46 2017
