@@ -6,14 +6,20 @@
   Created: 09/30/17
 """
 import os
+import dask
 import argparse
 import matplotlib
 import numpy as np
 import pandas as pd
+import dask.array as da
+from scipy import stats
 from pandas_plink import read_plink
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import train_test, executeLine
+from sklearn.model_selection import train_test_split
+from qtraitsimulation import qtraits_simulation
+from joblib import Parallel, delayed
 plt.style.use('ggplot')
 
 #----------------------------------------------------------------------
@@ -154,15 +160,54 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
     # prefix
     return gws, os.path.join(os.getcwd(), fn), train, test
 
+def matrix_reg(X, Y):
+    bs_hat, sse, rank, sing = da.linalg.lstsq(X, Y)
+    se = np.sqrt(da.diag(sse * da.linalg.inv(np.dot(X.T, X))))
+    t = bs_hat / se
+    pval = stats.t.sf(np.abs(t), X.shape[0] - X.shape[1] - 1) * 2
+    return bs_hat, pval
+
 #----------------------------------------------------------------------
-def plink_free_gwas(pheno, **kwargs):
+def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
+                    causal_pos=None, plot=False, threads=1, **kwargs):
     """
-    Compute the least square regression for a genotype in a phenotype
+    Compute the least square regression for a genotype in a phenotype. This
+    assumes that the phenotype has been computed from a nearly independent set
+    of variants to be accurate (I believe that that is the case for most
+    programs but it is not "advertised")
+
     :param pheno: phenotype file or dataframe
     :param kwargs: key word arguments with either bfile or array parameters
     :return: betas and pvalues
     """
-
+    if isinstance(geno, str):
+        (bim, fam, geno) = read_plink(bfile)
+    else:
+        try:
+            assert isinstance(geno, dask.array)
+        except AssertionError:
+            assert isinstance(geno, np.array)
+    if pheno is None:
+        pheno, gen = qtraits_simulation(prefix, bfile, **kwargs)
+        (geno, bim, truebeta, vec) = gen
+    if seed is None:
+        seed =  np.random.randint(12345)
+    print('Performing GWAS')
+    X = geno
+    Y = pheno.PHENO.values.resahpe(-1,1)
+    if validate:
+        X_train, X_test, y_train, y_test = train_test_split(
+        X, Y, test_size = 1/validate, random_state = seed)
+    else:
+        X_train, X_test, y_train, y_test = X, X, Y, Y
+    res = pd.DataFrame.from_records(Parallel(n_jobs=threads)(delayed(
+        stats.linregress)(X_train[:, i], y_train) for i in range(X.shape[1])),
+        columns=['slope', 'intercept', 'r_value', 'p_value', 'std_err'])
+    # Make a manhatan plot
+    if plot:
+        manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
+                       alpha=0.05)
+    return res, X_train, X_test, y_train, y_test
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -184,7 +229,9 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=1700, type=int)    
     args = parser.parse_args()
-    plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
-               args.allele_file,  covs=args.covs, nosex=args.nosex,
-               threads=args.threads, maxmem=args.maxmem, validate=args.validate,
-               validsnpsfile=args.validsnpsfile, plot=args.plot)
+    plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
+                    plot=args.plot, threads=args.threads)
+    # plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
+    #            args.allele_file,  covs=args.covs, nosex=args.nosex,
+    #            threads=args.threads, maxmem=args.maxmem, validate=args.validate,
+    #            validsnpsfile=args.validsnpsfile, plot=args.plot)

@@ -62,7 +62,7 @@ def test_create_pheno(prefix, h2, ncausals, noenv):
     ('toy_trueprs_0.2_5_0.01_norm', 0.2, 5, False, True, False, None),
     ('toy_trueprs_0.5_5_0.01_norm', 0.5, 5, False, False, True, True)])
 def test_qtraits_simulation(prefix, h2, ncausals, pop2, uni, normed, ceff):
-    bfile = os.path.join(test_folder, 'toy_bed_10K')
+    bfile = os.path.join(test_folder, 'toy5k')#'toy_bed_10K')
     bfile2 = os.path.join(test_folder, 'toy_bed_10K') if pop2 else None
     seed = 12345
     expected = os.path.join(test_folder, prefix)
@@ -72,9 +72,9 @@ def test_qtraits_simulation(prefix, h2, ncausals, pop2, uni, normed, ceff):
         ceff = bim.dropna().rename(columns={'beta':'eff'})
     else:
         ceff = None
-    pheno = qtraits_simulation(prefix, bfile, h2, ncausals, causaleff=ceff,
-                                     bfile2=bfile2, seed=seed, uniform=uni,
-                                     normalize=normed)
+    pheno, Gs = qtraits_simulation(prefix, bfile, h2, ncausals, causaleff=ceff,
+                                   bfile2=bfile2, seed=seed, uniform=uni,
+                                   normalize=normed)
     # Phenotype should have variance of approximately 1
     np.testing.assert_allclose(pheno.PHENO.var(), 1, rtol=0.05)
     # Genetic effect should have variance equal to h2 and mean 0 N(0,h2)

@@ -61,11 +61,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         (bim2, fam2, G2) = read_plink(bfile2)
         bim = bim.merge(bim2, on=bim.columns.tolist())
         # subset the genotype file
-        G = G[bim.index.tolist(), : ]
+        #G = G[bim.index.tolist(), : ]
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
-        G = (G.transpose() - G.mean(axis=1)) / G.std(axis=1)
+        G = (G.T - G.mean(axis=1)) / G.std(axis=1)
     else:
         # Transpose G so is n x m
         G = G.transpose()
@@ -103,24 +103,22 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         beta = np.random.normal(loc=0, scale=std, size=ncausal)
         causals.loc[:, 'beta'] = beta
     # Score
-    vec = np.zeros(allsnps)
-    vec[causals.index.tolist()] = causals.beta
-    g_eff = G.dot(vec).compute()
+    idx = causals.index.tolist()
+    g_eff = G[:, idx].dot(causals.beta).compute()
     # make sure is the correct variance when samples are small
     print('Sampling beta so that the variance of the genetic component is '
           'equal to h2')
     while not np.allclose(g_eff.var(), h2, rtol=1E-3):
         beta = np.random.normal(loc=0, scale=std, size=ncausal)
-        vec = np.zeros(allsnps)
-        vec[causals.index.tolist()] = beta
-        g_eff = G.dot(vec).compute()
+        g_eff = G[:, idx].dot(causals.beta).compute()
+        causals.loc[:, 'beta'] = beta
     bim['beta'] = causals.beta
     fam['gen_eff'] = g_eff
-    print('Variance in beta is', beta.var())
+    print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', g_eff.var())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
-    return G, bim, fam, vec
+    return G, bim, fam, beta
 
 
 # ----------------------------------------------------------------------
@@ -194,9 +192,6 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
             causals = frq[frq.SNP.isin(snps)]
         # If causal effects are provided use them, otherwise get them
         if causaleff is None:
-            #p = causals.loc[:, maf]
-            #vb = #h2 / ((2 * p) * (1 - p))
-            #std = np.sqrt(vb/ncausal)
             std = np.sqrt(h2_snp)
             g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
             # make sure is the correct variance when samples are small
@@ -343,15 +338,13 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     else:
         with open(picklefile, 'rb') as F:
             G, bim, truebeta, vec = pickle.load(F)
-        #truebeta = pd.read_table('%s.full' % outprefix, delim_whitespace=True)
-        #validsnpfile = '%s.totalsnps' % outprefix
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
         pheno = create_pheno(outprefix, h2, truebeta, noenv=noenv)
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
     if plothist:
         plot_pheno(outprefix, pheno, quality=quality)
-    return pheno, (G, bim, truebeta, vec)#, validsnpfile
+    return pheno, (G, bim, truebeta, vec)
 
 
 if __name__ == '__main__':
