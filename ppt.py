@@ -7,17 +7,15 @@
 """
 import argparse
 import shutil
+import dask.array as da
 import dask.dataframe as dd
 import matplotlib
-
+from pandas_plink import read_plink
 matplotlib.use('Agg')
 from scipy import stats
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
 plt.style.use('ggplot')
-
-#---------------------------------------------------------------------------
-def clump_vars():
 
 
 #---------------------------------------------------------------------------
@@ -139,7 +137,7 @@ def qfile_gen(outpref, clumped, r2, pvals_th, clump_field='P'):
     return qrange, qfile, qr, qf    
 
 #---------------------------------------------------------------------------
-def ScoreClumped(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th, 
+def ScoreClumped_plink(outpref, bfile, clumped, phenofn, sumstatsdf, r2, pvals_th,
                  plinkexe, allele_file, clump_field='P', maxmem=1700, threads=8,
                  score_type='sum'):
     """
@@ -268,7 +266,7 @@ def compute_prange(values, p=0.01):
     return values[np.linspace(0,values.shape[0], n, endpoint=False, dtype=int)]
         
 #----------------------------------------------------------------------
-def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
+def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
            plinkexe, allele_file, clump_field='P', sort_file=None, f_thr=0.1,
            plot=False, clean=False, maxmem=1700, threads=1, score_type='sum'):
     """
@@ -320,7 +318,7 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
         sumstatsdf.to_csv(sumstats, sep=' ', index=False)
         prange = compute_prange(vals.values)
     # Execute the clumping and read the files
-    results = [ScoreClumped(outpref, bfile, clump_vars(
+    results = [ScoreClumped_plink(outpref, bfile, clump_vars_plink(
         outpref, bfile, sumstats, r2, snpwindow, phenofn, allele_file, plinkexe,
         maxmem, threads, clump_field=clump_field), phenofn, sumstatsdf, r2,
                             prange, plinkexe, allele_file, clump_field, maxmem,
@@ -340,6 +338,19 @@ def pplust(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
     # Returns the dataframe with the results and the path to its file
     return results, os.path.join(os.getcwd(), '%s.results'%(outpref))
     
+
+#----------------------------------------------------------------------
+def pplust(prefix, geno, pheno, sumstats, split=3):
+    # Read required info (sumstats, genfile)
+    if isinstance(geno, str):
+        (bim, fam, geno) = read_plink(geno)
+        geno = geno.T
+    if isinstance(sumstats, str):
+        sumstats = pd.read_table(sumstats, delim_whitespace=True)
+    # Compute LD (R2) in dask format
+    R2 =
+    # Create training and testing set
+    # Sort sumstats by pvalue and clump by R2
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -399,7 +410,7 @@ if __name__ == '__main__':
         sta, sto = np.log10(pstart), np.log10(pstop)
         Ps = sorted([float('%.1g' % 10**(x)) for x in np.concatenate(
             (np.arange(sta, sto), [sto]), axis=0)], reverse=True)
-    pplust(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow, 
+    pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
            args.pheno, args.plinkexe, args.allele_file,
            clump_field=args.clump_field, sort_file=args.sort_file,
            plot=args.plot, clean=args.clean, maxmem=args.maxmem,
