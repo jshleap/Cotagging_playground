@@ -218,8 +218,8 @@ def transferability(args):
     snps = np.around((percentages * nsnps) / 100).astype(int) 
     qfile = '%s.qfile' % args.prefix
     if args.qrange is None:
-        qrange= '%s.qrange' % args.prefix
-        qr = gen_qrange(args.prefix, nsnps, 5, qrange, every=False)
+        #qrange= '%s.qrange' % args.prefix
+        qr, qrange = gen_qrange(args.prefix, nsnps, 5, qrange, every=False)
     else:
         qrange = args.qrange
         order = ['label', 'Min', 'Max']
@@ -227,8 +227,8 @@ def transferability(args):
     product.loc[:,['SNP', 'Index']].to_csv(qfile, sep=' ', header=False,
                                            index=False)   
     df = qrscore(args.plinkexe, args.target, args.sumstats, qrange, qfile, 
-                 args.pheno, args.prefix, qr, args.maxmem, args.threads, 
-                 'None', args.prefix)
+                 args.allele_file, args.pheno, args.prefix, qr, args.maxmem,
+                 args.threads, 'None', args.prefix)
     #get ppt results
     #ppts=[]
     #for i in glob('*.results'):
@@ -266,6 +266,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--prefix', help='prefix for outputs', 
                         required=True)
+    parser.add_argument('-a', '--allele_file', default='EUR.allele',
+                        help='File with the allele order. A1 in position 3 and '
+                             'id in position2', required=True)
     parser.add_argument('-b', '--reference', required=True, 
                         help=('prefix of the bed fileset in reference'))  
     parser.add_argument('-g', '--target', required=True, 

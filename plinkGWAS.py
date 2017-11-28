@@ -6,7 +6,6 @@
   Created: 09/30/17
 """
 import os
-import dask
 import argparse
 import matplotlib
 import numpy as np
@@ -14,6 +13,7 @@ import pandas as pd
 import dask.array as da
 from scipy import stats
 from pandas_plink import read_plink
+from dask.array.core import Array
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import train_test, executeLine
@@ -167,7 +167,8 @@ def matrix_reg(X, Y):
     pval = stats.t.sf(np.abs(t), X.shape[0] - X.shape[1] - 1) * 2
     return bs_hat, pval
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
                     causal_pos=None, plot=False, threads=1, **kwargs):
     """
@@ -180,21 +181,24 @@ def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
     :param kwargs: key word arguments with either bfile or array parameters
     :return: betas and pvalues
     """
+    seed = np.random.randint(1e4) if seed is None else seed
+    print('using seed %d' % seed)
+    np.random.seed(seed=seed)
     if isinstance(geno, str):
         (bim, fam, geno) = read_plink(bfile)
+        geno = geno.T
+        geno = (geno - geno.mean(axis=0))/geno.std(axis=0)
     else:
         try:
-            assert isinstance(geno, dask.array)
+            assert isinstance(geno, Array)
         except AssertionError:
-            assert isinstance(geno, np.array)
+            assert isinstance(geno, np.ndarray)
     if pheno is None:
         pheno, gen = qtraits_simulation(prefix, bfile, **kwargs)
         (geno, bim, truebeta, vec) = gen
-    if seed is None:
-        seed =  np.random.randint(12345)
     print('Performing GWAS')
     X = geno
-    Y = pheno.PHENO.values.resahpe(-1,1)
+    Y = da.from_array(pheno.PHENO.values, chunks=100)#.reshape(-1,1)
     if validate:
         X_train, X_test, y_train, y_test = train_test_split(
         X, Y, test_size = 1/validate, random_state = seed)
@@ -203,10 +207,16 @@ def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
     res = pd.DataFrame.from_records(Parallel(n_jobs=threads)(delayed(
         stats.linregress)(X_train[:, i], y_train) for i in range(X.shape[1])),
         columns=['slope', 'intercept', 'r_value', 'p_value', 'std_err'])
+    res.loc[:,'snp'] = bim.snp
     # Make a manhatan plot
     if plot:
         manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
                        alpha=0.05)
+    # write files
+    res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
+    data = dict(zip(['/X_train', '/X_test', '/y_train', '/y_test'],
+                    [X_train, X_test, y_train, y_test]))
+    da.to_hdf5('%s.data.hdf' % prefix, data)
     return res, X_train, X_test, y_train, y_test
 
 if __name__ == '__main__':
@@ -225,12 +235,14 @@ if __name__ == '__main__':
     parser.add_argument('-C', '--covs', default=None, action='store')
     parser.add_argument('-s', '--nosex', default=False, action='store_true')
     parser.add_argument('-l', '--plot', help=('Generate a manhatan plot'),
-                        default=False, action='store_true') 
+                        default=False, action='store_true')
+    parser.add_argument('-S', '--seed', help=('Random seed'),
+                        default=None)
     parser.add_argument('-t', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=1700, type=int)    
     args = parser.parse_args()
     plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
-                    plot=args.plot, threads=args.threads)
+                    plot=args.plot, threads=args.threads, seed=args.seed)
     # plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
     #            args.allele_file,  covs=args.covs, nosex=args.nosex,
     #            threads=args.threads, maxmem=args.maxmem, validate=args.validate,

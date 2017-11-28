@@ -67,9 +67,9 @@ def strategy_sum(x, y, alpha):
  
 
 #---------------------------------------------------------------------------
-def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats, 
-                    qrange, phenofile, frac_snps, qr, tar, maxmem=1700, 
-                    threads=8, strategy='sum', score_type='SUM'):
+def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats, qrange, qr,
+                    tar, allele_file, maxmem=1700, threads=8, strategy='sum',
+                    score_type='SUM'):
     """
     Single execution of the alpha loop for paralellization
     
@@ -84,6 +84,7 @@ def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats,
     :param float frac_snps: Numer of SNPs in one percent
     :param :class pd.DataFrame qr: DataFrame with the qranges
     :param str tar: label of target population
+    :param str allele_file: Filename with allele order
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
     :param str strategy: Suffix of the function with the selection strategy
@@ -106,18 +107,19 @@ def single_alpha_qr(prefix, alpha, merge, plinkexe, bfile, sumstats,
                                                index=False)
     #scorefile = '%s.score' % prefix
     normalize_geno = True if score_type == 'SUM' else False
-    df = qrscore(plinkexe, bfile, sumstats, qrange, qfile, phenofile, ou, qr,
-                maxmem, threads, alpha, prefix, normalized_geno=normalize_geno)
+    df = qrscore(plinkexe, bfile, sumstats, qrange, qfile, allele_file, ou, qr,
+                 maxmem, threads, alpha, prefix, normalized_geno=normalize_geno)
     # Return the results dataframe
     return df
 
 #---------------------------------------------------------------------------
 def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
-            plinkexe, tar, prunestep=1, qrangefn=None, maxmem=1700,
+            plinkexe, tar, allele_file, prunestep=1, qrangefn=None, maxmem=1700,
             threads=1, strategy='sum', every=False, score_type='SUM'):
     """
     Estimate the new rank based on the combination of the cotagging and P+T rank
     
+    :param str allele_file: Filename with the allele order
     :param str prefix: Prefix for outputs
     :param str bfile: Prefix of plink-bed fileset
     :param :class pd.Dataframe sorted_cotag:Filename with results in the sorting
@@ -154,9 +156,9 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
     merge = merge.rename(columns={'Index':'Index_Cotag'})
     # Execute the optimization
     df = Parallel(n_jobs=int(threads))(delayed(single_alpha_qr)(
-        prefix, alpha, merge, plinkexe, bfile, sumstats, qrange, phenofile,
-        frac_snps, qr, tar, maxmem, threads, strategy, score_type)
-                                       for alpha in tqdm(space))
+        prefix, alpha, merge, plinkexe, bfile, sumstats, qrange, qr, tar,
+        allele_file, maxmem, threads, strategy, score_type) for alpha in tqdm(
+        space))
     # Return the list of dataframes with the optimization results
     return df, qrange, qr, merge
 
@@ -263,8 +265,8 @@ def weighted_squares(out, sortedcotag):
 #----------------------------------------------------------------------
 def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
                ppt_results_ref, sumstats, pheno, plinkexe, alpha_step, 
-               labels, prune_step, sortresults, freq_threshold=0.1, h2=None,
-               qrangefn=None, maxmem=1700, threads=1, strategy='sum', 
+               labels, prune_step, sortresults, allele_file, freq_threshold=0.1,
+               h2=None, qrangefn=None, maxmem=1700, threads=1, strategy='sum',
                every=False, column='Cotagging', splits=5, weight=False,
                score_type='SUM'):
     """
@@ -283,6 +285,7 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     :param list labels: List with labels of reference and target populations
     :param int prune_step: Step of the prunning
     :param str sortresults: Filename with results in the sorting inlcuding path
+    :param str allele_file: Filename with the allele order information
     :param float freq_threshold: Threshold for frequency filtering
     :param float h2: Heritability of the phenotype
     :param str qrangefn: Filename of a previously made qrange
@@ -355,8 +358,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     # Score with test-set
     res_pr = '%s_testset' % prefix
     best = single_alpha_qr(res_pr, best_alpha, merged, plinkexe, test, scorefn,
-                          qrange, phe_te, frac_snps, qr, tar, maxmem=maxmem, 
-                          threads=threads, strategy=strategy,
+                           qrange, qr, tar, allele_file, maxmem=maxmem,
+                           threads=threads, strategy=strategy,
                            score_type=score_type)
     # Get the best alpha of the optimization
     #grouped = df.groupby('alpha')
@@ -374,8 +377,8 @@ def prankcster(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     else:
         sortedcotag = sorted_cotag
     wqfile = weighted_squares(wout, sortedcotag)
-    qdf = qrscore(plinkexe, targetbed, scorefn, qrange, wqfile, pheno, wout,qr,
-                  maxmem, threads, 'weighted', prefix)    
+    qdf = qrscore(plinkexe, targetbed, scorefn, qrange, wqfile, allele_file,
+                  wout, qr, maxmem, threads, 'weighted', prefix)
     merged = merged.merge(qdf,on='SNP kept', suffixes=['_hybrid', '_weighted'])
     f, ax = plt.subplots()
     # plot cotagging
@@ -403,6 +406,9 @@ if __name__ == '__main__':
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-p', '--prefix', help='prefix for outputs', 
                         required=True)
+    parser.add_argument('-a', '--allele_file', default='EUR.allele',
+                        help='File with the allele order. A1 in position 3 and '
+                             'id in position2', required=True)
     parser.add_argument('-b', '--reference', required=True, 
                         help=('prefix of the bed fileset in reference'))    
     parser.add_argument('-c', '--target', required=True, 
@@ -453,7 +459,7 @@ if __name__ == '__main__':
     prankcster(args.prefix, args.target, args.reference, args.cotagfn, 
                args.target_ppt, args.ref_ppt, args.sumstats, args.pheno,
                args.plinkexe, args.alpha_step, args.labels, args.prune_step, 
-               args.sortresults, h2=args.h2, freq_threshold=args.freq_threshold,
+               args.sortresults, args.allele_file, h2=args.h2, freq_threshold=args.freq_threshold,
                qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
                strategy=args.strategy, every=args.every, column=args.column, 
                splits=args.splits, weight=args.weight)   

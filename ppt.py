@@ -5,25 +5,23 @@
   Purpose: From SumStats get the best combination of R2 and P-thresholding P + T
   Created: 10/01/17
 """
-import os
-import shutil
-import pickle
-import tarfile
 import argparse
+import shutil
+import dask.dataframe as dd
 import matplotlib
+
 matplotlib.use('Agg')
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-from glob import glob
 from scipy import stats
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
 plt.style.use('ggplot')
 
+#---------------------------------------------------------------------------
+def clump_vars():
+
 
 #---------------------------------------------------------------------------
-def clump_vars(outpref, bfile, sumstats, r2, window, phenofn, al_file, plinkexe,
+def clump_vars_plink(outpref, bfile, sumstats, r2, window, phenofn, al_file, plinkexe,
                maxmem, threads, clump_field='P'):
     """
     Use plink to clump variants based on a pval and r2 threshold 

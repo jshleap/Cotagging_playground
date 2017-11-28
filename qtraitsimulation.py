@@ -106,13 +106,13 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     idx = causals.index.tolist()
     g_eff = G[:, idx].dot(causals.beta).compute()
     # make sure is the correct variance when samples are small
-    print('Sampling beta so that the variance of the genetic component is '
-          'equal to h2')
-    while not np.allclose(g_eff.var(), h2, rtol=1E-3):
-        beta = np.random.normal(loc=0, scale=std, size=ncausal)
-        g_eff = G[:, idx].dot(causals.beta).compute()
-        causals.loc[:, 'beta'] = beta
-    bim['beta'] = causals.beta
+    #print('Sampling beta so that the variance of the genetic component is '
+    #      'equal to h2')
+    #while not np.allclose(g_eff.var(), h2, rtol=1E-3):
+    #    beta = np.random.normal(loc=0, scale=std, size=ncausal)
+    #    g_eff = G[:, idx].dot(causals.beta).compute()
+    causals.loc[:, 'beta'] = beta
+    bim.loc[idx, 'beta'] = beta
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', g_eff.var())
@@ -195,8 +195,8 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
             std = np.sqrt(h2_snp)
             g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
             # make sure is the correct variance when samples are small
-            while not np.allclose(g_eff.var(), h2_snp, rtol=0.05):
-                g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
+            #while not np.allclose(g_eff.var(), h2_snp, rtol=0.05):
+            #    g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
             causals.loc[:, 'eff'] = g_eff
         # write snps and effect to score file
         mafs = causals.loc[:, maf]
@@ -252,11 +252,12 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     if noenv:
         env_effect = np.zeros(nind)
     else:
-        std = np.sqrt(1 - h2)
+        va = prs_true.gen_eff.var()
+        std = np.sqrt((va/h2) - va)
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
         # for small sample sizes force to be close to the expected heritability
-        while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
-            env_effect = np.random.normal(loc=0, scale=std, size=nind)
+        #while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
+            #env_effect = np.random.normal(loc=0, scale=std, size=nind)
     # Include environmental effects into the dataframe
     prs_true['env_eff'] = env_effect
     # Generate the phenotype from the model Phenotype = genetics + environment
