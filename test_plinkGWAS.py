@@ -1,9 +1,10 @@
 """
 Unittesting for plinkGWAS module
 """
-import os
-import pytest
 from glob import glob
+
+import pytest
+
 from plinkGWAS import *
 
 script_path = os.path.dirname(os.path.realpath(__file__))

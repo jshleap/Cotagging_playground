@@ -362,9 +362,9 @@ def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
 
 # ----------------------------------------------------------------------
 def single_clump(snp, R2, done, r_thresh):
-    idx = (R2.loc[snp, :] > r_thresh) & (~R2.loc[snp, :].isin(done))
+    idx = (R2.loc[snp, :] > r_thresh) & (~R2.loc[snp,:].index.isin(done))
     clum = R2.columns[idx].tolist()
-    clum.pop(clum.index(snp))
+    #clum.pop(clum.index(snp))
     return clum
 
 
@@ -383,12 +383,13 @@ def clump(R2, sumstats, r_thresh, p_thresh):
 
 
 # ----------------------------------------------------------------------
-def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
+def score(geno, bim, fam, pheno, sumstats, r_t, p_t, R2):
     clumps = clump(R2, sumstats, r_t, p_t)
     index = list(clumps.keys())
     idx = bim[bim.snp.isin(index)].i.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
-    prs = geno[:,idx].dot(betas)
+    prs = dd.from_dask_array(geno[:,idx].dot(betas), columns='PRS')
+    prs.loc[:, ['FID', 'IID']] = fam.loc[:, ['FID', 'IID']]
     slope, intercept, r_value, p_value, std_err = stats.linregress(pheno, prs)
     return r_t, p_t, r_value**2, prs
 
@@ -414,15 +415,21 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3,
     sumstats = sumstats.sort_values(by='p_value', ascending=True)
     # do clumping
     combos = product(r_range, p_thresh)
-    r = Parallel(n_jobs=threads)(delayed(score)(X_train, bim, y_train, sumstats,
-                                                r_t, p_t, R2)
+    r = Parallel(n_jobs=threads)(delayed(score)(X_train, bim, fam, y_train,
+                                                sumstats, r_t, p_t, R2)
                                  for r_t, p_t in combos)
-    best = sorted(r, key=itemgetter(2), reverse=True)[0]
+    r = sorted(r, key=itemgetter(2), reverse=True)[0]
+    with open('%s_ppt.results.tsv' % prefix, 'w') as F:
+        line = ['\t'.join(['LD threshold', 'P-value threshold', 'R2'])]
+        for i in r:
+            line += ['\t'.join(map(str, i[:-1]))]
+        F.write('\n'.join(line))
+    best = r[0]
     # score in test set
     _, _, r2, prs = score(X_test, bim, y_test, sumstats, best[0], best[1], R2)
     print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f' % (
         best[0], best[1], r2))
-    
+    prs.to_csv('%s.prs' % prefix, sep='\t', index=False)
     return prs
 
 
@@ -490,8 +497,9 @@ if __name__ == '__main__':
         sta, sto = np.log10(pstart), np.log10(pstop)
         Ps = sorted([float('%.1g' % 10 ** (x)) for x in np.concatenate(
             (np.arange(sta, sto), [sto]), axis=0)], reverse=True)
-    pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
-                 args.pheno, args.plinkexe, args.allele_file,
-                 clump_field=args.clump_field, sort_file=args.sort_file,
-                 plot=args.plot, clean=args.clean, maxmem=args.maxmem,
-                 threads=args.threads, score_type=args.score_type)
+    # pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
+    #              args.pheno, args.plinkexe, args.allele_file,
+    #              clump_field=args.clump_field, sort_file=args.sort_file,
+    #              plot=args.plot, clean=args.clean, maxmem=args.maxmem,
+    #              threads=args.threads, score_type=args.score_type)
+
