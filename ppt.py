@@ -16,7 +16,6 @@ from collections import defaultdict
 from itertools import product
 from pandas_plink import read_plink
 from sklearn.model_selection import train_test_split
-
 matplotlib.use('Agg')
 from scipy import stats
 import matplotlib.pyplot as plt
