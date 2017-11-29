@@ -1,0 +1,31 @@
+PLINK v1.90b3.45 64-bit (13 Jan 2017)
+Options in effect:
+  --bfile EUR
+  --keep-allele-order
+  --make-bed
+  --out /Users/jshleap/my_gits/Cottagging_playground/testfiles/toy200k_first
+  --snp SNP1
+  --window 20
+
+Hostname: scabiosa.local
+Working directory: /Volumes/project/gravel/hleap_projects/Cotagging/newsim
+Start time: Wed Nov 29 11:14:12 2017
+
+Random number seed: 1511972052
+32768 MB RAM detected; reserving 16384 MB for main workspace.
+15 out of 133303 variants loaded from .bim file.
+200000 people (0 males, 0 females, 200000 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy200k_first.nosex .
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 200000 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+15 variants and 200000 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy200k_first.bed +
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy200k_first.bim +
+/Users/jshleap/my_gits/Cottagging_playground/testfiles/toy200k_first.fam ...
+done.
+
+End time: Wed Nov 29 11:14:14 2017
