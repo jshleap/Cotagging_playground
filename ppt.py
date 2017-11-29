@@ -422,7 +422,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3,
     _, _, r2, prs = score(X_test, bim, y_test, sumstats, best[0], best[1], R2)
     print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f' % (
         best[0], best[1], r2))
-    
+
     return prs
 
 
