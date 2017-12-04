@@ -67,7 +67,7 @@ def test_create_pheno(prefix, h2, ncausals, noenv):
     ('toy_trueprs_0.2_5_0.01_norm', 0.2, 5, False, True, False, None),
     ('toy_trueprs_0.5_5_0.01_norm', 0.5, 5, False, False, True, True)])
 def test_qtraits_simulation(prefix, h2, ncausals, pop2, uni, normed, ceff):
-    bfile = os.path.join(test_folder, 'toy200K')#'toy_bed_10K')
+    bfile = os.path.join(test_folder, 'toy200K')# 'toy_bed_10K')
     bfile2 = os.path.join(test_folder, 'toy_bed_10K') if pop2 else None
     seed = 12345
     expected = os.path.join(test_folder, prefix)
@@ -85,7 +85,8 @@ def test_qtraits_simulation(prefix, h2, ncausals, pop2, uni, normed, ceff):
     # Genetic effect should have variance equal to h2 and mean 0 N(0,h2)
     #np.testing.assert_allclose(pheno.gen_eff.var(), h2, rtol=0.05)
     if normed:
-        np.testing.assert_allclose(pheno.gen_eff.mean(), 0, rtol=0.05, atol=0.05)
+        np.testing.assert_allclose(pheno.gen_eff.mean(), 0, rtol=0.05, atol=0.05
+                                   )
     # Error effect should have variance equal to 1 - h2 and mean 0 N(0,1-h2)
     #np.testing.assert_allclose(pheno.env_eff.var(), 1-h2, rtol=0.05)
     np.testing.assert_allclose(pheno.env_eff.mean(), 0, rtol=0.05, atol=0.05)
