@@ -1,33 +1,26 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 """
   Author:  Jose Sergio Hleap --<>
   Purpose: Analyze the tagging scores vs P+T and a Null random model
   Created: 10/02/17
 """
-
-import os
 import shutil
-import pickle
-import tarfile
-import argparse
+
 import matplotlib
+import dask.dataframe as dd
+
 matplotlib.use('Agg')
-import numpy as np
-import pandas as pd
-from glob import glob
-from tqdm import tqdm
-from functools import reduce
-import matplotlib.pyplot as plt
 from utilities4cotagging import *
+from plinkGWAS import *
 from itertools import filterfalse
 from scipy.stats import linregress
-from subprocess import Popen, PIPE
 from joblib import Parallel, delayed
+
 plt.style.use('ggplot')
 
 
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 def read_scored_qr(profilefn, phenofile, kind, nsnps, profiles):
     """
     Read the profile file a.k.a. PRS file or scoresum
@@ -43,17 +36,18 @@ def read_scored_qr(profilefn, phenofile, kind, nsnps, profiles):
     sc = pd.read_table(profilefn, delim_whitespace=True)
     # Read the phenotype file into a pandas dataframe
     pheno = pd.read_table(phenofile, delim_whitespace=True, header=None, names=[
-    'FID', 'IID', 'pheno'])
+        'FID', 'IID', 'pheno'])
     # Merge the two data frames
-    mer = sc.merge(pheno, on=['FID','IID'])
+    mer = sc.merge(pheno, on=['FID', 'IID'])
     # Compute the linear regression between the phenotype and the scored PRS
     lr = linregress(mer.pheno, mer.SCORESUM)
     # Store and return result in dictionary format
-    dic = {'SNP kept':nsnps, '-log(P)_%s' % kind : -np.log10(lr.pvalue), 
-           r'$R^{2}$_%s' % kind : lr.rvalue**2, 'Slope_%s' % kind: lr.slope}
+    dic = {'SNP kept': nsnps, '-log(P)_%s' % kind: -np.log10(lr.pvalue),
+           r'$R^{2}$_%s' % kind: lr.rvalue ** 2, 'Slope_%s' % kind: lr.slope}
     return dic
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def read_gwas_n_cotag(gwasfile, cotagfile):
     """
     Read the GWAS (a.k.a. summary stats) in the reference population and merge
@@ -70,7 +64,8 @@ def read_gwas_n_cotag(gwasfile, cotagfile):
     # Return the merged data frame
     return gwas.merge(cotag, on='SNP')
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
                      phenofile, tarbed, allsnp, clumped=None, every=False):
     """
@@ -86,11 +81,11 @@ def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
     :param tuple clumped: list of tuples with clumped dataframe and kind, and 
     phenofile
     :param bool every: test one snp at a time
-    """  
+    """
     # Make sure that the shapes coincide
     assert sortedcota.shape[0] == sortedtagR.shape[0]
     # get the number of possible snps
-    nsnps = sortedcota.shape[0]  
+    nsnps = sortedcota.shape[0]
     # Create a copy to randomize
     randomtagg = sortedcota.copy()
     idxs = randomtagg.Index.tolist()
@@ -104,7 +99,7 @@ def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
     # Get a series with the percentages to be explore with emphasis in the first
     # 200
     percentages = set_first_step(nsnps, step, every=every)
-    snps = np.around((percentages*allsnp)/100).astype(int)
+    snps = np.around((percentages * allsnp) / 100).astype(int)
     try:
         # Check if there are repeats in ths set of SNPS
         assert sorted(snps) == sorted(set(snps))
@@ -115,39 +110,40 @@ def subsetter_qrange(prefix, sortedcota, sortedtagT, sortedtagR, step,
     labels = ['%.2f' % x for x in percentages]
     # Generate the qrange file?
     order = ['label', 'Min', 'Max']
-    qr = pd.DataFrame({'label':labels, 'Min':np.zeros(len(percentages)),
-                       'Max':snps}).loc[:, order]
-                       #np.around(np.array(percentages, dtype=float)*(
-                       #    nsnps/100)).astype(int)}).loc[:, order]
-    qr.to_csv(qrange, header=False, index=False, sep =' ')    
+    qr = pd.DataFrame({'label': labels, 'Min': np.zeros(len(percentages)),
+                       'Max': snps}).loc[:, order]
+    # np.around(np.array(percentages, dtype=float)*(
+    #    nsnps/100)).astype(int)}).loc[:, order]
+    qr.to_csv(qrange, header=False, index=False, sep=' ')
     # Set qfile filename
-    qfile = '%s_%s.qfile' 
+    qfile = '%s_%s.qfile'
     # Set the output tuples with the qfile,  phenotype file and matching bed 
     c = (qfile % (prefix, 'cotag'), phenofile, tarbed)
     t = (qfile % (prefix, 'tagt'), phenofile, tarbed)
     r = (qfile % (prefix, 'tagr'), phenofile, tarbed)
     a = (qfile % (prefix, 'rand'), phenofile, tarbed)
     # Write the sortings to file
-    sortedcota.loc[:,['SNP', 'Index']].to_csv(c[0], sep=' ', header=False, 
-                                              index=False)
-    sortedtagT.loc[:,['SNP', 'Index']].to_csv(t[0], sep=' ', header=False, 
-                                              index=False)
-    sortedtagR.loc[:,['SNP', 'Index']].to_csv(r[0], sep=' ', header=False, 
-                                              index=False)
-    randomtagg.loc[:,['SNP', 'Index']].to_csv(a[0], sep=' ', header=False,
-                                              index=False)    
-    out = (qr, c, t, r, a) 
+    sortedcota.loc[:, ['SNP', 'Index']].to_csv(c[0], sep=' ', header=False,
+                                               index=False)
+    sortedtagT.loc[:, ['SNP', 'Index']].to_csv(t[0], sep=' ', header=False,
+                                               index=False)
+    sortedtagR.loc[:, ['SNP', 'Index']].to_csv(r[0], sep=' ', header=False,
+                                               index=False)
+    randomtagg.loc[:, ['SNP', 'Index']].to_csv(a[0], sep=' ', header=False,
+                                               index=False)
+    out = (qr, c, t, r, a)
     # Do the same as before but for clumps if any
     if clumped is not None:
         for clumped, kind, pf, bed in clumped:
             p = (qfile % (prefix, 'clum%s' % kind), pf, bed)
             out += (p,)
-            clumped.loc[:,['SNP', 'Index']].to_csv(p[0], sep=' ', header=False, 
-                                                   index=False)
+            clumped.loc[:, ['SNP', 'Index']].to_csv(p[0], sep=' ', header=False,
+                                                    index=False)
     # return the tuple of tuples, with the first element being the qr data frame
-    return out, qrange 
+    return out, qrange
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def cleanup():
     """
     Clean up the folder: remove nosex lists, put all logs under the LOGs folder
@@ -162,7 +158,7 @@ def cleanup():
         os.mkdir('SNP_lists')
     else:
         shutil.rmtree('SNP_lists')
-        os.mkdir('SNP_lists')        
+        os.mkdir('SNP_lists')
     for log in glob('*.log'):
         shutil.move(log, 'LOGs')
     for ns in glob('*.nosex'):
@@ -172,38 +168,41 @@ def cleanup():
     for nopred in glob('*.nopred'):
         os.remove(nopred)
 
-#----------------------------------------------------------------------
-def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps, 
+
+# ----------------------------------------------------------------------
+def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
                  maxmem, threads):
     """
     Helper function to paralellize score_qfiles
     """
     qfile, phenofile, bfile = tup
-    suf = qfile[qfile.find('_') +1 : qfile.rfind('.')]
+    suf = qfile[qfile.find('_') + 1: qfile.rfind('.')]
     ou = '%s_%s' % (prefix, suf)
     # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
     #          '--allow-no-sex --keep-allele-order --pheno %s --out %s '
     #          '--memory %d --threads %d')
-    score = ('%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
-             '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
-    score = score%(plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
-                   maxmem, threads)
-    o,e = executeLine(score)
+    score = (
+    '%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
+    '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
+    score = score % (plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
+                     maxmem, threads)
+    o, e = executeLine(score)
     profs = read_log(ou)
-    df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label), 
+    df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label),
                                       phenofile, suf, round(float(x.label)
                                                             * frac_snps), profs)
                        for x in qr.itertuples()])
-    #frames.append(df)    
+    # frames.append(df)
     with tarfile.open('Profiles_%s.tar.gz' % ou, mode='w:gz') as t:
         for fn in glob('%s*.profile' % ou):
             if os.path.isfile(fn):
                 t.add(fn)
-                os.remove(fn)    
+                os.remove(fn)
     return df
 
-#----------------------------------------------------------------------
-def score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem=1700, 
+
+# ----------------------------------------------------------------------
+def score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem=1700,
                  threads=8):
     """
     Score the set of qfiles defined in out
@@ -223,15 +222,16 @@ def score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem=1700,
     # Score files with plink's --q-score-range option and read them into a 
     # pandas data frame ... and do it in parallel
     frames = Parallel(n_jobs=int(threads))(delayed(single_score)(
-        prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps, maxmem, threads) 
-                                           for tup in tqdm(out[1:], 
+        prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps, maxmem, threads)
+                                           for tup in tqdm(out[1:],
                                                            total=len(out[1:])))
     return filterfalse(lambda df: df.empty, frames)
 
-#---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
                          sortedtagT, sortedtagR, plinkexe, clumped=None, step=1,
-                         tar_label='AFR', ref_label='EUR', maxmem=1700, 
+                         tar_label='AFR', ref_label='EUR', maxmem=1700,
                          threads=8, every=False):
     """
     Execute the prunning in a range from <step> to 100 with step <step> (in %)
@@ -253,7 +253,7 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
     :param bool every: test one snp at a time
     """
     # Get the fraction of snps per percentage
-    frac_snps = sortedcotag.shape[0]/100
+    frac_snps = sortedcotag.shape[0] / 100
     if os.path.isfile('pbp.pickle'):
         with open('pbp.pickle', 'rb') as f:
             merge = pickle.load(f)
@@ -262,14 +262,16 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
         print('Performing prunning ...')
         # Execute the qrange scoring and read it into a dataframe
         out, qrangefn = subsetter_qrange(prefix, sortedcotag, sortedtagT,
-                                         sortedtagR, step, phenofile, bfile, 
-                                         allsnp, clumped=clumped, every=every) 
+                                         sortedtagR, step, phenofile, bfile,
+                                         allsnp, clumped=clumped, every=every)
         frames = score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem,
                               threads)
         # Merge all the frames by the number of snps kept
-        merge = reduce(lambda x, y: pd.merge(x, y, on = 'SNP kept'), frames)
-        merge['Percentage of SNPs used'] = (merge.loc[:, 'SNP kept']/merge.loc[
-            :, 'SNP kept'].max()) * 100
+        merge = reduce(lambda x, y: pd.merge(x, y, on='SNP kept'), frames)
+        merge['Percentage of SNPs used'] = (
+                                           merge.loc[:, 'SNP kept'] / merge.loc[
+                                                                      :,
+                                                                      'SNP kept'].max()) * 100
         # write results to file
         merge.to_csv('%s_merged.tsv' % prefix, sep='\t', index=False)
         # Cleanup
@@ -281,7 +283,7 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
     return merge, qrangefn
 
 
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 def plotit(prefix, merge, col, labels, ppt=None, line=False, vline=None,
            hline=None, plottype='png', x='SNP kept'):
     """
@@ -305,41 +307,47 @@ def plotit(prefix, merge, col, labels, ppt=None, line=False, vline=None,
     ref, tar = labels
     if line:
         # If line plot, format dataframes accordingly an plot them
-        rand = merge.pivot(x).loc[:,col+'_rand']
-        cota = merge.pivot(x).loc[:,col+'_cotag']
+        rand = merge.pivot(x).loc[:, col + '_rand']
+        cota = merge.pivot(x).loc[:, col + '_cotag']
         f, ax = plt.subplots()
-        rand.plot(x=x, y=col+'_rand', label='Random', c='b', s=2, alpha=0.5, 
+        rand.plot(x=x, y=col + '_rand', label='Random', c='b', s=2, alpha=0.5,
                   ax=ax)
-        cota.plot(x=x, y=col+'_cotag', label='Cotagging', ax=ax, c='r', s=2, 
+        cota.plot(x=x, y=col + '_cotag', label='Cotagging', ax=ax, c='r', s=2,
                   alpha=0.5)
     else:
         # If scatter, plot each type
         f, ax = plt.subplots()
-        merge.plot.scatter(x=x, y=col+'_rand', label='Random', c='b', s=2, 
+        merge.plot.scatter(x=x, y=col + '_rand', label='Random', c='b', s=2,
                            alpha=0.5, ax=ax)
-        merge.plot.scatter(x=x, y=col+'_cotag', label='Cotagging', ax=ax, c='r',
+        merge.plot.scatter(x=x, y=col + '_cotag', label='Cotagging', ax=ax,
+                           c='r',
                            s=2, alpha=0.5)
-        merge.plot.scatter(x=x, y=col+'_tagt', label='Tagging %s' % tar, ax=ax, 
-                           c='c', s=2, alpha=0.5)   
-        merge.plot.scatter(x=x, y=col+'_tagr', label='Tagging %s' % ref, ax=ax, 
-                           c='m', s=2, alpha=0.5)  
-        #if isinstance(ppt, str):
-        merge.plot.scatter(x=x, y=col+'_clum%s' % ref , ax=ax, c='0.5', s=2, 
-                           alpha=0.5, label='Sorted Clump %s' % ref, marker='*')             
-        merge.plot.scatter(x=x, y=col+'_clum%s' % tar , ax=ax, c='k', s=2, 
-                           alpha=0.5, label='Sorted Clump %s' % tar)        
+        merge.plot.scatter(x=x, y=col + '_tagt', label='Tagging %s' % tar,
+                           ax=ax,
+                           c='c', s=2, alpha=0.5)
+        merge.plot.scatter(x=x, y=col + '_tagr', label='Tagging %s' % ref,
+                           ax=ax,
+                           c='m', s=2, alpha=0.5)
+        # if isinstance(ppt, str):
+        merge.plot.scatter(x=x, y=col + '_clum%s' % ref, ax=ax, c='0.5', s=2,
+                           alpha=0.5, label='Sorted Clump %s' % ref, marker='*')
+        merge.plot.scatter(x=x, y=col + '_clum%s' % tar, ax=ax, c='k', s=2,
+                           alpha=0.5, label='Sorted Clump %s' % tar)
     if vline is not None:
         ax.axvline(float(vline), c='0.5', ls='--')
     if hline is not None:
-        ax.axhline(float(hline), c='0.5', ls='--')        
+        ax.axhline(float(hline), c='0.5', ls='--')
     plt.ylabel(col)
     plt.tight_layout()
-    plt.savefig('%s_error.%s' % (prefix, plottype)) 
+    plt.savefig('%s_error.%s' % (prefix, plottype))
     plt.close()
-    
-def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar, 
-           phenoref, pptR=None, pptT=None, check_freqs=0.1, hline=None,
-           step=1, quality='png', maxmem=1700, threads=8, every=False):
+
+
+# ----------------------------------------------------------------------
+def ranumo_plink(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels,
+                 phenotar,
+                 phenoref, pptR=None, pptT=None, check_freqs=0.1, hline=None,
+                 step=1, quality='png', maxmem=1700, threads=8, every=False):
     """
     execute the code  
     
@@ -364,11 +372,11 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
     """
     print('Performing ranumo')
     # make sure the prefix does not have any _
-    prefix = prefix.replace('_','')
+    prefix = prefix.replace('_', '')
     # Unpack labels
     ref, tar = labels
     # Read summary statistics file
-    gwas = pd.read_table(gwasfn, delim_whitespace=True)        
+    gwas = pd.read_table(gwasfn, delim_whitespace=True)
     # read cotagfile (if needed) and mer it with the summary stats
     if isinstance(cotagfn, str):
         cotags = pd.read_table(cotagfn, sep='\t')
@@ -376,29 +384,30 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
     # Filter the merged file by MAF if required
     frqT = read_freq(tarbed, plinkexe, freq_threshold=check_freqs)
     frqR = read_freq(refbed, plinkexe, freq_threshold=check_freqs)
-    frq = frqT.merge(frqR, on=['CHR', 'SNP'], suffixes=['_%s' % ref, 
-                                                        '_%s' % tar]) 
+    frq = frqT.merge(frqR, on=['CHR', 'SNP'], suffixes=['_%s' % ref,
+                                                        '_%s' % tar])
     gwas = gwas[gwas.SNP.isin(frq.SNP)]
     # normalize betas and write a scoring file
     maf = 'MAF_%s' % tar
     a1 = 'A1_%s' % tar
-    mer = frq.loc[:,['SNP', a1, maf]].merge(gwas, on='SNP')
-    mer['norm'] = np.sqrt((2 * mer.loc[:,maf]) * (1 - mer.loc[:,maf]))
+    mer = frq.loc[:, ['SNP', a1, maf]].merge(gwas, on='SNP')
+    mer['norm'] = np.sqrt((2 * mer.loc[:, maf]) * (1 - mer.loc[:, maf]))
     mer['BETA_norm'] = mer.BETA / mer.norm
     scorefn = '%s.score' % prefix
     mer.loc[:, ['SNP', a1, 'BETA_norm']].to_csv(scorefn, sep=' ', index=False,
                                                 header=False)
     allsnp = gwas.shape[0]
     # Cotagging
-    sortedcot, beforetail = smartcotagsort(prefix, gwas, threads=threads)#cotags)
+    sortedcot, beforetail = smartcotagsort(prefix, gwas,
+                                           threads=threads)  # cotags)
     # Tagging Target
-    sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, 
+    sortedtagT, beforetailTT = smartcotagsort(prefix, gwas,
                                               column='Tagging %s' % tar,
                                               threads=threads)
     # Tagging Reference
-    sortedtagR, beforetailTR = smartcotagsort(prefix, gwas,#cotags,
+    sortedtagR, beforetailTR = smartcotagsort(prefix, gwas,  # cotags,
                                               column='Tagging %s' % ref,
-                                              threads=threads) 
+                                              threads=threads)
     # Process clump if required
     clump = []
     # Include the P + T of the reference population if required
@@ -409,7 +418,7 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
             assert isinstance(pptR, pd.DataFrame)
             resR = pptR
         best_clumpR = resR.nlargest(1, 'R2').File.iloc[0]
-        pptR = os.path.join(os.path.split(phenoref)[0], 
+        pptR = os.path.join(os.path.split(phenoref)[0],
                             '%s.clumped' % best_clumpR)
         clumR = parse_sort_clump(pptR, gwas.SNP)
         clump.append((clumR, ref, phenoref, refbed))
@@ -419,72 +428,158 @@ def ranumo(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels, phenotar,
             resT = pd.read_table(pptT, sep='\t')
         else:
             assert isinstance(pptT, pd.DataFrame)
-            resT = pptT       
+            resT = pptT
         best_clumpT = resT.nlargest(1, 'R2').File.iloc[0]
-        pptT = os.path.join(os.path.split(phenotar)[0], 
-                                            '%s.clumped' % best_clumpT)            
+        pptT = os.path.join(os.path.split(phenotar)[0],
+                            '%s.clumped' % best_clumpT)
         clumT = parse_sort_clump(pptT, gwas.SNP)
         clump.append((clumT, tar, phenotar, tarbed))
 
     # Perform the prunning and scoring
     merge, qrangefn = prunebypercentage_qr(prefix, tarbed, scorefn, phenotar,
-                                           sortedcot, allsnp, sortedtagT, 
-                                           sortedtagR, plinkexe, clumped=clump, 
-                                           step=step, tar_label=tar, 
-                                           ref_label=ref, maxmem=maxmem, 
-                                           threads=threads, every=every)      
+                                           sortedcot, allsnp, sortedtagT,
+                                           sortedtagR, plinkexe, clumped=clump,
+                                           step=step, tar_label=tar,
+                                           ref_label=ref, maxmem=maxmem,
+                                           threads=threads, every=every)
     # Plot reults
-    plotit(prefix+'_rval', merge, r'$R^{2}$', labels, ppt=clump,
+    plotit(prefix + '_rval', merge, r'$R^{2}$', labels, ppt=clump,
            plottype=quality, hline=hline)
     # Return the merged data frame
     return merge, qrangefn
 
+
+# ----------------------------------------------------------------------
+def read_clump(fn):
+    clump={}
+    with open(fn) as F:
+        for line in F:
+            bl = line.split()
+            clump[bl[0]] = bl[1].split(';')
+    return clump
+
+# ----------------------------------------------------------------------
+def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
+           labels, seed=None, threads=1, ppts=None, **kwargs):
+    seed = np.random.randint(1e4) if seed is None else seed
+    now = time.time()
+    print('Performing random null model (RANUMO)!')
+    ref, tar = labels
+    # If pheno is None for the reference, make simulation
+    if isinstance(refpheno, str):
+        refpheno = dd.read_table(refpheno, blocksize=25e6,
+                                 delim_whitespace=True)
+    elif refpheno is None:
+        # make simulation for reference
+        opts = {'outprefix': ref, 'bfile': refgeno, 'h2': kwargs['h2'],
+                'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
+                'uniform': kwargs['uniform'], 'seed': seed}
+        rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+        # make simulation for target
+        opts2 = {'outprefix': 'ppt_simulation', 'bfile': refgeno,
+                 'causaleff': rbim.dropna(), 'h2': kwargs['h2'],
+                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
+                 'uniform': kwargs['uniform'], 'seed': seed}
+        tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts2)
+        opt3 = {'prefix': 'ppt_simulation', 'pheno': rpheno, 'geno': rgeno,
+                'validate': 3, 'seed': seed, 'threads': kwargs['threads'],
+                'bim': rbim}
+        sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt3)
+    elif isinstance(refgeno, str):
+        (rbim, rfam, rgeno) = read_plink(refgeno)
+        rgeno = rgeno.T
+        sumstats = pd.read_table(sumstats, delim_whitespace=True)
+        (tbim, tfam, tgeno) = read_plink(targeno)
+        tgeno = tgeno.T
+    # subset the geno files to shared among the reference and target
+    mbim = rbim.merge(tbim, on='snp')
+    ridx = rbim.snp[rbim.snp.isin(mbim.snp)].index.tolist()
+    tidx = tbim.snp[tbim.snp.isin(mbim.snp)].index.tolist()
+    rgeno = rgeno[:, ridx]
+    tgeno = tgeno[:, tidx]
+    # read cotagfile (if needed) and mer it with the summary stats
+    if isinstance(cotagfn, str):
+        cotags = pd.read_table(cotagfn, sep='\t')
+    elif isinstance(cotagfn, pd.core.frame.DataFrame):
+        cotags = cotagfn
+    else:
+        D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
+        D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
+        cot = da.diag(da.dot(D_r, D_t))
+        stacked = da.stack([mbim.snp, D_r, D_t, cot], axis=1)
+        cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
+                                                      'cotag'])
+    gwas = cotags.merge(sumstats, on='snp')
+    # Sort the sumstats based on scores
+    allsnp = gwas.shape[0]
+    # Cotagging
+    sortedcot, beforetail = smartcotagsort(prefix, gwas, threads=threads)
+    # Tagging Target
+    params = dict(column='Tagging %s' % tar, threads=threads)
+    sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
+    # Tagging Reference
+    params.update(dict(column='Tagging %s' % ref))
+    sortedtagR, beforetailTR = smartcotagsort(prefix, gwas, **params)
+    if isinstance(ppts, tuple):
+        # read ppt from files
+        ppt_r = pd.read_table(ppts[0], delim_whitespace=True)
+        ppt_t = pd.read_table(ppts[1], delim_whitespace=True)
+    else:
+
+
+
+    print('Ranumo done after %.2f minutes' % ((time.time() - now) / 60.))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--prefix', help='prefix for outputs', 
+    parser.add_argument('-p', '--prefix', help='prefix for outputs',
                         required=True)
     parser.add_argument('-g', '--gwas', help='Filename of gwas results in the' +
-                        ' reference population', required=True)
+                                             ' reference population',
+                        required=True)
     parser.add_argument('-b', '--tarbed', help=('prefix of the bed fileset for'
-                                                 ' the target population'), 
-                                           required=True)
+                                                ' the target population'),
+                        required=True)
     parser.add_argument('-R', '--refbed', help=('prefix of the bed fileset for'
-                                                 ' the reference population'), 
-                                           required=True)    
+                                                ' the reference population'),
+                        required=True)
     parser.add_argument('-f', '--phenotar', help=('filename of the true '
                                                   'phenotype of the target '
-                                                  'population'), required=True) 
+                                                  'population'), required=True)
     parser.add_argument('-i', '--phenoref', help=('filename of the true '
                                                   'phenotype of the reference '
-                                                  'population'), required=True)    
+                                                  'population'), required=True)
     parser.add_argument('-P', '--plinkexe', default='~/Programs/plink_mac/plink'
-                        )    
+                        )
     parser.add_argument('-c', '--cotagfile', help='Filename of the cotag tsv ' +
-                        'file ')
+                                                  'file ')
     parser.add_argument('-s', '--step', help='Step in the percentage range to' +
-                        ' explore. By deafult is 1', default=1, type=float) 
+                                             ' explore. By deafult is 1',
+                        default=1, type=float)
     parser.add_argument('-l', '--labels', help=('Space separated string with '
                                                 'reference and target lables '
-                                                '(in that order)'), nargs=2) 
+                                                '(in that order)'), nargs=2)
     parser.add_argument('-r', '--ppt_ref', help=('Path to P+T results in the '
-                                                 'reference population'), 
-                                           default=None)
+                                                 'reference population'),
+                        default=None)
     parser.add_argument('-t', '--ppt_tar', help=('Path to P+T results in the '
-                                                 'reference population'), 
-                                           default=None)
+                                                 'reference population'),
+                        default=None)
     parser.add_argument('-H', '--h2', help=('Heritability of the simulated '
-                                            'phenotype'), default=False) 
+                                            'phenotype'), default=False)
     parser.add_argument('-F', '--check_freq', help=('Read a frequency file and '
-                                                    'filter by this threshold'), 
-                                              default=0.1, type=float) 
-    parser.add_argument('-q', '--quality', help=('type of plots (png, pdf)'), 
-                        default='png')    
-    parser.add_argument('-y', '--every', action='store_true', default=False) 
+                                                    'filter by this threshold'),
+                        default=0.1, type=float)
+    parser.add_argument('-q', '--quality', help=('type of plots (png, pdf)'),
+                        default='png')
+    parser.add_argument('-y', '--every', action='store_true', default=False)
     parser.add_argument('-T', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=3000, type=int)        
+    parser.add_argument('-M', '--maxmem', default=3000, type=int)
     args = parser.parse_args()
-    ranumo(args.prefix, args.tarbed, args.refbed, args.gwas, args.cotagfile, 
-           args.plinkexe, args.labels, args.phenotar, args.phenoref,  
-           pptR=args.ppt_ref, pptT=args.ppt_tar, check_freqs=args.check_freq, 
-           hline=args.h2, step=args.step, quality=args.quality, every=args.every,
+    ranumo(args.prefix, args.tarbed, args.refbed, args.gwas, args.cotagfile,
+           args.plinkexe, args.labels, args.phenotar, args.phenoref,
+           pptR=args.ppt_ref, pptT=args.ppt_tar, check_freqs=args.check_freq,
+           hline=args.h2, step=args.step, quality=args.quality,
+           every=args.every,
            threads=args.threads, maxmem=args.maxmem)

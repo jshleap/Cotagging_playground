@@ -6,12 +6,12 @@
   Created: 09/30/17
 """
 import argparse
-
+import dask.array as da
 import matplotlib
 from pandas_plink import read_plink
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
+import time
 plt.style.use('ggplot')
 from utilities4cotagging import *
 
@@ -32,7 +32,7 @@ def get_SNP_dist(bfile, causals):
 # ----------------------------------------------------------------------
 # TODO: Inlcude frequency filtering
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
-             seed=None, causaleff=None, uniform=False, snps=None):
+             seed=None, causaleff=None, uniform=False, snps=None, threads=1):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -49,7 +49,6 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     :param snps: list of snps to subset the casuals to
     :return: genetic matrix, bim and fam dataframes and the causal vector
     """
-
     # set random seed
     seed = np.random.randint(1e4) if seed is None else seed
     print('using seed %d' % seed)
@@ -100,25 +99,28 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals = bim[bim.snp.isin(snps)]
     # If causal effects are provided use them, otherwise get them
     if causaleff is None:
-        beta = np.random.normal(loc=0, scale=std, size=ncausal)
-        causals.loc[:, 'beta'] = beta
-    # Score
+        #chunks = estimate_chunks((ncausal,), threads)
+        pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
+        #pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
+        # Store them
+        causals.loc[:, 'beta'] = pre_beta#.compute()
     idx = causals.index.tolist()
+    # Score
     g_eff = G[:, idx].dot(causals.beta).compute()
-    # make sure is the correct variance when samples are small
-    #print('Sampling beta so that the variance of the genetic component is '
-    #      'equal to h2')
-    #while not np.allclose(g_eff.var(), h2, rtol=1E-3):
-    #    beta = np.random.normal(loc=0, scale=std, size=ncausal)
-    #    g_eff = G[:, idx].dot(causals.beta).compute()
-    causals.loc[:, 'beta'] = beta
-    bim.loc[idx, 'beta'] = beta
+    # get independent betas
+    # beta = np.zeros(G.shape[1])  # , chunks=chunks)
+    # beta[idx] = causals.beta
+    # chol = da.linalg.cholesky(nearestPD(da.corrcoef(G.T)), lower=True)
+    # betas = da.linalg.inv(chol).dot(beta)[idx]
+    # causals.loc[:, 'ind_beta'] = betas
+    bim.loc[idx, 'beta'] = causals.beta
+    #bim.loc[idx, 'ind_beta'] = betas
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', g_eff.var())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
-    return G, bim, fam, beta
+    return G, bim, fam, causals.beta
 
 
 # ----------------------------------------------------------------------
@@ -146,7 +148,6 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
     :param uniform: pick uniformingly distributed causal variants
     """
     # set the seed
-
     seed = np.random.randint(1e4) if seed is None else seed
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
@@ -322,11 +323,13 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     :param int seed: random seed to use in sampling
     :param bool uniform: pick uniformingly distributed causal variants
     """
-    print('Performing qtraits_simulation on %s' % outprefix)
+    now = time.time()
+    print("Performing simulation with h2=%.2f, and %d causal variants" % (h2,
+          ncausal))
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
-        causaleff = causaleff.reindex(columns=['SNP', 'eff'])
+        causaleff = causaleff.reindex(columns=['snp', 'eff'])
         assert causaleff.shape[0] == ncausal
     picklefile = '%s.pickle' % outprefix
     if not os.path.isfile(picklefile):
@@ -345,6 +348,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
     if plothist:
         plot_pheno(outprefix, pheno, quality=quality)
+    print('Simulation Done after %.2f seconds!!' % (time.time() - now))
     return pheno, (G, bim, truebeta, vec)
 
 

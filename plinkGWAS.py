@@ -1,28 +1,33 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 """
   Author:  Jose Sergio Hleap --<>
   Purpose: Run plink gwas analyses
   Created: 09/30/17
 """
-import os
 import argparse
+import os
+import time
+
+import dask.array as da
 import matplotlib
 import numpy as np
 import pandas as pd
-import dask.array as da
-from scipy import stats
-from pandas_plink import read_plink
 from dask.array.core import Array
+from pandas_plink import read_plink
+from scipy import stats
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import train_test, executeLine
 from sklearn.model_selection import train_test_split
 from qtraitsimulation import qtraits_simulation
-from joblib import Parallel, delayed
+from multiprocessing import Pool, cpu_count
+
 plt.style.use('ggplot')
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
          threads=False, maxmem=False, validsnpsfile=None):
     """
@@ -38,7 +43,7 @@ def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
     :param str validsnpsfile: file with valid snps to pass to --extract 
     :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
-    """   
+    """
     ## for plinkgwas string:
     ## 1) plink path and executable
     ## 2) prefix for the bed fileset
@@ -50,10 +55,10 @@ def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
     # Format CLA
     plinkgwas = ("%s --bfile %s --assoc fisher-midp --linear --pheno %s --prune"
                  " --out %s_gwas --ci 0.95 --a1-allele %s 3 2 --vif 100")
-    plinkgwas = plinkgwas%(plinkexe, bfile, pheno, outprefix, allele_file)
+    plinkgwas = plinkgwas % (plinkexe, bfile, pheno, outprefix, allele_file)
     # Include a subset of snps file if required
     if validsnpsfile is not None:
-        plinkgwas+= " --extract %s" % validsnpsfile
+        plinkgwas += " --extract %s" % validsnpsfile
     # Include Covariates
     if covs:
         plinkgwas += " --covar %s keep-pheno-on-missing-cov" % covs
@@ -66,17 +71,17 @@ def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
     if threads:
         plinkgwas += ' --threads %s' % threads
     if maxmem:
-        plinkgwas += ' --memory %s' % maxmem 
-    # execulte CLA
-    out = executeLine(plinkgwas)  
+        plinkgwas += ' --memory %s' % maxmem
+        # execulte CLA
+    out = executeLine(plinkgwas)
     # Set the Outfile
     fn = '%s_gwas.assoc.linear' % outprefix
     # Return the dataframe of the GWAS and its filename
     return pd.read_table(fn, delim_whitespace=True), fn
 
 
-#----------------------------------------------------------------------
-def manhattan_plot(outfn, p_values, causal_pos=None, alpha = 0.05, title=''):
+# ----------------------------------------------------------------------
+def manhattan_plot(outfn, p_values, causal_pos=None, alpha=0.05, title=''):
     """ 
     Generates a manhattan plot for a list of p-values. Overlays a horizontal 
     line indicating the Bonferroni significance threshold assuming all p-values 
@@ -91,7 +96,7 @@ def manhattan_plot(outfn, p_values, causal_pos=None, alpha = 0.05, title=''):
     # Get the lenght of the p-values array
     L = len(p_values)
     # Compute the bonferrony corrected threshold
-    bonferroni_threshold = alpha / L 
+    bonferroni_threshold = alpha / L
     # Make it log
     logBT = -np.log10(bonferroni_threshold)
     # Fix infinites
@@ -106,21 +111,22 @@ def manhattan_plot(outfn, p_values, causal_pos=None, alpha = 0.05, title=''):
     ax2.axhline(y=logBT, linewidth=1, color='r', ls='--')
     # Add shaded regions on the causal positions
     if causal_pos is not None:
-        [ax2.axvspan(x-0.2,x+0.2, facecolor='0.8', alpha=0.8) for x in 
+        [ax2.axvspan(x - 0.2, x + 0.2, facecolor='0.8', alpha=0.8) for x in
          causal_pos]
     # Plot one point per value
     ax2.plot(vals, '.', ms=1)
     # Zoom-in / limit the view to different portions of the data
     Ymin = min(vals)
     Ymax = max(vals)
-    ax2.set_ylim(0, Ymax+0.2)  # most of the data
-    ax2.set_xlim([-0.2, len(vals)+1])
-    plt.xlabel( r"marker index")
-    plt.ylabel( r"-log10(p-value)")
+    ax2.set_ylim(0, Ymax + 0.2)  # most of the data
+    ax2.set_xlim([-0.2, len(vals) + 1])
+    plt.xlabel(r"marker index")
+    plt.ylabel(r"-log10(p-value)")
     plt.title(title)
     plt.savefig(outfn)
-    
-#----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
 def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
                nosex=False, threads=False, maxmem=False, validate=None,
                validsnpsfile=None, plot=False, causal_pos=None):
@@ -137,7 +143,7 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
     print('Performing plinkGWAS')
     # Create a test/train validation sets
     if validate is not None:
-        keeps = train_test(outprefix, bfile, plinkexe, pheno, validate, maxmem, 
+        keeps = train_test(outprefix, bfile, plinkexe, pheno, validate, maxmem,
                            threads)
         for k, v in keeps.items():
             if 'train' in k:
@@ -147,18 +153,19 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
             else:
                 raise TypeError
     else:
-        train, test = (bfile, pheno),  (None, pheno)
+        train, test = (bfile, pheno), (None, pheno)
     # Run the GWAS
-    #training, pheno = train
+    # training, pheno = train
     gws, fn = gwas(plinkexe, train, outprefix, allele_file, covs, nosex=nosex,
-               threads=threads, maxmem=maxmem, validsnpsfile=validsnpsfile)
+                   threads=threads, maxmem=maxmem, validsnpsfile=validsnpsfile)
     # Make a manhatan plot
     if plot:
-        manhattan_plot('%s.manhatan.pdf' % outprefix, gws.P, causal_pos, 
+        manhattan_plot('%s.manhatan.pdf' % outprefix, gws.P, causal_pos,
                        alpha=0.05)
     # Return the gwas dataframe, its filename, and the train and test sets 
     # prefix
     return gws, os.path.join(os.getcwd(), fn), train, test
+
 
 def matrix_reg(X, Y):
     bs_hat, sse, rank, sing = da.linalg.lstsq(X, Y)
@@ -169,8 +176,8 @@ def matrix_reg(X, Y):
 
 
 # ----------------------------------------------------------------------
-def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
-                    causal_pos=None, plot=False, threads=1, **kwargs):
+def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
+                    causal_pos=None, plot=False, threads=cpu_count(), **kwargs):
     """
     Compute the least square regression for a genotype in a phenotype. This
     assumes that the phenotype has been computed from a nearly independent set
@@ -181,33 +188,44 @@ def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
     :param kwargs: key word arguments with either bfile or array parameters
     :return: betas and pvalues
     """
+    now = time.time()
+    print('Performing GWAS')
+    if 'bfile' in kwargs:
+        bfile = kwargs['bfile']
+    if 'bim' in kwargs:
+        bim = kwargs['bim']
     seed = np.random.randint(1e4) if seed is None else seed
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
     if isinstance(geno, str):
         (bim, fam, geno) = read_plink(bfile)
         geno = geno.T
-        geno = (geno - geno.mean(axis=0))/geno.std(axis=0)
+        geno = (geno - geno.mean(axis=0)) / geno.std(axis=0)
     else:
         try:
             assert isinstance(geno, Array)
         except AssertionError:
             assert isinstance(geno, np.ndarray)
     if pheno is None:
-        pheno, gen = qtraits_simulation(prefix, bfile, **kwargs)
+        pheno, gen = qtraits_simulation(prefix, **kwargs)
         (geno, bim, truebeta, vec) = gen
-    print('Performing GWAS')
+
     X = geno
-    Y = da.from_array(pheno.PHENO.values, chunks=100)#.reshape(-1,1)
+    Y = da.from_array(pheno.PHENO.values, chunks=100)  # .reshape(-1,1)
     if validate:
         X_train, X_test, y_train, y_test = train_test_split(
-        X, Y, test_size = 1/validate, random_state = seed)
+            X, Y, test_size=1 / validate, random_state=seed)
     else:
         X_train, X_test, y_train, y_test = X, X, Y, Y
-    res = pd.DataFrame.from_records(Parallel(n_jobs=threads)(delayed(
-        stats.linregress)(X_train[:, i], y_train) for i in range(X.shape[1])),
-        columns=['slope', 'intercept', 'r_value', 'p_value', 'std_err'])
-    res.loc[:,'snp'] = bim.snp
+    I = ((X_train[:, i], y_train) for i in range(X.shape[1]))
+    if X.shape[1] > 100:
+        p = Pool(threads)
+        r = p.map(stats.linregress, I)
+    else:
+        r = [stats.linregress(x, y) for x, y in I]
+    res = pd.DataFrame.from_records(r, columns=['slope', 'intercept', 'r_value',
+                                                'p_value', 'std_err'])
+    res.loc[:, 'snp'] = bim.snp
     # Make a manhatan plot
     if plot:
         manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
@@ -217,12 +235,14 @@ def plink_free_gwas(prefix, bfile, pheno, geno, validate=None, seed=None,
     data = dict(zip(['/X_train', '/X_test', '/y_train', '/y_test'],
                     [X_train, X_test, y_train, y_test]))
     da.to_hdf5('%s.data.hdf' % prefix, data)
+    print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
     return res, X_train, X_test, y_train, y_test
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--prefix', help='prefix for outputs', 
-                        required=True)  
+    parser.add_argument('-p', '--prefix', help='prefix for outputs',
+                        required=True)
     parser.add_argument('-B', '--bfile', default='EUR')
     parser.add_argument('-f', '--pheno', help='Phenotype file', required=True)
     parser.add_argument('-P', '--plinkexe', default='~/Programs/plink_mac/plink'
@@ -239,7 +259,7 @@ if __name__ == '__main__':
     parser.add_argument('-S', '--seed', help=('Random seed'),
                         default=None)
     parser.add_argument('-t', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=1700, type=int)    
+    parser.add_argument('-M', '--maxmem', default=1700, type=int)
     args = parser.parse_args()
     plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
                     plot=args.plot, threads=args.threads, seed=args.seed)

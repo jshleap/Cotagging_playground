@@ -10,13 +10,15 @@ import pickle
 import tarfile
 from glob import glob
 from subprocess import Popen, PIPE
-
+from functools import reduce
 import mmap
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from scipy.stats import linregress
 from tqdm import tqdm
+import psutil
+import dask.array as da
 
 
 # ----------------------------------------------------------------------
@@ -453,3 +455,65 @@ def qrscore(plinkexe, bfile, scorefile, qrange, qfile, phenofile, ou, qr,
                 except:
                     pass
     return df
+
+
+# ----------------------------------------------------------------------
+def estimate_size(shape):
+    """
+    Estimate the potential size of an array
+    :param shape: shape of the resulting array
+    :return: size in Mb
+    """
+    total_bytes = reduce(np.multiply, shape) * 8
+    return total_bytes/1E6
+
+
+# ----------------------------------------------------------------------
+def estimate_chunks(shape, threads):
+    avail_mem = psutil.virtual_memory().available / 1E7 # a tenth of the memory
+    usage = estimate_size(shape) * threads
+    if usage < avail_mem:
+        return shape
+    else:
+        n_chunks = np.floor(usage/avail_mem).astype(int)
+        return tuple([max([1,i]) for i in np.array(shape)/n_chunks])
+
+# ----------------------------------------------------------------------
+def nearestPD(A, threads=1):
+    """
+    Find the nearest positive-definite matrix to input
+
+    A Python/Numpy port of John D'Errico's `nearestSPD` MATLAB code [1], which
+    credits [2] from Ahmed Fasih
+
+    [1] https://www.mathworks.com/matlabcentral/fileexchange/42885-nearestspd
+
+    [2] N.J. Higham, "Computing a nearest symmetric positive semidefinite
+    matrix" (1988): https://doi.org/10.1016/0024-3795(88)90223-6
+    """
+    isPD = lambda x: da.all(np.linalg.eigvals(x) > 0).compute()
+    B = (A + A.T) / 2
+    _, s, V = da.linalg.svd(B)
+    H = da.dot(V.T, da.dot(da.diag(s), V))
+    A2 = (B + H) / 2
+    A3 = (A2 + A2.T) / 2
+    if isPD(A3):
+        return A3
+    spacing = da.spacing(da.linalg.norm(A))
+    # The above is different from [1]. It appears that MATLAB's `chol` Cholesky
+    # decomposition will accept matrixes with exactly 0-eigenvalue, whereas
+    # Numpy's will not. So where [1] uses `eps(mineig)` (where `eps` is Matlab
+    # for `np.spacing`), we use the above definition. CAVEAT: our `spacing`
+    # will be much larger than [1]'s `eps(mineig)`, since `mineig` is usually on
+    # the order of 1e-16, and `eps(1e-16)` is on the order of 1e-34, whereas
+    # `spacing` will, for Gaussian random matrixes of small dimension, be on
+    # othe order of 1e-16. In practice, both ways converge, as the unit test
+    # below suggests.
+    eye_chunk = estimate_chunks((A.shape[0], A.shape[0]), threads=threads)[0]
+    I = da.eye(A.shape[0], chunks=eye_chunk)
+    k = 1
+    while not isPD(A3):
+        mineig = da.min(da.real(np.linalg.eigvals(A3)))
+        A3 += I * (-mineig * k**2 + spacing)
+        k += 1
+    return A3

@@ -5,21 +5,16 @@
   Purpose: From SumStats get the best combination of R2 and P-thresholding P + T
   Created: 10/01/17
 """
-import argparse
 import shutil
-import dask.array as da
-from joblib import delayed, Parallel
+from itertools import product
 from operator import itemgetter
+
 import dask.dataframe as dd
 import matplotlib
-from collections import defaultdict
-from itertools import product
-from pandas_plink import read_plink
-from sklearn.model_selection import train_test_split
+
 matplotlib.use('Agg')
-from scipy import stats
-import matplotlib.pyplot as plt
-from utilities4cotagging import *
+from qtraitsimulation import *
+from plinkGWAS import *
 
 plt.style.use('ggplot')
 
@@ -357,52 +352,83 @@ def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
     cleanup(results, clean)
     # Returns the dataframe with the results and the path to its file
     return results, os.path.join(os.getcwd(), '%s.results' % (outpref))
+    return clum
 
 
 # ----------------------------------------------------------------------
-def single_clump(snp, R2, done, r_thresh):
-    idx = (R2.loc[snp, :] > r_thresh) & (~R2.loc[snp,:].index.isin(done))
-    clum = R2.columns[idx].tolist()
-    #clum.pop(clum.index(snp))
-    return clum
+def single_clump(snp, R2, done, r_thresh, extnd, clumps):
+    if not snp in done:
+        vec = R2.loc[:, snp]
+        idx = (vec > r_thresh) & (~vec.index.isin(done))
+        clum = vec.index[idx].tolist()
+        extnd(clum)
+        clumps[snp] = clum
+        # return clum
 
 
 # ----------------------------------------------------------------------
 def clump(R2, sumstats, r_thresh, p_thresh):
     sub = sumstats[sumstats.p_value < p_thresh]
     done = []
-    clumps = defaultdict()
-    app = done.append()
-    for row in sub.itertuples():
-        if not row.snp in done:
-            clu = single_clump(row.snp, R2, r_thresh)
-            app(clu)
-            clumps[row.snp] = clu
+    clumps = {}
+    extnd = done.extend
+    avail = sub.snp.tolist()
+    r2 = R2.loc[avail, avail].compute()
+    [single_clump(row.snp, r2, done, r_thresh, extnd, clumps)
+     for row in sub.itertuples()]
+    # set dataframe
+    df = sub[sub.snp.isin(list(clumps.keys()))].reindex(columns=['snp',
+                                                                 'p_value'])
+    df['Tagged'] = [';'.join(clumps[v]) for v in df.snp]
     return clumps
 
 
 # ----------------------------------------------------------------------
-def score(geno, bim, fam, pheno, sumstats, r_t, p_t, R2):
+def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
+    try:
+        pheno = pheno.compute()
+    except AttributeError:
+        pheno = pheno
+    if isinstance(pheno, pd.core.frame.DataFrame):
+        pheno = pheno.PHENO.values
+    assert isinstance(pheno, np.ndarray)
     clumps = clump(R2, sumstats, r_t, p_t)
-    index = list(clumps.keys())
+    index = clump.snp.tolist()
     idx = bim[bim.snp.isin(index)].i.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
-    prs = dd.from_dask_array(geno[:,idx].dot(betas), columns='PRS')
-    prs.loc[:, ['FID', 'IID']] = fam.loc[:, ['FID', 'IID']]
+    prs = geno[:, idx].dot(betas).compute()
     slope, intercept, r_value, p_value, std_err = stats.linregress(pheno, prs)
-    return r_t, p_t, r_value**2, prs
+    return r_t, p_t, r_value ** 2, clumps, prs
+
 
 # ----------------------------------------------------------------------
-def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3,
-           seed=None, threads=-1):
+def pplust(prefix, geno, pheno, bim, sumstats, r_range, p_thresh, split=3,
+           seed=None, **kwargs):
+    now = time.time()
+    print ('Performing P + T!')
     seed = np.random.randint(1e4) if seed is None else seed
     # Read required info (sumstats, genfile)
+    if 'bim' in kwargs:
+        bim = kwargs['bim']
+    if 'fam' in kwargs:
+        fam = kwargs['fam']
+    if isinstance(pheno, str):
+        pheno = dd.read_table(pheno, blocksize=25e6,
+                              delim_whitespace=True)
+    elif pheno is None:
+        # make simulation
+        opts = {'outprefix': 'ppt_simulation', 'bfile': geno,
+                'h2': kwargs['h2'], 'ncausal': kwargs['ncausal'],
+                'normalize': kwargs['normalize'], 'uniform': kwargs['uniform'],
+                'seed': seed}
+        pheno, (G, bim, truebeta, vec) = qtraits_simulation(**opts)
+        opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': G,
+                'validate': 3, 'seed': seed, 'threads': kwargs['threads'],
+                'bim':bim}
+        sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt2)
     if isinstance(geno, str):
         (bim, fam, geno) = read_plink(geno)
         geno = geno.T
-    if isinstance(pheno, str):
-        pheno = dd.read_table('largefile.csv', blocksize=25e6,
-                              delim_whitespace=True)
     if isinstance(sumstats, str):
         sumstats = pd.read_table(sumstats, delim_whitespace=True)
     # Compute LD (R2) in dask format
@@ -413,23 +439,32 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3,
     # Sort sumstats by pvalue and clump by R2
     sumstats = sumstats.sort_values(by='p_value', ascending=True)
     # do clumping
-    combos = product(r_range, p_thresh)
-    r = Parallel(n_jobs=threads)(delayed(score)(X_train, bim, fam, y_train,
-                                                sumstats, r_t, p_t, R2)
-                                 for r_t, p_t in combos)
-    r = sorted(r, key=itemgetter(2), reverse=True)[0]
+    r = [score(X_train, bim, y_train, sumstats, r_t, p_t, R2) for r_t, p_t in
+         tqdm(product(r_range, p_thresh), total=len(r_range) * len(p_thresh))]
+    best = sorted(r, key=itemgetter(2), reverse=True)[0]
     with open('%s_ppt.results.tsv' % prefix, 'w') as F:
         line = ['\t'.join(['LD threshold', 'P-value threshold', 'R2'])]
-        for i in r:
-            line += ['\t'.join(map(str, i[:-1]))]
+        line += ['\t'.join(map(str, i[:-2])) for i in r]
         F.write('\n'.join(line))
-    best = r[0]
     # score in test set
-    _, _, r2, prs = score(X_test, bim, y_test, sumstats, best[0], best[1], R2)
-    print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f' % (
-        best[0], best[1], r2))
+    r_t, p_t, r2, clumps, sc = score(X_test, bim, y_test, sumstats, best[0], best[1],
+                              R2)
+    if isinstance(sc, np.ndarray):
+        if isinstance(y_test, pd.core.frame.DataFrame):
+            prs = y_test.reindex(columns=['fid', 'iid'])
+        else:
+            raise NotImplementedError
+        prs['prs'] = sc
+    else:
+        prs = dd.from_dask_array(sc, columns='PRS')
+        prs.loc[:, ['FID', 'IID']] = fam.loc[:, ['FID', 'IID']]
+    print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f in '
+          'the test set' % (p_t, r_t, r2))
+    clumps.to_csv('%s.clumps' % prefix, sep='\t', index=False)
+
     prs.to_csv('%s.prs' % prefix, sep='\t', index=False)
-    return prs
+    print ('P + T Done after %.2f minutes' % ((time.time() - now) / 60.))
+    return p_t, r_t, r2, clumps, prs
 
 
 if __name__ == '__main__':
@@ -439,12 +474,12 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--prefix', help='prefix for outputs',
                         required=True)
     parser.add_argument('-s', '--sumstats', help='Filename of Sumstats',
-                        required=True)
+                        default=None)
     parser.add_argument('-P', '--pheno', help='Filename of phenotype file',
-                        required=True)
+                        default=None)
     parser.add_argument('-A', '--allele_file', default='EUR.allele',
                         help='File with the allele order. A1 in position 3 and '
-                             'id in position2', required=True)
+                             'id in position2')
     parser.add_argument('-n', '--plinkexe', help=('Path and executable file of '
                                                   'plink'), required=True)
     parser.add_argument('-l', '--LDwindow',
@@ -481,6 +516,11 @@ if __name__ == '__main__':
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=3000, type=int)
     parser.add_argument('-S', '--score_type', default='sum')
+    parser.add_argument('--h2', default=None, type=float)
+    parser.add_argument('--ncausal', default=None, type=int)
+    parser.add_argument('--normalize', default=None, type=bool)
+    parser.add_argument('--uniform', default=None, type=bool)
+
     args = parser.parse_args()
 
     LDs = [x if x <= 0.99 else 0.99 for x in sorted(
@@ -493,12 +533,15 @@ if __name__ == '__main__':
         else:
             Ps = 'infer'
     else:
-        sta, sto = np.log10(pstart), np.log10(pstop)
+        sta, sto = np.log10(args.pstart), np.log10(args.pstop)
         Ps = sorted([float('%.1g' % 10 ** (x)) for x in np.concatenate(
             (np.arange(sta, sto), [sto]), axis=0)], reverse=True)
+    prs = pplust(args.prefix, args.bfile, args.pheno, args.sumstats,
+                 LDs, Ps, threads=args.threads, h2=args.h2,
+                 ncausal=args.ncausal, normalize=args.normalize,
+                 uniform=args.uniform)
     # pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
     #              args.pheno, args.plinkexe, args.allele_file,
     #              clump_field=args.clump_field, sort_file=args.sort_file,
     #              plot=args.plot, clean=args.clean, maxmem=args.maxmem,
     #              threads=args.threads, score_type=args.score_type)
-
