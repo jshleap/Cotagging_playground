@@ -5,19 +5,16 @@
   Purpose: Analyze the tagging scores vs P+T and a Null random model
   Created: 10/02/17
 """
-import shutil
 
 import matplotlib
-import dask.dataframe as dd
+import random
 
 matplotlib.use('Agg')
-from utilities4cotagging import *
-from plinkGWAS import *
 from itertools import filterfalse
-from scipy.stats import linregress
-from joblib import Parallel, delayed
+from ppt import *
 
 plt.style.use('ggplot')
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +179,8 @@ def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
     #          '--allow-no-sex --keep-allele-order --pheno %s --out %s '
     #          '--memory %d --threads %d')
     score = (
-    '%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
-    '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
+        '%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
+        '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
     score = score % (plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
                      maxmem, threads)
     o, e = executeLine(score)
@@ -269,9 +266,10 @@ def prunebypercentage_qr(prefix, bfile, gwasfn, phenofile, sortedcotag, allsnp,
         # Merge all the frames by the number of snps kept
         merge = reduce(lambda x, y: pd.merge(x, y, on='SNP kept'), frames)
         merge['Percentage of SNPs used'] = (
-                                           merge.loc[:, 'SNP kept'] / merge.loc[
-                                                                      :,
-                                                                      'SNP kept'].max()) * 100
+                                               merge.loc[:,
+                                               'SNP kept'] / merge.loc[
+                                                             :,
+                                                             'SNP kept'].max()) * 100
         # write results to file
         merge.to_csv('%s_merged.tsv' % prefix, sep='\t', index=False)
         # Cleanup
@@ -451,40 +449,76 @@ def ranumo_plink(prefix, tarbed, refbed, gwasfn, cotagfn, plinkexe, labels,
 
 # ----------------------------------------------------------------------
 def read_clump(fn):
-    clump={}
+    clump = {}
     with open(fn) as F:
         for line in F:
             bl = line.split()
             clump[bl[0]] = bl[1].split(';')
     return clump
 
+
+# ----------------------------------------------------------------------
+def single_score(df, idxs, i, geno, pheno, label):
+    idx = idxs[: i]
+    prs = geno[:, df.gen_index[idx]].dot(df.slope[idx]).compute()
+    lr = stats.linregress(pheno, prs)
+    return pd.DataFrame([{'Number of SNPs': idx.shape[0], 'R2': lr.r_value,
+                          'type':label}])
+
+
+# ----------------------------------------------------------------------
+def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
+    """
+    Prune and score a dataframe of sorted snps
+
+    :param pheno: Phenotype array
+    :param geno: Genotype array
+    :param random: randomize the snps
+    :param df: sorted dataframe
+    :return: scored dataframe
+    """
+    if random:
+        df = df.sample(frac=1)
+    idxs = df.index.values
+    p = Pool(threads)
+    print('First 200')
+    gen = ((df, idxs, i, geno, pheno, label) for i in
+           tqdm(range(1, min(200, df.shape[0]), 2)))
+    # process the first two hundred every 2
+    res = p.map(single_score, gen)
+    print('Processing the rest of variants')
+    if df.shape[0] > 200:
+        ngen = ((df, idxs, i, geno, pheno, label) for i in
+                tqdm(range(201, df.shape[0], step)))
+        res += p.map(single_score, ngen)
+    return pd.concat(res)
+
+
 # ----------------------------------------------------------------------
 def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
-           labels, seed=None, threads=1, ppts=None, **kwargs):
+           labels, prunestep=10, seed=None, threads=1, ppts=None, **kwargs):
     seed = np.random.randint(1e4) if seed is None else seed
     now = time.time()
     print('Performing random null model (RANUMO)!')
     ref, tar = labels
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):
-        refpheno = dd.read_table(refpheno, blocksize=25e6,
-                                 delim_whitespace=True)
+        rpheno = dd.read_table(refpheno, blocksize=25e6, delim_whitespace=True)
+        tpheno = dd.read_table(tarpheno, blocksize=25e6, delim_whitespace=True)
     elif refpheno is None:
         # make simulation for reference
+        print('Simulating phenotype for referebce popylation %s \n' % ref)
         opts = {'outprefix': ref, 'bfile': refgeno, 'h2': kwargs['h2'],
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'seed': seed}
         rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
-        opts2 = {'outprefix': 'ppt_simulation', 'bfile': refgeno,
-                 'causaleff': rbim.dropna(), 'h2': kwargs['h2'],
-                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
-                 'uniform': kwargs['uniform'], 'seed': seed}
-        tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts2)
-        opt3 = {'prefix': 'ppt_simulation', 'pheno': rpheno, 'geno': rgeno,
-                'validate': 3, 'seed': seed, 'threads': kwargs['threads'],
-                'bim': rbim}
-        sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt3)
+        print('Simulating phenotype for target population %s \n' % tar)
+        opts.update(dict(outprefix=tar, bfile=targeno, causaleff=rbim.dropna()))
+        tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
+        opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
+                         validate= 3, threads= threads, bim=rbim))
+        sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_plink(refgeno)
         rgeno = rgeno.T
@@ -511,25 +545,74 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
                                                       'cotag'])
     gwas = cotags.merge(sumstats, on='snp')
     # Sort the sumstats based on scores
-    allsnp = gwas.shape[0]
+    results = []
     # Cotagging
-    sortedcot, beforetail = smartcotagsort(prefix, gwas, threads=threads)
+    sortedcot, beforetail = smartcotagsort(prefix, gwas, column='cotag',
+                                           threads=threads)
+    sortedcot['gen_index'] = [tbim[tbim.snp == i].i[0] for i in sortedcot.snp]
+    # prune cotagging
+    results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging',
+                            step=prunestep, threads=threads))
     # Tagging Target
-    params = dict(column='Tagging %s' % tar, threads=threads)
+    params = dict(column='tar', threads=threads)
     sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
+    sortedtagT['gen_index'] = [tbim[tbim.snp == i].i[0] for i in sortedtagT.snp]
+    results.append(prune_it(sortedtagT, tgeno, tpheno, 'Tagging %s' % tar,
+                            step=prunestep, threads=threads))
     # Tagging Reference
-    params.update(dict(column='Tagging %s' % ref))
+    params.update(dict(column='ref' % ref))
     sortedtagR, beforetailTR = smartcotagsort(prefix, gwas, **params)
+    sortedtagR['gen_index'] = [rbim[rbim.snp == i].i[0] for i in sortedtagR.snp]
+    results.append(prune_it(sortedtagR, rgeno, rpheno, 'Tagging %s' % ref,
+                            step=prunestep, threads=threads))
+    # prune and score the random model
+    results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging', random=True,
+                            step=prunestep, threads=threads))
+
     if isinstance(ppts, tuple):
         # read ppt from files
         ppt_r = pd.read_table(ppts[0], delim_whitespace=True)
         ppt_t = pd.read_table(ppts[1], delim_whitespace=True)
     else:
+        # perform p+t in reference
+        ppt_r = pplust('%s_ppt' % ref, rgeno, rpheno, rbim, sumstats,
+                       kwargs['r_range'], kwargs['p_tresh'])[-2]
+        # get the full lenght with apropriate inidces
+        tagged_r = [y for x in ppt_r for y in x if y]
+        tagged_r = sumstats[sumstats.snp.isin(tagged_r)].reindex(
+            columns=['snp', 'p_value', 'slope']).sample(frac=1)
+        ppt_r = ppt_r.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
+            'p_value')
+        ppt_r = pd.concat((ppt_r, tagged_r), ignore_index=True)
+        ppt_r['gen_index'] = [rbim[rbim.snp == i].i[0] for i in ppt_r.snp]
+        # perform p+t in target
+        ppt_t = pplust('%s_ppt' % tar, tgeno, tpheno, tbim, sumstats,
+                       kwargs['r_range'], kwargs['p_tresh'])[-2]
+        # get the full lenght with apropriate inidces
+        tagged_t = [y for x in ppt_r for y in x if y]
+        tagged_t = sumstats[sumstats.snp.isin(tagged_t)].reindex(
+            columns=['snp', 'p_value', 'slope']).sample(frac=1)
+        ppt_t = ppt_t.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
+            'p_value')
+        ppt_t = pd.concat((ppt_t, tagged_t), ignore_index=True)
+        ppt_r['gen_index'] = [tbim[tbim.snp == i].i[0] for i in ppt_t.snp]
 
-
-
+    # prune and process P+Ts
+    results.append(prune_it(ppt_t, tgeno, tpheno, 'P+T %s' % tar,
+                            step=prunestep, threads=threads))
+    results.append(prune_it(ppt_r, rgeno, rpheno, 'P+T %s' % ref,
+                            step=prunestep, threads=threads))
+    results = pd.concat(results)
+    results.to_csv('%s.ranumo.tsv', sep='\t', index=False)
+    # plot
+    f, ax = plt.subplots()
+    results.groupby('type').plot(x='Number of SNPs', y='R2', kind='scatter',
+                                 ax=ax, legend=True)
+    plt.tight_layout()
+    plt.savefig('%s_ranumo.pdf' % prefix)
+    plt.close()
     print('Ranumo done after %.2f minutes' % ((time.time() - now) / 60.))
-
+    return results
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

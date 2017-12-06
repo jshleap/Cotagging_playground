@@ -54,13 +54,13 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
     # read rhe genotype files
-    (bim, fam, G) = read_plink(bfile)
+    (bim, fam, G) = read_geno(bfile)
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
-        (bim2, fam2, G2) = read_plink(bfile2)
+        (bim2, fam2, G2) = read_geno(bfile2)
         bim = bim.merge(bim2, on=bim.columns.tolist())
         # subset the genotype file
-        #G = G[bim.index.tolist(), : ]
+        G = G[bim.i.tolist(), :]
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
@@ -86,10 +86,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     if causaleff is not None:
         cols = ['snp', 'beta']
         causals = bim[bim.snp.isin(causaleff.snp)]
-        causals = causals.merge(causaleff.loc[:, cols], on='snp')
+        c = cols if 'beta' in bim else 'snp'
+        causals = causals.merge(causaleff.reindex(columns=cols), on=c)
     elif uniform:
-        causals = bim.snp[np.linspace(0, bim.shape[0] - 1, num=ncausal,
-                                      dtype=int)]
+        idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
+        causals = bim.snp[bim.index[idx]]
         av_dist = (np.around(bim.pos.diff().mean() / 1000)).astype(int)
         causals = bim[bim.snp.isin(causals)]
         print('Causal SNPs are %d kbp apart on average' % av_dist)
@@ -104,17 +105,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         #pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
         # Store them
         causals.loc[:, 'beta'] = pre_beta#.compute()
+        causals = causals.dropna()
     idx = causals.index.tolist()
     # Score
     g_eff = G[:, idx].dot(causals.beta).compute()
-    # get independent betas
-    # beta = np.zeros(G.shape[1])  # , chunks=chunks)
-    # beta[idx] = causals.beta
-    # chol = da.linalg.cholesky(nearestPD(da.corrcoef(G.T)), lower=True)
-    # betas = da.linalg.inv(chol).dot(beta)[idx]
-    # causals.loc[:, 'ind_beta'] = betas
     bim.loc[idx, 'beta'] = causals.beta
-    #bim.loc[idx, 'ind_beta'] = betas
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', g_eff.var())
@@ -299,7 +294,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
                        noenv=False, plothist=False, freqthreshold=0.1,
                        bfile2=None, quality='png', seed=None, uniform=False,
-                       normalize=False):
+                       normalize=False, **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -329,7 +324,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
-        causaleff = causaleff.reindex(columns=['snp', 'eff'])
+        causaleff = causaleff.reindex(columns=['snp', 'beta'])
         assert causaleff.shape[0] == ncausal
     picklefile = '%s.pickle' % outprefix
     if not os.path.isfile(picklefile):
@@ -348,7 +343,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
     if plothist:
         plot_pheno(outprefix, pheno, quality=quality)
-    print('Simulation Done after %.2f seconds!!' % (time.time() - now))
+    bim.dropna().to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
+    print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
     return pheno, (G, bim, truebeta, vec)
 
 
@@ -376,7 +372,8 @@ if __name__ == '__main__':
     parser.add_argument('-2', '--bfile2', help=('prefix of the plink bedfileset'
                                                 'o n a second population'))
     parser.add_argument('-u', '--uniform', default=False, action='store_true')
-    parser.add_argument('-t', '--threads', default=False, action='store')
+    parser.add_argument('-t', '--threads', default=False, action='store',
+                        type=int)
     parser.add_argument('-M', '--maxmem', default=False, action='store')
     parser.add_argument('-s', '--seed', default=None, type=int)
 

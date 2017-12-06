@@ -19,7 +19,7 @@ from scipy import stats
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from utilities4cotagging import train_test, executeLine
+from utilities4cotagging import *
 from sklearn.model_selection import train_test_split
 from qtraitsimulation import qtraits_simulation
 from multiprocessing import Pool, cpu_count
@@ -175,6 +175,11 @@ def matrix_reg(X, Y):
     return bs_hat, pval
 
 
+def regression_iter(x, y):
+    for i in range(x.shape[1]):
+        print('processing', i)
+        yield x[:,i], y
+
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                     causal_pos=None, plot=False, threads=cpu_count(), **kwargs):
@@ -217,12 +222,14 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
             X, Y, test_size=1 / validate, random_state=seed)
     else:
         X_train, X_test, y_train, y_test = X, X, Y, Y
-    I = ((X_train[:, i], y_train) for i in range(X.shape[1]))
+    #I = regression_iter(X_train, y_train)
+    I = ((X_train[:, i].compute(), y_train.compute()) for i in range(X.shape[1]))
     if X.shape[1] > 100:
-        p = Pool(threads)
-        r = p.map(stats.linregress, I)
+        with Pool(threads) as p:
+            #r = p.map(stats.linregress, I)
+            r = list(tqdm(p.imap(stats.linregress, I), total=X.shape[1]))
     else:
-        r = [stats.linregress(x, y) for x, y in I]
+        r = [stats.linregress(x, y) for x, y in tqdm(I, total=X.shape[1])]
     res = pd.DataFrame.from_records(r, columns=['slope', 'intercept', 'r_value',
                                                 'p_value', 'std_err'])
     res.loc[:, 'snp'] = bim.snp

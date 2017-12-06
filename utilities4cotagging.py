@@ -19,6 +19,7 @@ from scipy.stats import linregress
 from tqdm import tqdm
 import psutil
 import dask.array as da
+from pandas_plink import read_plink
 
 
 # ----------------------------------------------------------------------
@@ -263,6 +264,17 @@ def helper_smartsort2(grouped, key):
     """
     df = grouped.get_group(key)
     return df.loc[df.index[0], :]
+
+
+# ---------------------------------------------------------------------------
+def read_geno(bfile):
+    (bim, fam, G) = read_plink(bfile)
+    # remove constant variants
+    G_std = G.std(axis=1).compute()
+    idx = (G_std != 0)
+    G = G[idx, :]
+    bim = bim[idx].reset_index(drop=True)
+    return bim, fam, G
 
 
 # ---------------------------------------------------------------------------

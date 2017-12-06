@@ -361,6 +361,7 @@ def single_clump(snp, R2, done, r_thresh, extnd, clumps):
         vec = R2.loc[:, snp]
         idx = (vec > r_thresh) & (~vec.index.isin(done))
         clum = vec.index[idx].tolist()
+        clum.pop(clum.index(snp))
         extnd(clum)
         clumps[snp] = clum
         # return clum
@@ -380,7 +381,7 @@ def clump(R2, sumstats, r_thresh, p_thresh):
     df = sub[sub.snp.isin(list(clumps.keys()))].reindex(columns=['snp',
                                                                  'p_value'])
     df['Tagged'] = [';'.join(clumps[v]) for v in df.snp]
-    return clumps
+    return df
 
 
 # ----------------------------------------------------------------------
@@ -393,7 +394,8 @@ def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
         pheno = pheno.PHENO.values
     assert isinstance(pheno, np.ndarray)
     clumps = clump(R2, sumstats, r_t, p_t)
-    index = clump.snp.tolist()
+    assert isinstance(clumps, pd.core.frame.DataFrame)
+    index = clumps.snp.tolist()
     idx = bim[bim.snp.isin(index)].i.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
     prs = geno[:, idx].dot(betas).compute()
