@@ -14,9 +14,11 @@ import matplotlib.pyplot as plt
 import time
 plt.style.use('ggplot')
 from utilities4cotagging import *
-
+from numba import double
+from numba.decorators import jit
 
 # ----------------------------------------------------------------------
+@jit
 def get_SNP_dist(bfile, causals):
     """
     compute the distance between snps (for now only for uniformly distributed)
@@ -31,6 +33,7 @@ def get_SNP_dist(bfile, causals):
 
 # ----------------------------------------------------------------------
 # TODO: Inlcude frequency filtering
+@jit
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              seed=None, causaleff=None, uniform=False, snps=None, threads=1):
     """
@@ -228,6 +231,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
 
 
 # ----------------------------------------------------------------------
+@jit
 def create_pheno(prefix, h2, prs_true, noenv=False):
     """
     Generate phenotypes and real betas.
@@ -291,6 +295,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 
 # ----------------------------------------------------------------------
 # TODO: include test of correlation of variants (LD)??
+@jit
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
                        noenv=False, plothist=False, freqthreshold=0.1,
                        bfile2=None, quality='png', seed=None, uniform=False,

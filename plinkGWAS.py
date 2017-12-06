@@ -26,6 +26,37 @@ from multiprocessing import Pool, cpu_count
 
 plt.style.use('ggplot')
 
+from numba import double
+from numba.decorators import jit
+
+
+# ----------------------------------------------------------------------
+@jit
+def nu_linregress(x, y):
+    TINY = 1.0e-20
+    x = np.asarray(x)
+    y = np.asarray(y)
+    arr = np.array([x, y])
+    n = len(x)
+    # average sum of squares:
+    ssxm, ssxym, ssyxm, ssym = (np.dot(arr,arr.T)/n).flat
+    r_num = ssxym
+    r_den = np.sqrt(ssxm * ssym)
+    if r_den == 0.0:
+        r = 0.0
+    else:
+        r = r_num / r_den
+        # test for numerical error propagation
+        if r > 1.0:
+            r = 1.0
+        elif r < -1.0:
+            r = -1.0
+    df = n - 2
+    slope = r_num / ssxm
+    r_t = r + TINY
+    t = r * np.sqrt(df / ((1.0 - r_t)*(1.0 + r_t)))
+    prob = 2 * stats.distributions.t.sf(np.abs(t), df)
+    return slope, r**2, prob
 
 # ----------------------------------------------------------------------
 def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
@@ -226,10 +257,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     #I = ((X_train[:, i].compute(), y_train.compute()) for i in range(X.shape[1]))
     if X.shape[1] > 100:
         with Pool(threads) as p:
-            r = p.map(stats.linregress, I)
-            #r = list(tqdm(p.imap(stats.linregress, I), total=X.shape[1]))
+            #r = p.map(stats.linregress, I)
+            r = list(tqdm(p.imap(nu_linregress, I), total=X.shape[1]))
     else:
-        r = [stats.linregress(x, y) for x, y in tqdm(I, total=X.shape[1])]
+        r = [nu_linregress(x, y) for x, y in tqdm(I, total=X.shape[1])]
     res = pd.DataFrame.from_records(r, columns=['slope', 'intercept', 'r_value',
                                                 'p_value', 'std_err'])
     res.loc[:, 'snp'] = bim.snp
