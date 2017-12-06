@@ -178,7 +178,7 @@ def matrix_reg(X, Y):
 def regression_iter(x, y):
     for i in range(x.shape[1]):
         print('processing', i)
-        yield x[:,i], y
+        yield x[:,i].compute(), y.compute()
 
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
@@ -222,12 +222,12 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
             X, Y, test_size=1 / validate, random_state=seed)
     else:
         X_train, X_test, y_train, y_test = X, X, Y, Y
-    #I = regression_iter(X_train, y_train)
-    I = ((X_train[:, i].compute(), y_train.compute()) for i in range(X.shape[1]))
+    I = regression_iter(X_train, y_train)
+    #I = ((X_train[:, i].compute(), y_train.compute()) for i in range(X.shape[1]))
     if X.shape[1] > 100:
         with Pool(threads) as p:
-            #r = p.map(stats.linregress, I)
-            r = list(tqdm(p.imap(stats.linregress, I), total=X.shape[1]))
+            r = p.map(stats.linregress, I)
+            #r = list(tqdm(p.imap(stats.linregress, I), total=X.shape[1]))
     else:
         r = [stats.linregress(x, y) for x, y in tqdm(I, total=X.shape[1])]
     res = pd.DataFrame.from_records(r, columns=['slope', 'intercept', 'r_value',
