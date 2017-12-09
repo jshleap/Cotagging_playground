@@ -18,7 +18,7 @@ from numba import double
 from numba.decorators import jit
 
 # ----------------------------------------------------------------------
-@jit
+
 def get_SNP_dist(bfile, causals):
     """
     compute the distance between snps (for now only for uniformly distributed)
@@ -33,7 +33,7 @@ def get_SNP_dist(bfile, causals):
 
 # ----------------------------------------------------------------------
 # TODO: Inlcude frequency filtering
-@jit
+
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              seed=None, causaleff=None, uniform=False, snps=None, threads=1):
     """
@@ -61,9 +61,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
         (bim2, fam2, G2) = read_geno(bfile2)
-        bim = bim.merge(bim2, on=bim.columns.tolist())
+        indices = bim.snp.isin(bim2.snp)
+        #bim = bim.merge(bim2, on=bim.columns.tolist())
         # subset the genotype file
-        G = G[bim.i.tolist(), :]
+        G = G[indices.tolist(), :]
+        bim = bim[indices].reset_index(drop=True)
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
@@ -88,30 +90,30 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         ncausal = allsnps
     if causaleff is not None:
         cols = ['snp', 'beta']
-        causals = bim[bim.snp.isin(causaleff.snp)]
+        causals = bim[bim.snp.isin(causaleff.snp)].copy()
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.snp[bim.index[idx]]
         av_dist = (np.around(bim.pos.diff().mean() / 1000)).astype(int)
-        causals = bim[bim.snp.isin(causals)]
+        causals = bim[bim.snp.isin(causals)].copy()
         print('Causal SNPs are %d kbp apart on average' % av_dist)
     elif snps is None:
-        causals = bim.sample(ncausal, replace=False, random_state=seed)
+        causals = bim.sample(ncausal, replace=False, random_state=seed).copy()
     else:
-        causals = bim[bim.snp.isin(snps)]
+        causals = bim[bim.snp.isin(snps)].copy()
     # If causal effects are provided use them, otherwise get them
     if causaleff is None:
         #chunks = estimate_chunks((ncausal,), threads)
         pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
         #pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
         # Store them
-        causals.loc[:, 'beta'] = pre_beta#.compute()
+        causals['beta'] = pre_beta#.compute()
         causals = causals.dropna()
     idx = causals.index.tolist()
     # Score
-    g_eff = G[:, idx].dot(causals.beta).compute()
+    g_eff = G[:, idx].dot(causals.beta).compute(num_workers=threads)
     bim.loc[idx, 'beta'] = causals.beta
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
@@ -231,7 +233,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
 
 
 # ----------------------------------------------------------------------
-@jit
+
 def create_pheno(prefix, h2, prs_true, noenv=False):
     """
     Generate phenotypes and real betas.
@@ -295,7 +297,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 
 # ----------------------------------------------------------------------
 # TODO: include test of correlation of variants (LD)??
-@jit
+
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
                        noenv=False, plothist=False, freqthreshold=0.1,
                        bfile2=None, quality='png', seed=None, uniform=False,

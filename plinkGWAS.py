@@ -8,14 +8,16 @@
 import argparse
 import os
 import time
-
+import dask.dataframe as dd
 import dask.array as da
 import matplotlib
 import numpy as np
 import pandas as pd
 from dask.array.core import Array
+import dask
 from pandas_plink import read_plink
 from scipy import stats
+import h5py
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -26,20 +28,26 @@ from multiprocessing import Pool, cpu_count
 
 plt.style.use('ggplot')
 
-from numba import double
-from numba.decorators import jit
+from numba import jit
 
 
 # ----------------------------------------------------------------------
 @jit
 def nu_linregress(x, y):
+    """
+    Refactor of the scipy linregress with numba and less checks for speed sake
+
+    :param x: array for independent
+    :param y:
+    :return:
+    """
     TINY = 1.0e-20
     x = np.asarray(x)
     y = np.asarray(y)
     arr = np.array([x, y])
     n = len(x)
     # average sum of squares:
-    ssxm, ssxym, ssyxm, ssym = (np.dot(arr,arr.T)/n).flat
+    ssxm, ssxym, ssyxm, ssym = (np.dot(arr, arr.T) / n).flat
     r_num = ssxym
     r_den = np.sqrt(ssxm * ssym)
     if r_den == 0.0:
@@ -54,9 +62,47 @@ def nu_linregress(x, y):
     df = n - 2
     slope = r_num / ssxm
     r_t = r + TINY
-    t = r * np.sqrt(df / ((1.0 - r_t)*(1.0 + r_t)))
+    t = r * np.sqrt(df / ((1.0 - r_t) * (1.0 + r_t)))
     prob = 2 * stats.distributions.t.sf(np.abs(t), df)
-    return slope, r**2, prob
+    return slope, r ** 2, prob
+
+
+# ----------------------------------------------------------------------
+@jit
+def da_linregress(x, y):
+    """
+    Refactor of the scipy linregress with numba, less checks for speed sake and
+    done with dask arrays
+
+    :param x: array for independent
+    :param y:
+    :return:
+    """
+    TINY = 1.0e-20
+    # x = np.asarray(x)
+    # y = np.asarray(y)
+    arr = da.stack([x, y], axis=1)
+    n = len(x)
+    # average sum of squares:
+    ssxm, ssxym, ssyxm, ssym = (da.dot(arr.T, arr) / n).ravel()
+    r_num = ssxym
+    r_den = np.sqrt(ssxm * ssym)
+    if r_den == 0.0:
+        r = 0.0
+    else:
+        r = r_num / r_den
+        # test for numerical error propagation
+        if r > 1.0:
+            r = 1.0
+        elif r < -1.0:
+            r = -1.0
+    df = n - 2
+    slope = r_num / ssxm
+    r_t = r + TINY
+    t = r * da.sqrt(df / ((1.0 - r_t) * (1.0 + r_t)))
+    prob = 2 * stats.distributions.t.sf(np.abs(t), df)
+    return slope, r ** 2, prob
+
 
 # ----------------------------------------------------------------------
 def gwas(plinkexe, bfile, outprefix, allele_file, covs=None, nosex=False,
@@ -159,7 +205,7 @@ def manhattan_plot(outfn, p_values, causal_pos=None, alpha=0.05, title=''):
 
 # ----------------------------------------------------------------------
 def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
-               nosex=False, threads=False, maxmem=False, validate=None,
+               nosex=False, threads=cpu_count(), maxmem=False, validate=None,
                validsnpsfile=None, plot=False, causal_pos=None):
     """
     execute the gwas
@@ -169,7 +215,7 @@ def plink_gwas(plinkexe, bfile, outprefix, pheno, allele_file, covs=None,
     :param str outprefix: Prefix for the outputs
     :param bool nosex: If option --allow-no-sex should be used
     :param str covs: Filename with the covariates to use
-    :param int/bool validate: To split the bed into test and training 
+    :param int/bool validate: To split the bed into test and tGraining
     """
     print('Performing plinkGWAS')
     # Create a test/train validation sets
@@ -206,10 +252,15 @@ def matrix_reg(X, Y):
     return bs_hat, pval
 
 
-def regression_iter(x, y):
+def regression_iter(x, y, threads):
     for i in range(x.shape[1]):
         print('processing', i)
-        yield x[:,i].compute(), y.compute()
+        yield x[:, i].compute(num_workers=threads), y.compute(
+            num_workers=threads)
+
+
+lr = jit(linregress)
+
 
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
@@ -224,57 +275,68 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     :param kwargs: key word arguments with either bfile or array parameters
     :return: betas and pvalues
     """
-    now = time.time()
     print('Performing GWAS')
-    if 'bfile' in kwargs:
-        bfile = kwargs['bfile']
-    if 'bim' in kwargs:
-        bim = kwargs['bim']
-    seed = np.random.randint(1e4) if seed is None else seed
-    print('using seed %d' % seed)
-    np.random.seed(seed=seed)
-    if isinstance(geno, str):
-        (bim, fam, geno) = read_plink(bfile)
-        geno = geno.T
-        geno = (geno - geno.mean(axis=0)) / geno.std(axis=0)
+    now = time.time()
+    filename = '%s.data.hdf' % prefix
+    if os.path.isfile(filename):
+        f = h5py.File(filename, 'r')
+        x_train = da.from_array(f.get('x_train'))
+        X_test = da.from_array(f.get('X_test'))
+        y_train = da.from_array(f.get('y_train'))
+        y_test = da.from_array(f.get('y_test'))
+        res = pd.read_csv('%s.gwas' % prefix, sep='\t')
     else:
-        try:
-            assert isinstance(geno, Array)
-        except AssertionError:
-            assert isinstance(geno, np.ndarray)
-    if pheno is None:
-        pheno, gen = qtraits_simulation(prefix, **kwargs)
-        (geno, bim, truebeta, vec) = gen
-
-    X = geno
-    Y = da.from_array(pheno.PHENO.values, chunks=100)  # .reshape(-1,1)
-    if validate:
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, Y, test_size=1 / validate, random_state=seed)
-    else:
-        X_train, X_test, y_train, y_test = X, X, Y, Y
-    I = regression_iter(X_train, y_train)
-    #I = ((X_train[:, i].compute(), y_train.compute()) for i in range(X.shape[1]))
-    if X.shape[1] > 100:
-        with Pool(threads) as p:
-            #r = p.map(stats.linregress, I)
-            r = list(tqdm(p.imap(nu_linregress, I), total=X.shape[1]))
-    else:
-        r = [nu_linregress(x, y) for x, y in tqdm(I, total=X.shape[1])]
-    res = pd.DataFrame.from_records(r, columns=['slope', 'intercept', 'r_value',
-                                                'p_value', 'std_err'])
-    res.loc[:, 'snp'] = bim.snp
-    # Make a manhatan plot
-    if plot:
-        manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
-                       alpha=0.05)
-    # write files
-    res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
-    data = dict(zip(['/X_train', '/X_test', '/y_train', '/y_test'],
-                    [X_train, X_test, y_train, y_test]))
-    da.to_hdf5('%s.data.hdf' % prefix, data)
+        if 'bfile' in kwargs:
+            bfile = kwargs['bfile']
+        if 'bim' in kwargs:
+            bim = kwargs['bim']
+        seed = np.random.randint(1e4) if seed is None else seed
+        print('using seed %d' % seed)
+        np.random.seed(seed=seed)
+        if isinstance(geno, str):
+            (bim, fam, geno) = read_plink(bfile)
+            geno = geno.T
+            geno = (geno - geno.mean(axis=0)) / geno.std(axis=0)
+        else:
+            try:
+                assert isinstance(geno, Array)
+            except AssertionError:
+                assert isinstance(geno, np.ndarray)
+        if pheno is None:
+            pheno, gen = qtraits_simulation(prefix, **kwargs)
+            (geno, bim, truebeta, vec) = gen
+        x = geno.rechunk((geno.shape[0], geno.chunks[1]))
+        y = da.from_array(pheno.PHENO.values,
+                          chunks=x.chunks[0])  # .reshape(-1,1)
+        if validate:
+            print('making the crossvalidation data')
+            x_train, X_test, y_train, y_test = train_test_split(
+                x, y, test_size=1 / validate, random_state=seed)
+        else:
+            x_train, X_test, y_train, y_test = x, x, y, y
+        chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
+                               ).astype(int))
+        x_train = x_train.rechunk(chunks)
+        y_train = y_train.rechunk(chunks[0])
+        print('using dask delayed')
+        delayed_results = [dask.delayed(lr)(x_train[:, i], y_train) for i
+                           in range(x_train.shape[1])]
+        r = list(dask.compute(*delayed_results, num_workers=threads))
+        res = pd.DataFrame.from_records(r, columns=['slope', 'intercept',
+                                                    'r_value', 'p_value',
+                                                    'std_err'])
+        res['snp'] = bim.snp
+        # Make a manhatan plot
+        if plot:
+            manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
+                           alpha=0.05)
+        # write files
+        res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
+        data = dict(zip(['/x_train', '/X_test', '/y_train', '/y_test'],
+                        [x_train, X_test, y_train, y_test]))
+        da.to_hdf5('%s.data.hdf' % prefix, data)
     print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
-    return res, X_train, X_test, y_train, y_test
+    return res, x_train, X_test, y_train, y_test
 
 
 if __name__ == '__main__':

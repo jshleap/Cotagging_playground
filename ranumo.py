@@ -15,9 +15,12 @@ from ppt import *
 
 plt.style.use('ggplot')
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+from numba import double
+from numba.decorators import jit
 
 
 # ---------------------------------------------------------------------------
+@jit
 def read_scored_qr(profilefn, phenofile, kind, nsnps, profiles):
     """
     Read the profile file a.k.a. PRS file or scoresum
@@ -460,10 +463,13 @@ def read_clump(fn):
 # ----------------------------------------------------------------------
 def single_score(df, idxs, i, geno, pheno, label):
     idx = idxs[: i]
-    prs = geno[:, df.gen_index[idx]].dot(df.slope[idx]).compute()
-    lr = stats.linregress(pheno, prs)
-    return pd.DataFrame([{'Number of SNPs': idx.shape[0], 'R2': lr.r_value,
-                          'type':label}])
+    try:
+        prs = geno[:, df.gen_index[idx]].dot(df.slope[idx]).compute()
+    except AttributeError:
+        prs = geno[:, df.gen_index[idx]].dot(df.slope[idx])
+    regress = lr(pheno, prs)
+    return {'Number of SNPs': idx.shape[0], 'R2': regress.r_value, 'type': label
+            }
 
 
 # ----------------------------------------------------------------------
@@ -477,21 +483,23 @@ def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
     :param df: sorted dataframe
     :return: scored dataframe
     """
+    print('Prunning %s...' % label)
     if random:
         df = df.sample(frac=1)
     idxs = df.index.values
-    p = Pool(threads)
     print('First 200')
     gen = ((df, idxs, i, geno, pheno, label) for i in
-           tqdm(range(1, min(200, df.shape[0]), 2)))
+           range(1, min(200, df.shape[0]), 2))
+    delayed_results = [dask.delayed(single_score)(*i) for i in gen]
+    res = list(dask.compute(*delayed_results, num_workers=threads))
     # process the first two hundred every 2
-    res = p.map(single_score, gen)
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df, idxs, i, geno, pheno, label) for i in
-                tqdm(range(201, df.shape[0], step)))
-        res += p.map(single_score, ngen)
-    return pd.concat(res)
+                range(201, df.shape[0], step))
+        delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
+        res += list(dask.compute(*delayed_results, num_workers=threads))
+    return pd.DataFrame(res)
 
 
 # ----------------------------------------------------------------------
@@ -507,17 +515,17 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         tpheno = dd.read_table(tarpheno, blocksize=25e6, delim_whitespace=True)
     elif refpheno is None:
         # make simulation for reference
-        print('Simulating phenotype for referebce popylation %s \n' % ref)
+        print('Simulating phenotype for reference population %s \n' % ref)
         opts = {'outprefix': ref, 'bfile': refgeno, 'h2': kwargs['h2'],
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
-                'uniform': kwargs['uniform'], 'seed': seed}
+                'uniform': kwargs['uniform'], 'snps': None, 'seed': seed}
         rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tar)
         opts.update(dict(outprefix=tar, bfile=targeno, causaleff=rbim.dropna()))
         tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate= 3, threads= threads, bim=rbim))
+                         validate=3, threads=threads, bim=rbim))
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_plink(refgeno)
@@ -540,29 +548,36 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
         D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
         cot = da.diag(da.dot(D_r, D_t))
-        stacked = da.stack([mbim.snp, D_r, D_t, cot], axis=1)
+        ref = da.diag(da.dot(D_r, D_r))
+        tar = da.diag(da.dot(D_t, D_t))
+        stacked = da.stack([mbim.snp, ref, tar, cot], axis=1)
         cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
-                                                      'cotag'])
+                                                      'cotag']).compute(
+            num_tasks=threads)
+        cotags.to_csv('%s_cotags.tsv'%prefix, sep='\t', index=False)
     gwas = cotags.merge(sumstats, on='snp')
     # Sort the sumstats based on scores
     results = []
     # Cotagging
     sortedcot, beforetail = smartcotagsort(prefix, gwas, column='cotag',
                                            threads=threads)
-    sortedcot['gen_index'] = [tbim[tbim.snp == i].i[0] for i in sortedcot.snp]
+    sortedcot['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
+                              sortedcot.snp]
     # prune cotagging
     results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging',
                             step=prunestep, threads=threads))
     # Tagging Target
     params = dict(column='tar', threads=threads)
     sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
-    sortedtagT['gen_index'] = [tbim[tbim.snp == i].i[0] for i in sortedtagT.snp]
+    sortedtagT['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
+                               sortedtagT.snp]
     results.append(prune_it(sortedtagT, tgeno, tpheno, 'Tagging %s' % tar,
                             step=prunestep, threads=threads))
     # Tagging Reference
     params.update(dict(column='ref' % ref))
     sortedtagR, beforetailTR = smartcotagsort(prefix, gwas, **params)
-    sortedtagR['gen_index'] = [rbim[rbim.snp == i].i[0] for i in sortedtagR.snp]
+    sortedtagR['gen_index'] = [rbim[rbim.snp == i].i.values[0] for i in
+                               sortedtagR.snp]
     results.append(prune_it(sortedtagR, rgeno, rpheno, 'Tagging %s' % ref,
                             step=prunestep, threads=threads))
     # prune and score the random model
@@ -614,29 +629,30 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     print('Ranumo done after %.2f minutes' % ((time.time() - now) / 60.))
     return results
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--prefix', help='prefix for outputs',
                         required=True)
     parser.add_argument('-g', '--gwas', help='Filename of gwas results in the' +
                                              ' reference population',
-                        required=True)
+                        default=None)
     parser.add_argument('-b', '--tarbed', help=('prefix of the bed fileset for'
                                                 ' the target population'),
-                        required=True)
+                        required=None)
     parser.add_argument('-R', '--refbed', help=('prefix of the bed fileset for'
                                                 ' the reference population'),
                         required=True)
     parser.add_argument('-f', '--phenotar', help=('filename of the true '
                                                   'phenotype of the target '
-                                                  'population'), required=True)
+                                                  'population'), default=None)
     parser.add_argument('-i', '--phenoref', help=('filename of the true '
                                                   'phenotype of the reference '
-                                                  'population'), required=True)
+                                                  'population'), default=None)
     parser.add_argument('-P', '--plinkexe', default='~/Programs/plink_mac/plink'
                         )
     parser.add_argument('-c', '--cotagfile', help='Filename of the cotag tsv ' +
-                                                  'file ')
+                                                  'file ', default=None)
     parser.add_argument('-s', '--step', help='Step in the percentage range to' +
                                              ' explore. By deafult is 1',
                         default=1, type=float)
@@ -659,10 +675,14 @@ if __name__ == '__main__':
     parser.add_argument('-y', '--every', action='store_true', default=False)
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=3000, type=int)
+    parser.add_argument('--ncausal', default=200, type=int)
+    parser.add_argument('--normalize', default=True, action='store_false')
+    parser.add_argument('--uniform', default=True, action='store_false')
+
     args = parser.parse_args()
-    ranumo(args.prefix, args.tarbed, args.refbed, args.gwas, args.cotagfile,
-           args.plinkexe, args.labels, args.phenotar, args.phenoref,
-           pptR=args.ppt_ref, pptT=args.ppt_tar, check_freqs=args.check_freq,
-           hline=args.h2, step=args.step, quality=args.quality,
-           every=args.every,
-           threads=args.threads, maxmem=args.maxmem)
+    ranumo(args.prefix, args.refbed, args.phenoref,  args.gwas, args.tarbed,
+           args.phenotar, args.cotagfile, args.labels, pptR=args.ppt_ref,
+           pptT=args.ppt_tar, check_freqs=args.check_freq, hline=args.h2,
+           step=args.step, quality=args.quality, every=args.every,
+           threads=args.threads, maxmem=args.maxmem, h2=args.h2,
+           ncausal=args.ncausal, normalize=args.normalize, uniform=args.uniform)

@@ -294,14 +294,15 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        grouped = gwascotag.groupby(column)
-        keys = sorted(grouped.groups.keys(), reverse=True)
-        tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
-            grouped, key) for key in tqdm(keys, total=len(keys)))
-        if isinstance(tup[0], pd.core.series.Series):
-            sorteddf = pd.concat(tup, axis=1).transpose()
-        else:
-            sorteddf = pd.concat(tup)
+        grouped = gwascotag.groupby(column).first()
+        sorteddf = grouped.sort_values(by=column, ascending=False)
+        # keys = sorted(grouped.groups.keys(), reverse=True)
+        # tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
+        #     grouped, key) for key in tqdm(keys, total=len(keys)))
+        # if isinstance(tup[0], pd.core.series.Series):
+        #     sorteddf = pd.concat(tup, axis=1).transpose()
+        # else:
+        #     sorteddf = pd.concat(tup)
         tail = gwascotag[~gwascotag.index.isin(sorteddf.index)]
         beforetail = sorteddf.shape[0]
         df = sorteddf.copy()
