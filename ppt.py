@@ -380,8 +380,25 @@ def clump(R2, sumstats, r_thresh, p_thresh):
     # set dataframe
     df = sub[sub.snp.isin(list(clumps.keys()))].reindex(columns=['snp',
                                                                  'p_value'])
+    # set a dataframe compatible with ranumo
+    df2 = df.copy()
     df['Tagged'] = [';'.join(clumps[v]) for v in df.snp]
-    return df
+    tagged = [x for v in df.snp for x in clumps[v]]
+    tail = sub[sub.snp.isin(tagged)].reindex(columns=['snp', 'p_value'])
+    df2 = df2.append(tail).reset_index()
+    return df, df2
+
+
+# ----------------------------------------------------------------------
+def new_plot(prefix, ppt, geno, pheno, threads):
+    params = dict(column='index', threads=threads)
+    ppt, _ = smartcotagsort(prefix, ppt, **params)
+    ppt = prune_it(ppt, geno, pheno, 'P+T %s' % prefix, step=5, threads=threads)
+    f, ax = plt.subplots()
+    ppt.plot(x='Number of SNPs', y='R2', kind='scatter',ax=ax, legend=True)
+    plt.tight_layout()
+    plt.savefig('%s_ppt.pdf' % prefix)
+    plt.close()
 
 
 # ----------------------------------------------------------------------
@@ -393,18 +410,19 @@ def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
     if isinstance(pheno, pd.core.frame.DataFrame):
         pheno = pheno.PHENO.values
     assert isinstance(pheno, np.ndarray)
-    clumps = clump(R2, sumstats, r_t, p_t)
+    clumps, df2 = clump(R2, sumstats, r_t, p_t)
     assert isinstance(clumps, pd.core.frame.DataFrame)
     index = clumps.snp.tolist()
     idx = bim[bim.snp.isin(index)].i.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
     prs = geno[:, idx].dot(betas).compute()
     slope, intercept, r_value, p_value, std_err = stats.linregress(pheno, prs)
-    return r_t, p_t, r_value ** 2, clumps, prs
+    return r_t, p_t, r_value ** 2, clumps, prs, df2
 
 
 # ----------------------------------------------------------------------
-def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None, **kwargs):
+def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
+           threads=1, **kwargs):
     now = time.time()
     print ('Performing P + T!')
     seed = np.random.randint(1e4) if seed is None else seed
@@ -424,7 +442,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
                 'seed': seed}
         pheno, (G, bim, truebeta, vec) = qtraits_simulation(**opts)
         opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': G,
-                'validate': 3, 'seed': seed, 'threads': kwargs['threads'],
+                'validate': 3, 'seed': seed, 'threads':threads,
                 'bim':bim}
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt2)
     if isinstance(geno, str):
@@ -448,8 +466,8 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         line += ['\t'.join(map(str, i[:-2])) for i in r]
         F.write('\n'.join(line))
     # score in test set
-    r_t, p_t, r2, clumps, sc = score(X_test, bim, y_test, sumstats, best[0], best[1],
-                              R2)
+    r_t, p_t, r2, clumps, sc, df2 = score(X_test, bim, y_test, sumstats, best[0],
+                                     best[1], R2)
     if isinstance(sc, np.ndarray):
         if isinstance(y_test, pd.core.frame.DataFrame):
             prs = y_test.reindex(columns=['fid', 'iid'])
@@ -462,10 +480,11 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f in '
           'the test set' % (p_t, r_t, r2))
     clumps.to_csv('%s.clumps' % prefix, sep='\t', index=False)
-    
     prs.to_csv('%s.prs' % prefix, sep='\t', index=False)
+    # plot the prune version:
+    new_plot(prefix, df2, geno, pheno, threads)
     print ('P + T Done after %.2f minutes' % ((time.time() - now) / 60.))
-    return p_t, r_t, r2, clumps, prs
+    return p_t, r_t, r2, clumps, prs, df2
 
 
 if __name__ == '__main__':

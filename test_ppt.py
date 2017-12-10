@@ -48,7 +48,7 @@ def test_single_clump(snp, r_thresh, done, expected):
                   4: 'SNP11', 9: ''}, p_value={0: 0.0, 2: 0.0, 4: 0.0, 9: 0.0},
           snp={0: 'SNP1', 2: 'SNP3', 4: 'SNP5', 9: 'SNP10'}))])
 def test_clump(r_thresh, p_thresh, expected):
-    clumps = clump(R2, ss, r_thresh, p_thresh)
+    clumps, df2 = clump(R2, ss, r_thresh, p_thresh)
     assert clumps.to_dict() == expected
 
 
@@ -57,7 +57,7 @@ def test_clump(r_thresh, p_thresh, expected):
                                               (0.5, 1E-15, 0.72663),
                                               (0.5, 1, 0.72688)])
 def test_score(r_t, p_t, expected):
-    r, p, r2, clumps, prs = score(X, bim, y, ss, r_t, p_t, R2)
+    r, p, r2, clumps, prs, df2 = score(X, bim, y, ss, r_t, p_t, R2)
     assert (r, p) == (r_t, p_t)
     np.testing.assert_allclose(r2, expected, rtol=1E-4, atol=1E-4)
 
@@ -67,7 +67,7 @@ def test_score(r_t, p_t, expected):
     ([0.3, 0.4, 0.5], [1, 1E-16], (1E-16, 0.4, 0.7295))
 ])
 def test_pplust(r_range, p_range, expected):
-    p_t, r_t, r2, clumps, prs = pplust('testing', X, y, bim, ss, r_range,
+    p_t, r_t, r2, clumps, prs, df2 = pplust('testing', X, y, bim, ss, r_range,
                                        p_range)
     assert (p_t, r_t) == expected[:2]
     np.testing.assert_allclose(r2, expected[-1], rtol=0.01, atol=0.01)

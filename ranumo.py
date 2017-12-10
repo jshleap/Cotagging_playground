@@ -170,38 +170,6 @@ def cleanup():
 
 
 # ----------------------------------------------------------------------
-def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
-                 maxmem, threads):
-    """
-    Helper function to paralellize score_qfiles
-    """
-    qfile, phenofile, bfile = tup
-    suf = qfile[qfile.find('_') + 1: qfile.rfind('.')]
-    ou = '%s_%s' % (prefix, suf)
-    # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
-    #          '--allow-no-sex --keep-allele-order --pheno %s --out %s '
-    #          '--memory %d --threads %d')
-    score = (
-        '%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
-        '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
-    score = score % (plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
-                     maxmem, threads)
-    o, e = executeLine(score)
-    profs = read_log(ou)
-    df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label),
-                                      phenofile, suf, round(float(x.label)
-                                                            * frac_snps), profs)
-                       for x in qr.itertuples()])
-    # frames.append(df)
-    with tarfile.open('Profiles_%s.tar.gz' % ou, mode='w:gz') as t:
-        for fn in glob('%s*.profile' % ou):
-            if os.path.isfile(fn):
-                t.add(fn)
-                os.remove(fn)
-    return df
-
-
-# ----------------------------------------------------------------------
 def score_qfiles(out, prefix, plinkexe, gwasfn, frac_snps, maxmem=1700,
                  threads=8):
     """
@@ -471,37 +439,6 @@ def single_score(df, idxs, i, geno, pheno, label):
     return {'Number of SNPs': idx.shape[0], 'R2': regress.r_value, 'type': label
             }
 
-
-# ----------------------------------------------------------------------
-def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
-    """
-    Prune and score a dataframe of sorted snps
-
-    :param pheno: Phenotype array
-    :param geno: Genotype array
-    :param random: randomize the snps
-    :param df: sorted dataframe
-    :return: scored dataframe
-    """
-    print('Prunning %s...' % label)
-    if random:
-        df = df.sample(frac=1)
-    idxs = df.index.values
-    print('First 200')
-    gen = ((df, idxs, i, geno, pheno, label) for i in
-           range(1, min(200, df.shape[0]), 2))
-    delayed_results = [dask.delayed(single_score)(*i) for i in gen]
-    res = list(dask.compute(*delayed_results, num_workers=threads))
-    # process the first two hundred every 2
-    print('Processing the rest of variants')
-    if df.shape[0] > 200:
-        ngen = ((df, idxs, i, geno, pheno, label) for i in
-                range(201, df.shape[0], step))
-        delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
-        res += list(dask.compute(*delayed_results, num_workers=threads))
-    return pd.DataFrame(res)
-
-
 # ----------------------------------------------------------------------
 def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
            labels, prunestep=10, seed=None, threads=1, ppts=None, **kwargs):
@@ -591,26 +528,29 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     else:
         # perform p+t in reference
         ppt_r = pplust('%s_ppt' % ref, rgeno, rpheno, rbim, sumstats,
-                       kwargs['r_range'], kwargs['p_tresh'])[-2]
-        # get the full lenght with apropriate inidces
-        tagged_r = [y for x in ppt_r for y in x if y]
-        tagged_r = sumstats[sumstats.snp.isin(tagged_r)].reindex(
-            columns=['snp', 'p_value', 'slope']).sample(frac=1)
-        ppt_r = ppt_r.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
-            'p_value')
-        ppt_r = pd.concat((ppt_r, tagged_r), ignore_index=True)
-        ppt_r['gen_index'] = [rbim[rbim.snp == i].i[0] for i in ppt_r.snp]
+                       kwargs['r_range'], kwargs['p_tresh'])[-1]
+        params.update(dict(column='index'))
+        ppt_r, _ = smartcotagsort(prefix, ppt_r, **params)
+        # # get the full lenght with apropriate inidces
+        # tagged_r = [y for x in ppt_r for y in x if y]
+        # tagged_r = sumstats[sumstats.snp.isin(tagged_r)].reindex(
+        #     columns=['snp', 'p_value', 'slope']).sample(frac=1)
+        # ppt_r = ppt_r.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
+        #     'p_value')
+        # ppt_r = pd.concat((ppt_r, tagged_r), ignore_index=True)
+        # ppt_r['gen_index'] = [rbim[rbim.snp == i].i[0] for i in ppt_r.snp]
         # perform p+t in target
         ppt_t = pplust('%s_ppt' % tar, tgeno, tpheno, tbim, sumstats,
-                       kwargs['r_range'], kwargs['p_tresh'])[-2]
-        # get the full lenght with apropriate inidces
-        tagged_t = [y for x in ppt_r for y in x if y]
-        tagged_t = sumstats[sumstats.snp.isin(tagged_t)].reindex(
-            columns=['snp', 'p_value', 'slope']).sample(frac=1)
-        ppt_t = ppt_t.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
-            'p_value')
-        ppt_t = pd.concat((ppt_t, tagged_t), ignore_index=True)
-        ppt_r['gen_index'] = [tbim[tbim.snp == i].i[0] for i in ppt_t.snp]
+                       kwargs['r_range'], kwargs['p_tresh'])[-1]
+        ppt_t, _ = smartcotagsort(prefix, ppt_t, **params)
+        # # get the full lenght with apropriate inidces
+        # tagged_t = [y for x in ppt_r for y in x if y]
+        # tagged_t = sumstats[sumstats.snp.isin(tagged_t)].reindex(
+        #     columns=['snp', 'p_value', 'slope']).sample(frac=1)
+        # ppt_t = ppt_t.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
+        #     'p_value')
+        # ppt_t = pd.concat((ppt_t, tagged_t), ignore_index=True)
+        # ppt_r['gen_index'] = [tbim[tbim.snp == i].i[0] for i in ppt_t.snp]
 
     # prune and process P+Ts
     results.append(prune_it(ppt_t, tgeno, tpheno, 'P+T %s' % tar,

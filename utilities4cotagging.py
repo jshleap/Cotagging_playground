@@ -20,7 +20,7 @@ from tqdm import tqdm
 import psutil
 import dask.array as da
 from pandas_plink import read_plink
-
+import dask
 
 # ----------------------------------------------------------------------
 def mapcount(filename):
@@ -530,3 +530,65 @@ def nearestPD(A, threads=1):
         A3 += I * (-mineig * k**2 + spacing)
         k += 1
     return A3
+
+
+# ----------------------------------------------------------------------
+def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
+                 maxmem, threads):
+    """
+    Helper function to paralellize score_qfiles
+    """
+    qfile, phenofile, bfile = tup
+    suf = qfile[qfile.find('_') + 1: qfile.rfind('.')]
+    ou = '%s_%s' % (prefix, suf)
+    # score = ('%s --bfile %s --score %s 2 4 7 header --q-score-range %s %s '
+    #          '--allow-no-sex --keep-allele-order --pheno %s --out %s '
+    #          '--memory %d --threads %d')
+    score = (
+        '%s --bfile %s --score %s sum --q-score-range %s %s --allow-no-sex '
+        '--keep-allele-order --pheno %s --out %s --memory %d --threads %d')
+    score = score % (plinkexe, bfile, gwasfn, qrange, qfile, phenofile, ou,
+                     maxmem, threads)
+    o, e = executeLine(score)
+    profs = read_log(ou)
+    df = pd.DataFrame([read_scored_qr('%s.%s.profile' % (ou, x.label),
+                                      phenofile, suf, round(float(x.label)
+                                                            * frac_snps), profs)
+                       for x in qr.itertuples()])
+    # frames.append(df)
+    with tarfile.open('Profiles_%s.tar.gz' % ou, mode='w:gz') as t:
+        for fn in glob('%s*.profile' % ou):
+            if os.path.isfile(fn):
+                t.add(fn)
+                os.remove(fn)
+    return df
+
+
+# ----------------------------------------------------------------------
+def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
+    """
+    Prune and score a dataframe of sorted snps
+
+    :param pheno: Phenotype array
+    :param geno: Genotype array
+    :param random: randomize the snps
+    :param df: sorted dataframe
+    :return: scored dataframe
+    """
+    print('Prunning %s...' % label)
+    if random:
+        df = df.sample(frac=1)
+    idxs = df.index.values
+    print('First 200')
+    gen = ((df, idxs, i, geno, pheno, label) for i in
+           range(1, min(200, df.shape[0]), 2))
+    delayed_results = [dask.delayed(single_score)(*i) for i in gen]
+    res = list(dask.compute(*delayed_results, num_workers=threads))
+    # process the first two hundred every 2
+    print('Processing the rest of variants')
+    if df.shape[0] > 200:
+        ngen = ((df, idxs, i, geno, pheno, label) for i in
+                range(201, df.shape[0], step))
+        delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
+        res += list(dask.compute(*delayed_results, num_workers=threads))
+    return pd.DataFrame(res)
