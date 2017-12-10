@@ -423,6 +423,7 @@ def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
 # ----------------------------------------------------------------------
 def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
            threads=1, **kwargs):
+    X_train = None
     now = time.time()
     print ('Performing P + T!')
     seed = np.random.randint(1e4) if seed is None else seed
@@ -440,9 +441,9 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
                 'h2': kwargs['h2'], 'ncausal': kwargs['ncausal'],
                 'normalize': kwargs['normalize'], 'uniform': kwargs['uniform'],
                 'seed': seed}
-        pheno, (G, bim, truebeta, vec) = qtraits_simulation(**opts)
-        opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': G,
-                'validate': 3, 'seed': seed, 'threads':threads,
+        pheno, (geno, bim, truebeta, vec) = qtraits_simulation(**opts)
+        opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': geno,
+                'validate': 3, 'seed': seed, 'threads': kwargs['threads'],
                 'bim':bim}
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt2)
     if isinstance(geno, str):
@@ -453,8 +454,14 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     # Compute LD (R2) in dask format
     R2 = dd.from_dask_array(geno, columns=bim.snp).corr() ** 2
     # Create training and testing set
-    X_train, X_test, y_train, y_test = train_test_split(
-        geno, pheno, test_size=1 / split, random_state=seed)
+    if X_train is None:
+        X_train, X_test, y_train, y_test = train_test_split(geno, pheno,
+                                                            test_size=1 / split,
+                                                            random_state=seed)
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(X_test, y_test,
+                                                            test_size=1 / split,
+                                                            random_state=seed)
     # Sort sumstats by pvalue and clump by R2
     sumstats = sumstats.sort_values(by='p_value', ascending=True)
     # do clumping
