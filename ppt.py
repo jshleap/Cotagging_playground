@@ -386,6 +386,7 @@ def clump(R2, sumstats, r_thresh, p_thresh):
     tagged = [x for v in df.snp for x in clumps[v]]
     tail = sub[sub.snp.isin(tagged)].reindex(columns=['snp', 'p_value'])
     df2 = df2.append(tail).reset_index()
+    del clump, tagged, avail, done
     return df, df2
 
 
@@ -403,10 +404,7 @@ def new_plot(prefix, ppt, geno, pheno, threads):
 
 # ----------------------------------------------------------------------
 def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
-    try:
-        pheno = pheno.compute()
-    except AttributeError:
-        pheno = pheno
+    print('Scoring with p-val %.2g and R2 %.2g' % (p_t, r_t))
     if isinstance(pheno, pd.core.frame.DataFrame):
         pheno = pheno.PHENO.values
     assert isinstance(pheno, np.ndarray)
@@ -415,8 +413,9 @@ def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
     index = clumps.snp.tolist()
     idx = bim[bim.snp.isin(index)].i.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
-    prs = geno[:, idx].dot(betas).compute()
-    slope, intercept, r_value, p_value, std_err = stats.linregress(pheno, prs)
+    prs = geno[:, idx].dot(betas)
+    slope, intercept, r_value, p_value, std_err = lr(pheno, prs)
+    del slope, intercept, p_value, std_err
     return r_t, p_t, r_value ** 2, clumps, prs, df2
 
 
@@ -443,8 +442,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
                 'seed': seed}
         pheno, (geno, bim, truebeta, vec) = qtraits_simulation(**opts)
         opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': geno,
-                'validate': 3, 'seed': seed, 'threads': kwargs['threads'],
-                'bim':bim}
+                'validate': 3, 'seed': seed, 'threads': threads, 'bim':bim}
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt2)
     if isinstance(geno, str):
         (bim, fam, geno) = read_plink(geno)
@@ -465,8 +463,10 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     # Sort sumstats by pvalue and clump by R2
     sumstats = sumstats.sort_values(by='p_value', ascending=True)
     # do clumping
-    r = [score(X_train, bim, y_train, sumstats, r_t, p_t, R2) for r_t, p_t in
-         tqdm(product(r_range, p_thresh), total=len(r_range) * len(p_thresh))]
+    delayed_results = [
+        dask.delayed(score)(X_train, bim, y_train, sumstats, r_t, p_t, R2) for
+        r_t, p_t in product(r_range, p_thresh)]
+    r = list(dask.compute(*delayed_results, num_workers=threads))
     best = sorted(r, key=itemgetter(2), reverse=True)[0]
     with open('%s_ppt.results.tsv' % prefix, 'w') as F:
         line = ['\t'.join(['LD threshold', 'P-value threshold', 'R2'])]

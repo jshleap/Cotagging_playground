@@ -259,9 +259,6 @@ def regression_iter(x, y, threads):
             num_workers=threads)
 
 
-lr = jit(linregress)
-
-
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                     causal_pos=None, plot=False, threads=cpu_count(), **kwargs):
