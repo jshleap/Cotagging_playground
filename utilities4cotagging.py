@@ -294,7 +294,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        grouped = gwascotag.groupby(column).first()
+        grouped = gwascotag.groupby(column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=False)
         # keys = sorted(grouped.groups.keys(), reverse=True)
         # tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(

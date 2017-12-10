@@ -404,8 +404,7 @@ def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
 
 
 # ----------------------------------------------------------------------
-def pplust(prefix, geno, pheno, bim, sumstats, r_range, p_thresh, split=3,
-           seed=None, **kwargs):
+def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None, **kwargs):
     now = time.time()
     print ('Performing P + T!')
     seed = np.random.randint(1e4) if seed is None else seed
@@ -463,7 +462,7 @@ def pplust(prefix, geno, pheno, bim, sumstats, r_range, p_thresh, split=3,
     print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f in '
           'the test set' % (p_t, r_t, r2))
     clumps.to_csv('%s.clumps' % prefix, sep='\t', index=False)
-
+    
     prs.to_csv('%s.prs' % prefix, sep='\t', index=False)
     print ('P + T Done after %.2f minutes' % ((time.time() - now) / 60.))
     return p_t, r_t, r2, clumps, prs
@@ -483,7 +482,7 @@ if __name__ == '__main__':
                         help='File with the allele order. A1 in position 3 and '
                              'id in position2')
     parser.add_argument('-n', '--plinkexe', help=('Path and executable file of '
-                                                  'plink'), required=True)
+                                                  'plink'))
     parser.add_argument('-l', '--LDwindow',
                         help='Physical distance threshold ' +
                              'for clumping in kb (250kb by default)', type=int,
