@@ -21,7 +21,9 @@ import psutil
 import dask.array as da
 from pandas_plink import read_plink
 import dask
+from numba import jit
 
+lr = jit(linregress)
 # ----------------------------------------------------------------------
 def mapcount(filename):
     """

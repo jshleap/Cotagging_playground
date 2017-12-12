@@ -66,6 +66,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         # subset the genotype file
         G = G[indices.tolist(), :]
         bim = bim[indices].reset_index(drop=True)
+        bim.loc[:, 'i'] = bim.index.tolist()
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
@@ -85,14 +86,16 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     bim.loc[:,['snp', 'a0']].to_csv(allele, **par)
     # Get causal mutation indices randomly distributed
     if ncausal > allsnps:
-        print('More causals than available snps. Setting it to %d' %
-              allsnps)
+        print('More causals than available snps. Setting it to %d' % allsnps)
         ncausal = allsnps
     if causaleff is not None:
+        print('using causal effect')
         cols = ['snp', 'beta']
         causals = bim[bim.snp.isin(causaleff.snp)].copy()
+        pre_beta = causaleff.beta
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
+        print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.snp[bim.index[idx]]
@@ -111,13 +114,21 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         # Store them
         causals['beta'] = pre_beta#.compute()
         causals = causals.dropna()
-    idx = causals.index.tolist()
+    nc = causals.reindex(columns=['snp', 'beta'])
+    bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i'])
+    bim = bim.merge(nc, on='snp')
+    print(bim.dropna().head())
+    idx = bim.dropna().i.values
     # Score
+    assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
     g_eff = G[:, idx].dot(causals.beta).compute(num_workers=threads)
-    bim.loc[idx, 'beta'] = causals.beta
+
+    if causaleff is not None:
+        assert sorted(bim.dropna().snp) == sorted(causaleff.snp)
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', g_eff.var())
+    print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
     return G, bim, fam, causals.beta
