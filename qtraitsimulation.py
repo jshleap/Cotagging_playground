@@ -68,18 +68,22 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     if f_thr > 0:
         # filter by MAF
         good = (mafs < (1 - f_thr)) & (mafs > f_thr)
+        good = good.compute(num_workers=threads)
         G = G[good, :]
         bim = bim[good].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
         (bim2, fam2, G2) = read_geno(bfile2)
-        indices = bim.snp.isin(bim2.snp)
+        mafs2 = G2.sum(axis=1) / (2 * G2.shape[1])
+        good2 = ((mafs2 < (1 - f_thr)) & (mafs2 > f_thr)).compute(
+            num_workers=threads)
+        indices = bim.snp.isin(bim2[good2].snp)
         # bim = bim.merge(bim2, on=bim.columns.tolist())
         # subset the genotype file
         G = G[indices.tolist(), :]
         bim = bim[indices].reset_index(drop=True)
-        bim.loc[:, 'i'] = bim.index.tolist()
+        bim['i'] = bim.index.tolist()
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
