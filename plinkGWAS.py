@@ -276,63 +276,63 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     print('Performing GWAS')
     now = time.time()
     filename = '%s.data.hdf' % prefix
-    if os.path.isfile(filename):
-        f = h5py.File(filename, 'r')
-        x_train = da.from_array(f.get('x_train'))
-        X_test = da.from_array(f.get('X_test'))
-        y_train = da.from_array(f.get('y_train'))
-        y_test = da.from_array(f.get('y_test'))
-        res = pd.read_csv('%s.gwas' % prefix, sep='\t')
+    # if os.path.isfile(filename):
+    #     f = h5py.File(filename, 'r')
+    #     x_train = da.from_array(f.get('x_train'))
+    #     X_test = da.from_array(f.get('X_test'))
+    #     y_train = da.from_array(f.get('y_train'))
+    #     y_test = da.from_array(f.get('y_test'))
+    #     res = pd.read_csv('%s.gwas' % prefix, sep='\t')
+    #else:
+    if 'bfile' in kwargs:
+        bfile = kwargs['bfile']
+    if 'bim' in kwargs:
+        bim = kwargs['bim']
+    seed = np.random.randint(1e4) if seed is None else seed
+    print('using seed %d' % seed)
+    np.random.seed(seed=seed)
+    if isinstance(geno, str):
+        (bim, fam, geno) = read_plink(bfile)
+        geno = geno.T
+        geno = (geno - geno.mean(axis=0)) / geno.std(axis=0)
     else:
-        if 'bfile' in kwargs:
-            bfile = kwargs['bfile']
-        if 'bim' in kwargs:
-            bim = kwargs['bim']
-        seed = np.random.randint(1e4) if seed is None else seed
-        print('using seed %d' % seed)
-        np.random.seed(seed=seed)
-        if isinstance(geno, str):
-            (bim, fam, geno) = read_plink(bfile)
-            geno = geno.T
-            geno = (geno - geno.mean(axis=0)) / geno.std(axis=0)
-        else:
-            try:
-                assert isinstance(geno, Array)
-            except AssertionError:
-                assert isinstance(geno, np.ndarray)
-        if pheno is None:
-            pheno, gen = qtraits_simulation(prefix, **kwargs)
-            (geno, bim, truebeta, vec) = gen
-        x = geno.rechunk((geno.shape[0], geno.chunks[1]))
-        y = da.from_array(pheno.PHENO.values,
-                          chunks=x.chunks[0])  # .reshape(-1,1)
-        if validate:
-            print('making the crossvalidation data')
-            x_train, X_test, y_train, y_test = train_test_split(
-                x, y, test_size=1 / validate, random_state=seed)
-        else:
-            x_train, X_test, y_train, y_test = x, x, y, y
-        chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
-                               ).astype(int))
-        x_train = x_train.rechunk(chunks)
-        y_train = y_train.rechunk(chunks[0])
-        print('using dask delayed')
-        delayed_results = [dask.delayed(lr)(x_train[:, i], y_train) for i
-                           in range(x_train.shape[1])]
-        r = list(dask.compute(*delayed_results, num_workers=threads))
-        res = pd.DataFrame.from_records(r, columns=['slope', 'intercept',
-                                                    'r_value', 'p_value',
-                                                    'std_err'])
-        res['snp'] = bim.snp
-        # Make a manhatan plot
-        if plot:
-            manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
-                           alpha=0.05)
-        # write files
-        res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
-        data = dict(zip(['/x_train', '/X_test', '/y_train', '/y_test'],
-                        [x_train, X_test, y_train, y_test]))
-        da.to_hdf5('%s.data.hdf' % prefix, data)
+        try:
+            assert isinstance(geno, Array)
+        except AssertionError:
+            assert isinstance(geno, np.ndarray)
+    if pheno is None:
+        pheno, gen = qtraits_simulation(prefix, **kwargs)
+        (geno, bim, truebeta, vec) = gen
+    x = geno.rechunk((geno.shape[0], geno.chunks[1]))
+    y = da.from_array(pheno.PHENO.values,
+                      chunks=x.chunks[0])  # .reshape(-1,1)
+    if validate:
+        print('making the crossvalidation data')
+        x_train, X_test, y_train, y_test = train_test_split(
+            x, y, test_size=1 / validate, random_state=seed)
+    else:
+        x_train, X_test, y_train, y_test = x, x, y, y
+    chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
+                           ).astype(int))
+    x_train = x_train.rechunk(chunks)
+    y_train = y_train.rechunk(chunks[0])
+    print('using dask delayed')
+    delayed_results = [dask.delayed(lr)(x_train[:, i], y_train) for i
+                       in range(x_train.shape[1])]
+    r = list(dask.compute(*delayed_results, num_workers=threads))
+    res = pd.DataFrame.from_records(r, columns=['slope', 'intercept',
+                                                'r_value', 'p_value',
+                                                'std_err'])
+    res['snp'] = bim.snp
+    # Make a manhatan plot
+    if plot:
+        manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
+                       alpha=0.05)
+    # write files
+    res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
+    data = dict(zip(['/x_train', '/X_test', '/y_train', '/y_test'],
+                    [x_train, X_test, y_train, y_test]))
+    da.to_hdf5('%s.data.hdf' % prefix, data)
     print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
     return res, x_train, X_test, y_train, y_test
 
