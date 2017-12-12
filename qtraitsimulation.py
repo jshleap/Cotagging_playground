@@ -35,7 +35,8 @@ def get_SNP_dist(bfile, causals):
 # TODO: Inlcude frequency filtering
 
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
-             seed=None, causaleff=None, uniform=False, snps=None, threads=1):
+             f_thr=0.1, seed=None, causaleff=None, uniform=False, snps=None,
+             threads=1):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -58,6 +59,15 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     np.random.seed(seed=seed)
     # read rhe genotype files
     (bim, fam, G) = read_geno(bfile)
+    # get MAFs
+    m, n = G.shape
+    mafs = G.sum(axis=1)/(2*n)
+    if f_thr > 0:
+        # filter by MAF
+        good = (mafs < (1 - f_thr)) & (mafs > f_thr)
+        G = G[good,:]
+        bim = bim[good].reset_index(drop=True)
+        bim['i'] = bim.index.tolist()
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
         (bim2, fam2, G2) = read_geno(bfile2)
@@ -310,7 +320,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 # TODO: include test of correlation of variants (LD)??
 
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
-                       noenv=False, plothist=False, freqthreshold=0.1,
+                       noenv=False, plothist=False, freqthreshold=0.01,
                        bfile2=None, quality='png', seed=None, uniform=False,
                        normalize=False, **kwargs):
     """
@@ -348,7 +358,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     if not os.path.isfile(picklefile):
         opts = dict(prefix=outprefix, bfile=bfile, h2=h2, ncausal=ncausal,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
-                    causaleff=causaleff, uniform=uniform)
+                    causaleff=causaleff, uniform=uniform, f_thr=freqthreshold)
         G, bim, truebeta, vec = true_prs(**opts)
         with open(picklefile, 'wb') as F:
             pickle.dump((G, bim, truebeta, vec), F)
