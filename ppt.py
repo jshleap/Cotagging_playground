@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use('Agg')
 from qtraitsimulation import *
 from plinkGWAS import *
-
+import gc
 plt.style.use('ggplot')
 
 
@@ -356,27 +356,28 @@ def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
 
 
 # ----------------------------------------------------------------------
-def single_clump(snp, R2, done, r_thresh, extnd, clumps):
+@jit
+def single_clump(snp, R2, r_thresh):
     if not snp in done:
         vec = R2.loc[:, snp]
         idx = (vec > r_thresh) & (~vec.index.isin(done))
         clum = vec.index[idx].tolist()
         clum.pop(clum.index(snp))
-        extnd(clum)
-        clumps[snp] = clum
-        # return clum
+        done.extend(clum)
+        return {snp: clum}
 
 
 # ----------------------------------------------------------------------
-def clump(R2, sumstats, r_thresh, p_thresh):
-    sub = sumstats[sumstats.p_value < p_thresh]
+def clump(R2, sumstats, r_thr, p_thr, threads):
+    sub = sumstats[sumstats.p_value < p_thr]
+    global done
     done = []
-    clumps = {}
-    extnd = done.extend
-    avail = sub.snp.tolist()
-    r2 = R2.loc[avail, avail].compute()
-    [single_clump(row.snp, r2, done, r_thresh, extnd, clumps)
-     for row in sub.itertuples()]
+    #avail = sub.snp.tolist()
+    #r2 = R2.loc[avail, avail]
+    delayed_results = [dask.delayed(single_clump)(row.snp, R2[row.block], r_thr)
+                       for row in sub.itertuples()]
+    r = list(dask.compute(*delayed_results, num_workers=threads))
+    clumps = dict(pair for d in r for pair in d.items() if d is not None)
     # set dataframe
     df = sub[sub.snp.isin(list(clumps.keys()))].reindex(columns=['snp',
                                                                  'p_value'])
@@ -386,7 +387,7 @@ def clump(R2, sumstats, r_thresh, p_thresh):
     tagged = [x for v in df.snp for x in clumps[v]]
     tail = sub[sub.snp.isin(tagged)].reindex(columns=['snp', 'p_value'])
     df2 = df2.append(tail).reset_index()
-    del clump, tagged, avail, done
+    print ('done clumping for this configuration')
     return df, df2
 
 
@@ -396,32 +397,33 @@ def new_plot(prefix, ppt, geno, pheno, threads):
     ppt, _ = smartcotagsort(prefix, ppt, **params)
     ppt = prune_it(ppt, geno, pheno, 'P+T %s' % prefix, step=5, threads=threads)
     f, ax = plt.subplots()
-    ppt.plot(x='Number of SNPs', y='R2', kind='scatter',ax=ax, legend=True)
+    ppt.plot(x='Number of SNPs', y='R2', kind='scatter', ax=ax, legend=True)
     plt.tight_layout()
     plt.savefig('%s_ppt.pdf' % prefix)
     plt.close()
 
 
 # ----------------------------------------------------------------------
-def score(geno, bim, pheno, sumstats, r_t, p_t, R2):
+def score(geno, pheno, sumstats, r_t, p_t, R2, threads):
     print('Scoring with p-val %.2g and R2 %.2g' % (p_t, r_t))
     if isinstance(pheno, pd.core.frame.DataFrame):
         pheno = pheno.PHENO.values
-    assert isinstance(pheno, np.ndarray)
-    clumps, df2 = clump(R2, sumstats, r_t, p_t)
-    assert isinstance(clumps, pd.core.frame.DataFrame)
+    #assert isinstance(pheno, np.ndarray)
+    clumps, df2 = clump(R2, sumstats, r_t, p_t, threads)
+    #assert isinstance(clumps, pd.core.frame.DataFrame)
     index = clumps.snp.tolist()
-    idx = bim[bim.snp.isin(index)].i.tolist()
+    idx = sumstats[sumstats.snp.isin(index)].gen_index.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
     prs = geno[:, idx].dot(betas)
     slope, intercept, r_value, p_value, std_err = lr(pheno, prs)
     del slope, intercept, p_value, std_err
+    gc.collect()
     return r_t, p_t, r_value ** 2, clumps, prs, df2
 
 
 # ----------------------------------------------------------------------
 def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
-           threads=1, **kwargs):
+           threads=1, window=250,  **kwargs):
     X_train = None
     now = time.time()
     print ('Performing P + T!')
@@ -450,7 +452,9 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     if isinstance(sumstats, str):
         sumstats = pd.read_table(sumstats, delim_whitespace=True)
     # Compute LD (R2) in dask format
-    R2 = dd.from_dask_array(geno, columns=bim.snp).corr() ** 2
+    #R2 = dd.from_dask_array(geno, columns=bim.snp).corr() ** 2
+    bim, R2 = blocked_R2(bim, geno, window)
+    bim['gen_index'] = bim.index.tolist()
     # Create training and testing set
     if X_train is None:
         X_train, X_test, y_train, y_test = train_test_split(geno, pheno,
@@ -463,10 +467,13 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     # Sort sumstats by pvalue and clump by R2
     sumstats = sumstats.sort_values(by='p_value', ascending=True)
     # do clumping
-    delayed_results = [
-        dask.delayed(score)(X_train, bim, y_train, sumstats, r_t, p_t, R2) for
-        r_t, p_t in product(r_range, p_thresh)]
-    r = list(dask.compute(*delayed_results, num_workers=threads))
+    sumstats = sumstats.merge(bim, on='snp')
+    r = [score(X_train, y_train, sumstats, r_t, p_t, R2, threads)
+         for r_t, p_t in product(r_range, p_thresh)]
+    # delayed_results = [
+    #     dask.delayed(score)(X_train, bim, y_train, sumstats, r_t, p_t, R2) for
+    #     r_t, p_t in product(r_range, p_thresh)]
+    # r = list(dask.compute(*delayed_results, num_workers=threads))
     best = sorted(r, key=itemgetter(2), reverse=True)[0]
     with open('%s_ppt.results.tsv' % prefix, 'w') as F:
         line = ['\t'.join(['LD threshold', 'P-value threshold', 'R2'])]
@@ -474,7 +481,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         F.write('\n'.join(line))
     # score in test set
     r_t, p_t, r2, clumps, sc, df2 = score(X_test, bim, y_test, sumstats, best[0],
-                                     best[1], R2)
+                                     best[1], R2, threads)
     if isinstance(sc, np.ndarray):
         if isinstance(y_test, pd.core.frame.DataFrame):
             prs = y_test.reindex(columns=['fid', 'iid'])

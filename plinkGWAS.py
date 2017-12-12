@@ -30,6 +30,7 @@ plt.style.use('ggplot')
 
 from numba import jit
 
+lr = jit(stats.linregress)
 
 # ----------------------------------------------------------------------
 @jit

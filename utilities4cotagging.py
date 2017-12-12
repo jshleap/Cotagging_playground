@@ -21,6 +21,8 @@ import psutil
 import dask.array as da
 from pandas_plink import read_plink
 import dask
+import dask.dataframe as dd
+
 
 # ----------------------------------------------------------------------
 def mapcount(filename):
@@ -106,6 +108,26 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
         frq = pd.read_table('%s.frq.gz' % bfile, delim_whitespace=True)
         # filter MAFs greater than 1 - freq_threshold and smaller than freq_threshold
     return frq[(frq.MAF < high) & (frq.MAF > low)]
+
+
+# ----------------------------------------------------------------------
+def blocked_R2(bim, geno, window):
+    assert bim.shape[0] == geno.shape[1]
+    bim['pos_kb'] = bim.pos / 1000
+    ma = bim.pos_kb.max()
+    mi = bim.pos_kb.min()
+    r2_block = {}
+    curr = 0
+    for i, b in enumerate(np.arange(mi, ma, window, dtype=int)):
+        boole = (bim.pos_kb < b + window - 1) & (bim.pos_kb > curr)
+        bim.loc[boole, 'block'] = i
+        curr = bim.pos_kb[boole].max()
+        idx = bim.index[boole].tolist()
+        sub = geno[:, idx]
+        assert sub.shape[1] == len(idx)
+        r2_block[i] = dd.from_dask_array(sub, columns=bim.snp[boole].tolist()
+                                         ).corr()**2
+    return bim, r2_block
 
 
 # ----------------------------------------------------------------------
@@ -478,18 +500,19 @@ def estimate_size(shape):
     :return: size in Mb
     """
     total_bytes = reduce(np.multiply, shape) * 8
-    return total_bytes/1E6
+    return total_bytes / 1E6
 
 
 # ----------------------------------------------------------------------
 def estimate_chunks(shape, threads):
-    avail_mem = psutil.virtual_memory().available / 1E7 # a tenth of the memory
+    avail_mem = psutil.virtual_memory().available / 1E7  # a tenth of the memory
     usage = estimate_size(shape) * threads
     if usage < avail_mem:
         return shape
     else:
-        n_chunks = np.floor(usage/avail_mem).astype(int)
-        return tuple([max([1,i]) for i in np.array(shape)/n_chunks])
+        n_chunks = np.floor(usage / avail_mem).astype(int)
+        return tuple([max([1, i]) for i in np.array(shape) / n_chunks])
+
 
 # ----------------------------------------------------------------------
 def nearestPD(A, threads=1):
@@ -527,7 +550,7 @@ def nearestPD(A, threads=1):
     k = 1
     while not isPD(A3):
         mineig = da.min(da.real(np.linalg.eigvals(A3)))
-        A3 += I * (-mineig * k**2 + spacing)
+        A3 += I * (-mineig * k ** 2 + spacing)
         k += 1
     return A3
 
