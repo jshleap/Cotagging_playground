@@ -9,13 +9,16 @@ import argparse
 import dask.array as da
 import matplotlib
 from pandas_plink import read_plink
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import time
+
 plt.style.use('ggplot')
 from utilities4cotagging import *
 from numba import double
 from numba.decorators import jit
+
 
 # ----------------------------------------------------------------------
 
@@ -61,18 +64,18 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     (bim, fam, G) = read_geno(bfile)
     # get MAFs
     m, n = G.shape
-    mafs = G.sum(axis=1)/(2*n)
+    mafs = G.sum(axis=1) / (2 * n)
     if f_thr > 0:
         # filter by MAF
         good = (mafs < (1 - f_thr)) & (mafs > f_thr)
-        G = G[good,:]
+        G = G[good, :]
         bim = bim[good].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
         (bim2, fam2, G2) = read_geno(bfile2)
         indices = bim.snp.isin(bim2.snp)
-        #bim = bim.merge(bim2, on=bim.columns.tolist())
+        # bim = bim.merge(bim2, on=bim.columns.tolist())
         # subset the genotype file
         G = G[indices.tolist(), :]
         bim = bim[indices].reset_index(drop=True)
@@ -93,7 +96,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # write the possible snps and the allele file
     par = dict(sep=' ', index=False, header=False)
     bim.snp.to_csv(totalsnps, **par)
-    bim.loc[:,['snp', 'a0']].to_csv(allele, **par)
+    bim.loc[:, ['snp', 'a0']].to_csv(allele, **par)
     # Get causal mutation indices randomly distributed
     if ncausal > allsnps:
         print('More causals than available snps. Setting it to %d' % allsnps)
@@ -118,11 +121,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals = bim[bim.snp.isin(snps)].copy()
     # If causal effects are provided use them, otherwise get them
     if causaleff is None:
-        #chunks = estimate_chunks((ncausal,), threads)
+        # chunks = estimate_chunks((ncausal,), threads)
         pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
-        #pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
+        # pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
         # Store them
-        causals['beta'] = pre_beta#.compute()
+        causals['beta'] = pre_beta  # .compute()
         causals = causals.dropna()
     nc = causals.reindex(columns=['snp', 'beta'])
     bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i'])
@@ -217,7 +220,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
             std = np.sqrt(h2_snp)
             g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
             # make sure is the correct variance when samples are small
-            #while not np.allclose(g_eff.var(), h2_snp, rtol=0.05):
+            # while not np.allclose(g_eff.var(), h2_snp, rtol=0.05):
             #    g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
             causals.loc[:, 'eff'] = g_eff
         # write snps and effect to score file
@@ -276,11 +279,11 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
         env_effect = np.zeros(nind)
     else:
         va = prs_true.gen_eff.var()
-        std = np.sqrt((va/h2) - va)
+        std = np.sqrt((va / h2) - va)
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
         # for small sample sizes force to be close to the expected heritability
-        #while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
-            #env_effect = np.random.normal(loc=0, scale=std, size=nind)
+        # while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
+        # env_effect = np.random.normal(loc=0, scale=std, size=nind)
     # Include environmental effects into the dataframe
     prs_true['env_eff'] = env_effect
     # Generate the phenotype from the model Phenotype = genetics + environment
@@ -301,6 +304,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     prs_true.reindex(columns=['FID', 'IID', 'PHENO']).to_csv(ofn, **opts)
     # return the dataframe
     return prs_true
+
 
 # ----------------------------------------------------------------------
 def plot_pheno(prefix, prs_true, quality='pdf'):
@@ -348,7 +352,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     """
     now = time.time()
     print("Performing simulation with h2=%.2f, and %d causal variants" % (h2,
-          ncausal))
+                                                                          ncausal))
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
