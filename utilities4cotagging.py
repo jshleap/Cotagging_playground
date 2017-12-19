@@ -301,7 +301,7 @@ def read_geno(bfile):
 
 
 # ---------------------------------------------------------------------------
-def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
+def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in 
     the last part of the dataframe
@@ -310,7 +310,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
     :param :class pd.DataFrame gwascotag: merged dataframe of cotag and gwas
     :param str column: name of the column to be sorted by in the cotag file
     """
-    gwascotag = gwascotag.sort_values(by=column, ascending=False)
+    gwascotag = gwascotag.sort_values(by=column, ascending=ascending)
     picklefile = '%s_%s.pickle' % (prefix, ''.join(column.split()))
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
@@ -318,7 +318,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
     else:
         print('Sorting File based on %s "clumping"...' % column)
         grouped = gwascotag.groupby(column, as_index=False).first()
-        sorteddf = grouped.sort_values(by=column, ascending=False)
+        sorteddf = grouped.sort_values(by=column, ascending=ascending)
         # keys = sorted(grouped.groups.keys(), reverse=True)
         # tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
         #     grouped, key) for key in tqdm(keys, total=len(keys)))
@@ -332,7 +332,9 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', threads=1):
         if not tail.empty:
             df = df.append(tail.sample(frac=1))
         df = df.reset_index(drop=True)
-        df['Index'] = df.index.tolist()
+        df['gen_index'] = df.index.tolist()
+        print('smartcotagsort')
+        print(df.head())
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
     return df, beforetail
@@ -557,7 +559,7 @@ def nearestPD(A, threads=1):
 
 
 # ----------------------------------------------------------------------
-def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
+def single_score_plink(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
                  maxmem, threads):
     """
     Helper function to paralellize score_qfiles
@@ -589,6 +591,23 @@ def single_score(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
 
 
 # ----------------------------------------------------------------------
+def single_score(subdf, geno, pheno, label):
+# def single_score(df, idxs, i, geno, pheno, label):
+    # idx = idxs[: i]
+    # try:
+    #     prs = geno[:, df.gen_index[idx]].dot(df.slope[idx]).compute()
+    # except AttributeError:
+    #     prs = geno[:, df.gen_index[idx]].dot(df.slope[idx])
+    indices = subdf.i.tolist()#gen_index.tolist()
+    prs = geno[:, indices].dot(subdf.slope)
+    #print(subdf.head(), '\n')
+    regress = lr(pheno.PHENO, prs)
+    #print(regress)
+    return {'Number of SNPs': subdf.shape[0], 'R2': regress.rvalue **2,
+            'type': label}
+
+
+# ----------------------------------------------------------------------
 def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
     """
     Prune and score a dataframe of sorted snps
@@ -604,14 +623,14 @@ def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
         df = df.sample(frac=1)
     idxs = df.index.values
     print('First 200')
-    gen = ((df, idxs, i, geno, pheno, label) for i in
+    gen = ((df.iloc[:i], geno, pheno, label) for i in
            range(1, min(200, df.shape[0]), 2))
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     res = list(dask.compute(*delayed_results, num_workers=threads))
     # process the first two hundred every 2
     print('Processing the rest of variants')
     if df.shape[0] > 200:
-        ngen = ((df, idxs, i, geno, pheno, label) for i in
+        ngen = ((df.iloc[: i], geno, pheno, label) for i in
                 range(201, df.shape[0], step))
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
         res += list(dask.compute(*delayed_results, num_workers=threads))

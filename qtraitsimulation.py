@@ -132,8 +132,9 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals['beta'] = pre_beta  # .compute()
         causals = causals.dropna()
     nc = causals.reindex(columns=['snp', 'beta'])
+    bidx = bim[bim.snp.isin(nc.snp)].index.tolist()
     bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i'])
-    bim = bim.merge(nc, on='snp')
+    bim.loc[bidx, 'beta'] = nc.beta.values.tolist()
     print(bim.dropna().head())
     idx = bim.dropna().i.values
     # Score

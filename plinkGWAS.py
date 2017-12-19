@@ -304,8 +304,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
         pheno, gen = qtraits_simulation(prefix, **kwargs)
         (geno, bim, truebeta, vec) = gen
     x = geno.rechunk((geno.shape[0], geno.chunks[1]))
-    y = da.from_array(pheno.PHENO.values,
-                      chunks=x.chunks[0])  # .reshape(-1,1)
+    y = pheno
+    #y = dd.from_pandas(pheno, chunksize=geno.shape[0])  # .reshape(-1,1)
     if validate:
         print('making the crossvalidation data')
         x_train, X_test, y_train, y_test = train_test_split(
@@ -315,9 +315,9 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
                            ).astype(int))
     x_train = x_train.rechunk(chunks)
-    y_train = y_train.rechunk(chunks[0])
+    #y_train = y_train.rechunk(chunks[0])
     print('using dask delayed')
-    delayed_results = [dask.delayed(lr)(x_train[:, i], y_train) for i
+    delayed_results = [dask.delayed(lr)(x_train[:, i], y_train.PHENO) for i
                        in range(x_train.shape[1])]
     r = list(dask.compute(*delayed_results, num_workers=threads))
     res = pd.DataFrame.from_records(r, columns=['slope', 'intercept',
@@ -330,9 +330,9 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                        alpha=0.05)
     # write files
     res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
-    data = dict(zip(['/x_train', '/X_test', '/y_train', '/y_test'],
-                    [x_train, X_test, y_train, y_test]))
-    da.to_hdf5('%s.data.hdf' % prefix, data)
+    # data = dict(zip(['/x_train', '/X_test', '/y_train', '/y_test'],
+    #                 [x_train, X_test, y_train, y_test]))
+    # da.to_hdf5('%s.data.hdf' % prefix, data)
     print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
     return res, x_train, X_test, y_train, y_test
 

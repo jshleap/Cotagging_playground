@@ -429,37 +429,28 @@ def read_clump(fn):
 
 
 # ----------------------------------------------------------------------
-def single_score(df, idxs, i, geno, pheno, label):
-    idx = idxs[: i]
-    try:
-        prs = geno[:, df.gen_index[idx]].dot(df.slope[idx]).compute()
-    except AttributeError:
-        prs = geno[:, df.gen_index[idx]].dot(df.slope[idx])
-    regress = lr(pheno, prs)
-    return {'Number of SNPs': idx.shape[0], 'R2': regress.r_value, 'type': label
-            }
-
-# ----------------------------------------------------------------------
 def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
            labels, prunestep=10, seed=None, threads=1, ppts=None, **kwargs):
     seed = np.random.randint(1e4) if seed is None else seed
     now = time.time()
     print('Performing random null model (RANUMO)!')
-    ref, tar = labels
+    refl, tarl = labels
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):
         rpheno = dd.read_table(refpheno, blocksize=25e6, delim_whitespace=True)
         tpheno = dd.read_table(tarpheno, blocksize=25e6, delim_whitespace=True)
     elif refpheno is None:
         # make simulation for reference
-        print('Simulating phenotype for reference population %s \n' % ref)
-        opts = {'outprefix': ref, 'bfile': refgeno, 'h2': kwargs['h2'],
+        print('Simulating phenotype for reference population %s \n' % refl)
+        opts = {'outprefix': refl, 'bfile': refgeno, 'h2': kwargs['h2'],
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
-                'uniform': kwargs['uniform'], 'snps': None, 'seed': seed}
+                'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
+                'bfile2': targeno}
         rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
-        print('Simulating phenotype for target population %s \n' % tar)
-        opts.update(dict(outprefix=tar, bfile=targeno, causaleff=rbim.dropna()))
+        print('Simulating phenotype for target population %s \n' % tarl)
+        opts.update(dict(outprefix=tarl, bfile=targeno, causaleff=rbim.dropna(),
+                         bfile2=refgeno))
         tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=3, threads=threads, bim=rbim))
@@ -497,28 +488,31 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     results = []
     # Cotagging
     sortedcot, beforetail = smartcotagsort(prefix, gwas, column='cotag',
-                                           threads=threads)
-    sortedcot['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
-                              sortedcot.snp]
+                                           ascending=False)
+    sortedcot = sortedcot.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+    # sortedcot['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
+    #                           sortedcot.snp]
     # prune cotagging
     results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging',
-                            step=prunestep, threads=threads))
+                            step=prunestep))
     # Tagging Target
-    params = dict(column='tar', threads=threads)
+    params = dict(column='tar', ascending=False)
     sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
-    sortedtagT['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
-                               sortedtagT.snp]
-    results.append(prune_it(sortedtagT, tgeno, tpheno, 'Tagging %s' % tar,
-                            step=prunestep, threads=threads))
+    # sortedtagT['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
+    #                            sortedtagT.snp]
+    sortedtagT = sortedtagT.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+    results.append(prune_it(sortedtagT, tgeno, tpheno, 'Tagging %s' % tarl,
+                            step=prunestep))
     # Tagging Reference
-    params.update(dict(column='ref' % ref))
+    params.update(dict(column='ref'))
     sortedtagR, beforetailTR = smartcotagsort(prefix, gwas, **params)
-    sortedtagR['gen_index'] = [rbim[rbim.snp == i].i.values[0] for i in
-                               sortedtagR.snp]
-    results.append(prune_it(sortedtagR, rgeno, rpheno, 'Tagging %s' % ref,
+    # sortedtagR['gen_index'] = [rbim[rbim.snp == i].i.values[0] for i in
+    #                            sortedtagR.snp]
+    sortedtagR = sortedtagR.merge(rbim.reindex(columns=['snp', 'i']), on='snp')
+    results.append(prune_it(sortedtagR, X_test, y_test, 'Tagging %s' % refl,
                             step=prunestep, threads=threads))
     # prune and score the random model
-    results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging', random=True,
+    results.append(prune_it(sortedcot, tgeno, tpheno, 'Random', random=True,
                             step=prunestep, threads=threads))
 
     if isinstance(ppts, tuple):
@@ -527,9 +521,9 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         ppt_t = pd.read_table(ppts[1], delim_whitespace=True)
     else:
         # perform p+t in reference
-        ppt_r = pplust('%s_ppt' % ref, rgeno, rpheno, rbim, sumstats,
-                       kwargs['r_range'], kwargs['p_tresh'])[-1]
-        params.update(dict(column='index'))
+        ppt_r = pplust('%s_ppt' % refl, rgeno, rpheno, sumstats,
+                       kwargs['r_range'], kwargs['p_tresh'], bim=rbim)[-1]
+        params.update(dict(column='index', ascending=True))
         ppt_r, _ = smartcotagsort(prefix, ppt_r, **params)
         # # get the full lenght with apropriate inidces
         # tagged_r = [y for x in ppt_r for y in x if y]
@@ -540,8 +534,8 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         # ppt_r = pd.concat((ppt_r, tagged_r), ignore_index=True)
         # ppt_r['gen_index'] = [rbim[rbim.snp == i].i[0] for i in ppt_r.snp]
         # perform p+t in target
-        ppt_t = pplust('%s_ppt' % tar, tgeno, tpheno, tbim, sumstats,
-                       kwargs['r_range'], kwargs['p_tresh'])[-1]
+        ppt_t = pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats,
+                       kwargs['r_range'], kwargs['p_tresh'], bim=tbim)[-1]
         ppt_t, _ = smartcotagsort(prefix, ppt_t, **params)
         # # get the full lenght with apropriate inidces
         # tagged_t = [y for x in ppt_r for y in x if y]
@@ -553,16 +547,18 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         # ppt_r['gen_index'] = [tbim[tbim.snp == i].i[0] for i in ppt_t.snp]
 
     # prune and process P+Ts
-    results.append(prune_it(ppt_t, tgeno, tpheno, 'P+T %s' % tar,
+    results.append(prune_it(ppt_t, tgeno, tpheno, 'P+T %s' % tarl,
                             step=prunestep, threads=threads))
-    results.append(prune_it(ppt_r, rgeno, rpheno, 'P+T %s' % ref,
+    results.append(prune_it(ppt_r, rgeno, rpheno, 'P+T %s' % refl,
                             step=prunestep, threads=threads))
     results = pd.concat(results)
-    results.to_csv('%s.ranumo.tsv', sep='\t', index=False)
+    results.to_csv('%s.ranumo.tsv' % prefix, sep='\t', index=False)
     # plot
+    colors = iter(['r', 'b', 'm', 'g', 'c', 'k','y'])
     f, ax = plt.subplots()
-    results.groupby('type').plot(x='Number of SNPs', y='R2', kind='scatter',
-                                 ax=ax, legend=True)
+    for t, df in results.groupby('type'):
+        df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=5,
+                c=next(colors), ax=ax, label=t)
     plt.tight_layout()
     plt.savefig('%s_ranumo.pdf' % prefix)
     plt.close()
@@ -571,6 +567,17 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
 
 
 if __name__ == '__main__':
+    class Store_as_arange(argparse._StoreAction):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = np.arange(values[0], values[1], values[2])
+            return super().__call__(parser, namespace, values, option_string)
+
+
+    class Store_as_array(argparse._StoreAction):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = np.array(values)
+            return super().__call__(parser, namespace, values, option_string)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--prefix', help='prefix for outputs',
                         required=True)
@@ -579,7 +586,7 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-b', '--tarbed', help=('prefix of the bed fileset for'
                                                 ' the target population'),
-                        required=None)
+                        required=True)
     parser.add_argument('-R', '--refbed', help=('prefix of the bed fileset for'
                                                 ' the reference population'),
                         required=True)
@@ -590,11 +597,11 @@ if __name__ == '__main__':
                                                   'phenotype of the reference '
                                                   'population'), default=None)
     parser.add_argument('-P', '--plinkexe', default='~/Programs/plink_mac/plink'
-                        )
-    parser.add_argument('-c', '--cotagfile', help='Filename of the cotag tsv ' +
-                                                  'file ', default=None)
-    parser.add_argument('-s', '--step', help='Step in the percentage range to' +
-                                             ' explore. By deafult is 1',
+                        , help='DEPRECATED, does nothing now')
+    parser.add_argument('-c', '--cotagfile', help=('Filename of the cotag tsv'
+                                                   ' file'), default=None)
+    parser.add_argument('-s', '--step', help=('Step in the percentage range to '
+                                              'explore. By deafult is 1'),
                         default=1, type=float)
     parser.add_argument('-l', '--labels', help=('Space separated string with '
                                                 'reference and target lables '
@@ -606,7 +613,8 @@ if __name__ == '__main__':
                                                  'reference population'),
                         default=None)
     parser.add_argument('-H', '--h2', help=('Heritability of the simulated '
-                                            'phenotype'), default=False)
+                                            'phenotype'), default=False,
+                        type=float)
     parser.add_argument('-F', '--check_freq', help=('Read a frequency file and '
                                                     'filter by this threshold'),
                         default=0.1, type=float)
@@ -618,6 +626,10 @@ if __name__ == '__main__':
     parser.add_argument('--ncausal', default=200, type=int)
     parser.add_argument('--normalize', default=True, action='store_false')
     parser.add_argument('--uniform', default=True, action='store_false')
+    parser.add_argument('--r_range', default=None, nargs=3,
+                        action=Store_as_arange, type=float)
+    parser.add_argument('--p_tresh', default=None, nargs='+',
+                        action=Store_as_array, type=float)
 
     args = parser.parse_args()
     ranumo(args.prefix, args.refbed, args.phenoref,  args.gwas, args.tarbed,
@@ -625,4 +637,5 @@ if __name__ == '__main__':
            pptT=args.ppt_tar, check_freqs=args.check_freq, hline=args.h2,
            step=args.step, quality=args.quality, every=args.every,
            threads=args.threads, maxmem=args.maxmem, h2=args.h2,
-           ncausal=args.ncausal, normalize=args.normalize, uniform=args.uniform)
+           ncausal=args.ncausal, normalize=args.normalize, uniform=args.uniform,
+           r_range=args.r_range, p_tresh=args.p_tresh)
