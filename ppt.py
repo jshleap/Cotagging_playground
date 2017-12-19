@@ -426,7 +426,7 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads):
     betas = sumstats[sumstats.snp.isin(index)].slope
     prs = geno[:, idx].dot(betas)
     slope, intercept, r_value, p_value, std_err = lr(pheno, prs)
-    print('Done clumping for this configuration\n')
+    print('Done clumping for this configuration. R2=%.3f\n' % r_value ** 2)
     return r_t, p_t, r_value ** 2, clumps, prs, df2
 
 
@@ -470,7 +470,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     # Compute LD (R2) in dask format
     #R2 = dd.from_dask_array(geno, columns=bim.snp).corr() ** 2
     bim, R2 = blocked_R2(bim, geno, window)
-    bim['gen_index'] = bim.index.tolist()
+    bim['gen_index'] = bim.i.tolist()
     # Create training and testing set
     if X_train is None:
         X_train, X_test, y_train, y_test = train_test_split(geno, pheno,
@@ -495,9 +495,9 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         r = pd.DataFrame.from_records([get(x) for x in r], columns=[
             'LD threshold', 'P-value threshold', 'R2'])
         r.to_csv('%s_ppt.results.tsv' % prefix, sep='\t', index=False)
-    best_rt, best_pt, best_r2 = r.iloc[0]
+    best_rt, best_pt, best_r2 = r.nlargest(n=1, columns='R2').values.flat
     # score in test set
-    r_t, p_t, r2, clumps, sc, df2 = score(X_test, y_test, sumstats, best_rt,
+    r_t, p_t, fit, clumps, sc, df2 = score(X_test, y_test, sumstats, best_rt,
                                           best_pt, R2, threads)
     if isinstance(sc, np.ndarray):
         if isinstance(y_test, pd.core.frame.DataFrame):
@@ -510,13 +510,14 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         # dd.from_dask_array(sc, columns=['PRS', 'fid', 'iid'])
         prs['prs'] = sc.compute(num_workers=threads)
     print('P+T optimized with pvalue %.4g and LD value of %.3f: R2 = %.3f in '
-          'the test set' % (p_t, r_t, r2))
+          'the test set' % (p_t, r_t, fit))
     clumps.to_csv('%s.clumps' % prefix, sep='\t', index=False)
     prs.to_csv('%s.prs' % prefix, sep='\t', index=False)
+    df2.to_csv('%s.sorted_ppt' % prefix, sep='\t', index=False)
     # plot the prune version:
     new_plot(prefix, df2, X_test, y_test, threads)
     print ('P + T Done after %.2f minutes' % ((time.time() - now) / 60.))
-    return p_t, r_t, r2, clumps, prs, df2
+    return p_t, r_t, fit, clumps, prs, df2
 
 
 if __name__ == '__main__':

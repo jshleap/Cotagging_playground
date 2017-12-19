@@ -308,10 +308,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     #y = dd.from_pandas(pheno, chunksize=geno.shape[0])  # .reshape(-1,1)
     if validate:
         print('making the crossvalidation data')
-        x_train, X_test, y_train, y_test = train_test_split(
+        x_train, x_test, y_train, y_test = train_test_split(
             x, y, test_size=1 / validate, random_state=seed)
     else:
-        x_train, X_test, y_train, y_test = x, x, y, y
+        x_train, x_test, y_train, y_test = x, x, y, y
     chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
                            ).astype(int))
     x_train = x_train.rechunk(chunks)
@@ -334,7 +334,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     #                 [x_train, X_test, y_train, y_test]))
     # da.to_hdf5('%s.data.hdf' % prefix, data)
     print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
-    return res, x_train, X_test, y_train, y_test
+    return res, x_train, x_test, y_train, y_test
 
 
 if __name__ == '__main__':

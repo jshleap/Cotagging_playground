@@ -123,7 +123,7 @@ def blocked_R2(bim, geno, window):
         boole = (bim.pos_kb < b + window - 1) & (bim.pos_kb > curr)
         bim.loc[boole, 'block'] = i
         curr = bim.pos_kb[boole].max()
-        idx = bim.index[boole].tolist()
+        idx = bim.i[boole].tolist()
         sub = geno[:, idx]
         assert sub.shape[1] == len(idx)
         r2_block[i] = dd.from_dask_array(sub, columns=bim.snp[boole].tolist()
@@ -310,7 +310,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
     :param :class pd.DataFrame gwascotag: merged dataframe of cotag and gwas
     :param str column: name of the column to be sorted by in the cotag file
     """
-    gwascotag = gwascotag.sort_values(by=column, ascending=ascending)
+    #gwascotag = gwascotag.sort_values(by=column, ascending=ascending)
     picklefile = '%s_%s.pickle' % (prefix, ''.join(column.split()))
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
@@ -319,6 +319,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
         print('Sorting File based on %s "clumping"...' % column)
         grouped = gwascotag.groupby(column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
+        tail = gwascotag[~gwascotag.snp.isin(grouped.snp)]
         # keys = sorted(grouped.groups.keys(), reverse=True)
         # tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
         #     grouped, key) for key in tqdm(keys, total=len(keys)))
@@ -326,15 +327,13 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
         #     sorteddf = pd.concat(tup, axis=1).transpose()
         # else:
         #     sorteddf = pd.concat(tup)
-        tail = gwascotag[~gwascotag.index.isin(sorteddf.index)]
+
         beforetail = sorteddf.shape[0]
         df = sorteddf.copy()
         if not tail.empty:
             df = df.append(tail.sample(frac=1))
         df = df.reset_index(drop=True)
-        df['gen_index'] = df.index.tolist()
-        print('smartcotagsort')
-        print(df.head())
+        #df['gen_index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
     return df, beforetail
@@ -608,7 +607,7 @@ def single_score(subdf, geno, pheno, label):
 
 
 # ----------------------------------------------------------------------
-def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
+def prune_it(df, geno, pheno, label, step=10, threads=1):
     """
     Prune and score a dataframe of sorted snps
 
@@ -619,9 +618,6 @@ def prune_it(df, geno, pheno, label, step=10, random=False, threads=1):
     :return: scored dataframe
     """
     print('Prunning %s...' % label)
-    if random:
-        df = df.sample(frac=1)
-    idxs = df.index.values
     print('First 200')
     gen = ((df.iloc[:i], geno, pheno, label) for i in
            range(1, min(200, df.shape[0]), 2))

@@ -482,7 +482,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
                                                       'cotag']).compute(
             num_tasks=threads)
-        cotags.to_csv('%s_cotags.tsv'%prefix, sep='\t', index=False)
+        cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
     gwas = cotags.merge(sumstats, on='snp')
     # Sort the sumstats based on scores
     results = []
@@ -490,30 +490,29 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     sortedcot, beforetail = smartcotagsort(prefix, gwas, column='cotag',
                                            ascending=False)
     sortedcot = sortedcot.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
-    # sortedcot['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
-    #                           sortedcot.snp]
-    # prune cotagging
-    results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging',
-                            step=prunestep))
+
     # Tagging Target
     params = dict(column='tar', ascending=False)
     sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
     # sortedtagT['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
     #                            sortedtagT.snp]
     sortedtagT = sortedtagT.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
-    results.append(prune_it(sortedtagT, tgeno, tpheno, 'Tagging %s' % tarl,
-                            step=prunestep))
+
     # Tagging Reference
     params.update(dict(column='ref'))
-    sortedtagR, beforetailTR = smartcotagsort(prefix, gwas, **params)
-    # sortedtagR['gen_index'] = [rbim[rbim.snp == i].i.values[0] for i in
-    #                            sortedtagR.snp]
+    sortedtagR, beforetailR = smartcotagsort(prefix, gwas, **params)
     sortedtagR = sortedtagR.merge(rbim.reindex(columns=['snp', 'i']), on='snp')
-    results.append(prune_it(sortedtagR, X_test, y_test, 'Tagging %s' % refl,
-                            step=prunestep, threads=threads))
-    # prune and score the random model
-    results.append(prune_it(sortedcot, tgeno, tpheno, 'Random', random=True,
-                            step=prunestep, threads=threads))
+
+    # Random model
+    rand = gwas.sample(frac=1).reset_index(drop=True)
+    rand['rand_index'] = rand.index.tolist()
+    random, beforetailrand = smartcotagsort(prefix, rand, column='rand_index',
+                                           ascending=False)
+    random = random.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+    # make sure that all have the same total SNPS
+    assert sorted(sortedtagT.snp) == sorted(sortedcot.snp)
+    assert sorted(sortedtagT.snp) == sorted(sortedtagR.snp)
+    assert sorted(sortedtagT.snp) == sorted(random.snp)
 
     if isinstance(ppts, tuple):
         # read ppt from files
@@ -521,7 +520,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         ppt_t = pd.read_table(ppts[1], delim_whitespace=True)
     else:
         # perform p+t in reference
-        ppt_r = pplust('%s_ppt' % refl, rgeno, rpheno, sumstats,
+        ppt_r = pplust('%s_ppt' % refl, X_test, y_test, sumstats,
                        kwargs['r_range'], kwargs['p_tresh'], bim=rbim)[-1]
         params.update(dict(column='index', ascending=True))
         ppt_r, _ = smartcotagsort(prefix, ppt_r, **params)
@@ -541,15 +540,29 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         # tagged_t = [y for x in ppt_r for y in x if y]
         # tagged_t = sumstats[sumstats.snp.isin(tagged_t)].reindex(
         #     columns=['snp', 'p_value', 'slope']).sample(frac=1)
+        #     columns=['snp', 'p_value', 'slope']).sample(rac=1)
         # ppt_t = ppt_t.reindex(colums=['snp', 'pvalue', 'slope']).sort_values(
         #     'p_value')
         # ppt_t = pd.concat((ppt_t, tagged_t), ignore_index=True)
         # ppt_r['gen_index'] = [tbim[tbim.snp == i].i[0] for i in ppt_t.snp]
 
+    # prune and process all
+    # prune cotagging
+    results.append(prune_it(sortedcot, tgeno, tpheno, 'Cotagging',
+                            step=prunestep))
+    # Prune tag tar
+    results.append(prune_it(sortedtagT, tgeno, tpheno, 'Tagging %s' % tarl,
+                            step=prunestep))
+    # prune tag ref
+    results.append(prune_it(sortedtagR, X_test, y_test, 'Tagging %s' % refl,
+                            step=prunestep, threads=threads))
+    # prune and score the random model
+    results.append(prune_it(random, tgeno, tpheno, 'Random', step=prunestep,
+                            threads=threads))
     # prune and process P+Ts
     results.append(prune_it(ppt_t, tgeno, tpheno, 'P+T %s' % tarl,
                             step=prunestep, threads=threads))
-    results.append(prune_it(ppt_r, rgeno, rpheno, 'P+T %s' % refl,
+    results.append(prune_it(ppt_r, X_test, y_test, 'P+T %s' % refl,
                             step=prunestep, threads=threads))
     results = pd.concat(results)
     results.to_csv('%s.ranumo.tsv' % prefix, sep='\t', index=False)
@@ -557,7 +570,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k','y'])
     f, ax = plt.subplots()
     for t, df in results.groupby('type'):
-        df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=5,
+        df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=3,
                 c=next(colors), ax=ax, label=t)
     plt.tight_layout()
     plt.savefig('%s_ranumo.pdf' % prefix)
