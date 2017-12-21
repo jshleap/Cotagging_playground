@@ -38,8 +38,8 @@ def get_SNP_dist(bfile, causals):
 # TODO: Inlcude frequency filtering
 
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
-             f_thr=0.1, seed=None, causaleff=None, uniform=False, snps=None,
-             threads=1):
+             f_thr=0.1, seed=None, causaleff=None, uniform=False, usepi=False,
+             snps=None, threads=1):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -84,6 +84,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         G = G[indices.tolist(), :]
         bim = bim[indices].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
+    pi = G.var(axis=1).mean() if usepi else 1
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
@@ -95,7 +96,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     allele = '%s.alleles' % prefix
     totalsnps = '%s.totalsnps' % prefix
     allsnps = G.shape[1]
-    h2_snp = h2 / ncausal
+    h2_snp = h2 / (ncausal*pi)
     std = np.sqrt(h2_snp)
     # write the possible snps and the allele file
     par = dict(sep=' ', index=False, header=False)

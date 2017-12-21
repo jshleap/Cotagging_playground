@@ -450,7 +450,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
         opts.update(dict(outprefix=tarl, bfile=targeno, causaleff=rbim.dropna(),
-                         bfile2=refgeno))
+                         bfile2=refgeno, validate=kwargs['split']))
         tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=3, threads=threads, bim=rbim))
@@ -473,15 +473,18 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     elif isinstance(cotagfn, pd.core.frame.DataFrame):
         cotags = cotagfn
     else:
-        D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
-        D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
-        cot = da.diag(da.dot(D_r, D_t))
-        ref = da.diag(da.dot(D_r, D_r))
-        tar = da.diag(da.dot(D_t, D_t))
-        stacked = da.stack([mbim.snp, ref, tar, cot], axis=1)
-        cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
-                                                      'cotag']).compute(
-            num_tasks=threads)
+        cotags = pd.concat(get_ld(rgeno, rbim, tgeno, tbim,
+                                  kbwindow=kwargs['window'], threads=threads))
+        # D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
+        # D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
+        # cot = da.diag(da.dot(D_r, D_t))
+        # ref = da.diag(da.dot(D_r, D_r))
+        # tar = da.diag(da.dot(D_t, D_t))
+        # stacked = da.stack([mbim.snp, ref, tar, cot], axis=1)
+        # cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
+        #                                               'cotag']).compute(
+        #     num_tasks=threads)
+
         cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
     gwas = cotags.merge(sumstats, on='snp')
     # Sort the sumstats based on scores
@@ -521,7 +524,8 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     else:
         # perform p+t in reference
         ppt_r = pplust('%s_ppt' % refl, X_test, y_test, sumstats,
-                       kwargs['r_range'], kwargs['p_tresh'], bim=rbim)[-1]
+                       kwargs['r_range'], kwargs['p_tresh'], bim=rbim,
+                       split=kwargs['split'])[-1]
         params.update(dict(column='index', ascending=True))
         ppt_r, _ = smartcotagsort(prefix, ppt_r, **params)
         # # get the full lenght with apropriate inidces
@@ -534,7 +538,8 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         # ppt_r['gen_index'] = [rbim[rbim.snp == i].i[0] for i in ppt_r.snp]
         # perform p+t in target
         ppt_t = pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats,
-                       kwargs['r_range'], kwargs['p_tresh'], bim=tbim)[-1]
+                       kwargs['r_range'], kwargs['p_tresh'], bim=tbim,
+                       split=kwargs['split'])[-1]
         ppt_t, _ = smartcotagsort(prefix, ppt_t, **params)
         # # get the full lenght with apropriate inidces
         # tagged_t = [y for x in ppt_r for y in x if y]
@@ -643,6 +648,8 @@ if __name__ == '__main__':
                         action=Store_as_arange, type=float)
     parser.add_argument('--p_tresh', default=None, nargs='+',
                         action=Store_as_array, type=float)
+    parser.add_argument('--split', default=None, type=int)
+    parser.add_argument('--window', default=1000, type=int)
 
     args = parser.parse_args()
     ranumo(args.prefix, args.refbed, args.phenoref,  args.gwas, args.tarbed,
@@ -651,4 +658,5 @@ if __name__ == '__main__':
            step=args.step, quality=args.quality, every=args.every,
            threads=args.threads, maxmem=args.maxmem, h2=args.h2,
            ncausal=args.ncausal, normalize=args.normalize, uniform=args.uniform,
-           r_range=args.r_range, p_tresh=args.p_tresh)
+           r_range=args.r_range, p_tresh=args.p_tresh, split=args.split,
+           window=args.window)

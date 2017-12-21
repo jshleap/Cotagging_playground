@@ -631,3 +631,34 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
         res += list(dask.compute(*delayed_results, num_workers=threads))
     return pd.DataFrame(res)
+
+
+# ----------------------------------------------------------------------
+@jit
+def single_window(df, rgeno, tgeno):
+    ridx = df.i_ref.values
+    tidx = df.i_tar.values
+    rg = rgeno[:, ridx]
+    tg = tgeno[:, tidx]
+    D_r = da.dot(rg.T, rg) / rg.shape[0]
+    D_t = da.dot(tg.T, tg) / tg.shape[0]
+    cot = da.diag(da.dot(D_r, D_t))
+    ref = da.diag(da.dot(D_r, D_r))
+    tar = da.diag(da.dot(D_t, D_t))
+    stacked = da.stack([df.snp, ref, tar, cot], axis=1)
+    return dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar', 'cotag']
+                              ).compute()
+
+
+# ----------------------------------------------------------------------
+def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1):
+    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1'],
+                      suffixes=['_ref', '_tar'])
+    nbins = max(mbim.pos)/kbwindow
+    bins = np.linspace(min(mbim.pos), max(mbim.pos) + 1, num=nbins,
+                       endpoint=True)
+    mbim['windows'] = pd.cut(mbim['pos'], bins, labels=bins[1:])
+    delayed_results = [dask.delayed(single_window)(df, rgeno, tgeno)
+                       for window, df in mbim.groupby('windows')]
+    r = list(dask.compute(*delayed_results, num_workers=threads))
+    return r
