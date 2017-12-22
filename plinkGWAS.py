@@ -279,13 +279,14 @@ def st_mod(x, y):
 
 # ----------------------------------------------------------------------
 def load_previous_run(prefix):
-    filename = '%s.data.hdf' % prefix
-    f = h5py.File(filename, 'r')
+    pfn = '%s_phenos.hdf5' % prefix
+    gfn = '%s.geno.hdf5' % prefix
+    f = h5py.File(gfn, 'r')
     chunks = np.load('chunks.npy')
     x_train = da.from_array(f.get('x_train'), chunks=chunks[0])
     x_test = da.from_array(f.get('x_test'), chunks=chunks[1])
-    y_train = da.from_array(f.get('y_train'), chunksize=chunks[0][0])
-    y_test = da.from_array(f.get('y_test'), chunksize=chunks[1][0])
+    y_train = pd.read_hdf(pfn, key='y_train')
+    y_test = pd.read_hdf(pfn, key='y_test')
     res = pd.read_csv('%s.gwas' % prefix, sep='\t')
     return res, x_train, x_test, y_train, y_test
 
@@ -306,8 +307,9 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     """
     print('Performing GWAS')
     now = time.time()
-    filename = '%s.data.hdf' % prefix
-    if os.path.isfile(filename):
+    pfn = '%s_phenos.hdf5' % prefix
+    gfn = '%s.geno.hdf5' % prefix
+    if os.path.isfile(pfn):
         res, x_train, x_test, y_train, y_test = load_previous_run(prefix)
         # f = h5py.File(filename, 'r')
         # x_train = da.from_array(f.get('x_train'))
@@ -364,15 +366,16 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                            alpha=0.05)
         # write files
         res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
-        labels = ['/x_train', '/x_test', '/y_train', '/y_test']
-        prearrays = [x_train, x_test,
-                     dd.from_pandas(y_train, chunksize=x_train.chunks[0][0]),
-                     dd.from_pandas(y_test, chunksize=x_test.chunks[0][0])]
+
+        labels = ['/x_train', '/x_test']
+        arrays = [x_train, x_test]
+        y_train.to_hdf(pfn, 'y_train', table=True, mode='a')
+        y_test.to_hdf(pfn, 'y_test', table=True, mode='a')
         chunks = np.array([x_train.chunks[0], x_test.chunks[0]])
         np.save('chunks.npy', chunks)
         #arrays = [chunks] + prearrays
-        data = dict(zip(labels, prearrays))
-        da.to_hdf5('%s.data.hdf' % prefix, data)
+        data = dict(zip(labels, arrays))
+        da.to_hdf5(gfn, data)
     print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
     return res, x_train, x_test, y_train, y_test
 
