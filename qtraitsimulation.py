@@ -35,8 +35,6 @@ def get_SNP_dist(bfile, causals):
 
 
 # ----------------------------------------------------------------------
-# TODO: Inlcude frequency filtering
-
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.1, seed=None, causaleff=None, uniform=False, usepi=False,
              snps=None, threads=1):
@@ -128,6 +126,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     if causaleff is None:
         # chunks = estimate_chunks((ncausal,), threads)
         pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
+        while not np.allclose(pre_beta.var(), std, rtol=1E-4, atol=1E-4 ):
+            pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
         # pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
         # Store them
         causals['beta'] = pre_beta  # .compute()
@@ -285,7 +285,8 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
         env_effect = np.zeros(nind)
     else:
         va = prs_true.gen_eff.var()
-        std = np.sqrt((va / h2) - va)
+        # std = np.sqrt((va / h2) - va)
+        std = np.sqrt(1 - va)
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
         # for small sample sizes force to be close to the expected heritability
         # while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
