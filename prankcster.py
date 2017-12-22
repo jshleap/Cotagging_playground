@@ -494,15 +494,17 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, sumstats=None, cotag=None,
     elif isinstance(cotag, str):
         sorted_cotag = pd.read_table(cotag, sep='\t')
     elif cotag is None:
-        D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
-        D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
-        cot = da.diag(da.dot(D_r, D_t))
-        ref = da.diag(da.dot(D_r, D_r))
-        tar = da.diag(da.dot(D_t, D_t))
-        stacked = da.stack([tbim.snp, ref, tar, cot], axis=1)
-        cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
-                                                      'cotag']).compute(
-            num_tasks=threads)
+        cotags = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=kwargs['window'],
+                        threads=threads)
+        # D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
+        # D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
+        # cot = da.diag(da.dot(D_r, D_t))
+        # ref = da.diag(da.dot(D_r, D_r))
+        # tar = da.diag(da.dot(D_t, D_t))
+        # stacked = da.stack([tbim.snp, ref, tar, cot], axis=1)
+        # cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
+        #                                               'cotag']).compute(
+        #     num_tasks=threads)
         cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
 
     nsnps = sorted_cotag.shape[0]
@@ -633,6 +635,8 @@ if __name__ == '__main__':
     parser.add_argument('-g', '--strategy', default='sum', help=(
         'Strategy to produce the hybrid measure. Currently available is '
         'weighted sum (sum)'))
+    parser.add_argument('--window', default=1000, help='kbwindow for ld',
+                        type=int)
     args = parser.parse_args()
     prankcster(args.prefix, args.target, args.reference, args.cotagfn,
                args.target_ppt, args.ref_ppt, args.sumstats, args.pheno,
