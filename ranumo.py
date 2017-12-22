@@ -453,7 +453,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
                          bfile2=refgeno, validate=kwargs['split']))
         tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate=3, threads=threads, bim=rbim))
+                         validate=kwargs['split'], threads=threads, bim=rbim))
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_plink(refgeno)

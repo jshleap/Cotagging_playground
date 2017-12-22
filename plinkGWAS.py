@@ -16,9 +16,10 @@ import pandas as pd
 from dask.array.core import Array
 import dask
 from pandas_plink import read_plink
+from collections import namedtuple
 from scipy import stats
 import h5py
-
+import statsmodels.api as sm
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
@@ -259,10 +260,40 @@ def regression_iter(x, y, threads):
         yield x[:, i].compute(num_workers=threads), y.compute(
             num_workers=threads)
 
+# ----------------------------------------------------------------------
+@jit
+def st_mod(x, y):
+    X = sm.add_constant(x)
+    model = sm.OLS(y, X)
+    results = model.fit()
+    cols = ['slope', 'intercept', 'r_value', 'p_value', 'std_err', 'b_pval',
+            'b_std_err']
+    LinregressResult = namedtuple('LinregressResult', cols)
+    slope, intercept = results.params
+    p_value, b_pval = results.pvalues
+    r_value = results.rsquared_adj
+    std_err, b_std_err = results.bse
+    return LinregressResult(slope, intercept, r_value, p_value, std_err, b_pval,
+                            b_std_err)
+
+
+# ----------------------------------------------------------------------
+def load_previous_run(prefix):
+    filename = '%s.data.hdf' % prefix
+    f = h5py.File(filename, 'r')
+    chunks = np.load('chunks.npy')
+    x_train = da.from_array(f.get('x_train'), chunks=chunks[0])
+    x_test = da.from_array(f.get('x_test'), chunks=chunks[1])
+    y_train = da.from_array(f.get('y_train'), chunksize=chunks[0][0])
+    y_test = da.from_array(f.get('y_test'), chunksize=chunks[1][0])
+    res = pd.read_csv('%s.gwas' % prefix, sep='\t')
+    return res, x_train, x_test, y_train, y_test
+
 
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
-                    causal_pos=None, plot=False, threads=cpu_count(), **kwargs):
+                    causal_pos=None, plot=False, threads=cpu_count(),
+                    stmd=False, **kwargs):
     """
     Compute the least square regression for a genotype in a phenotype. This
     assumes that the phenotype has been computed from a nearly independent set
@@ -277,12 +308,13 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     now = time.time()
     filename = '%s.data.hdf' % prefix
     if os.path.isfile(filename):
-        f = h5py.File(filename, 'r')
-        x_train = da.from_array(f.get('x_train'))
-        X_test = da.from_array(f.get('X_test'))
-        y_train = da.from_array(f.get('y_train'))
-        y_test = da.from_array(f.get('y_test'))
-        res = pd.read_csv('%s.gwas' % prefix, sep='\t')
+        res, x_train, x_test, y_train, y_test = load_previous_run(prefix)
+        # f = h5py.File(filename, 'r')
+        # x_train = da.from_array(f.get('x_train'))
+        # x_test = da.from_array(f.get('x_test'))
+        # y_train = da.from_array(f.get('y_train'))
+        # y_test = da.from_array(f.get('y_test'))
+        # res = pd.read_csv('%s.gwas' % prefix, sep='\t')
     else:
         if 'bfile' in kwargs:
             bfile = kwargs['bfile']
@@ -304,7 +336,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
             pheno, gen = qtraits_simulation(prefix, **kwargs)
             (geno, bim, truebeta, vec) = gen
         x = geno.rechunk((geno.shape[0], geno.chunks[1]))
-        y = pheno
+        try:
+            y = pheno.compute(num_workers=threads)
+        except AttributeError:
+            y = pheno
         #y = dd.from_pandas(pheno, chunksize=geno.shape[0])  # .reshape(-1,1)
         if validate:
             print('making the crossvalidation data')
@@ -317,12 +352,11 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
         x_train = x_train.rechunk(chunks)
         #y_train = y_train.rechunk(chunks[0])
         print('using dask delayed')
-        delayed_results = [dask.delayed(lr)(x_train[:, i], y_train.PHENO) for i
+        func = st_mod if stmd else lr
+        delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO) for i
                            in range(x_train.shape[1])]
         r = list(dask.compute(*delayed_results, num_workers=threads))
-        res = pd.DataFrame.from_records(r, columns=['slope', 'intercept',
-                                                    'r_value', 'p_value',
-                                                    'std_err'])
+        res = pd.DataFrame.from_records(r, columns=r[0]._fields)
         res['snp'] = bim.snp
         # Make a manhatan plot
         if plot:
@@ -330,8 +364,14 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                            alpha=0.05)
         # write files
         res.to_csv('%s.gwas' % prefix, sep='\t', index=False)
-        data = dict(zip(['/x_train', '/x_test', '/y_train', '/y_test'],
-                         [x_train, x_test, y_train, y_test]))
+        labels = ['/x_train', '/x_test', '/y_train', '/y_test']
+        prearrays = [x_train, x_test,
+                     dd.from_pandas(y_train, chunksize=x_train.chunks[0][0]),
+                     dd.from_pandas(y_test, chunksize=x_test.chunks[0][0])]
+        chunks = np.array([x_train.chunks[0], x_test.chunks[0]])
+        np.save('chunks.npy', chunks)
+        #arrays = [chunks] + prearrays
+        data = dict(zip(labels, prearrays))
         da.to_hdf5('%s.data.hdf' % prefix, data)
     print('GWAS DONE after %.2f seconds !!' % (time.time() - now))
     return res, x_train, x_test, y_train, y_test
