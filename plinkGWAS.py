@@ -369,8 +369,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
 
         labels = ['/x_train', '/x_test']
         arrays = [x_train, x_test]
-        y_train.to_hdf(pfn, 'y_train', table=True, mode='a')
-        y_test.to_hdf(pfn, 'y_test', table=True, mode='a')
+        y_train.to_hdf(pfn, 'y_train', table=True, mode='a', format="table")
+        y_test.to_hdf(pfn, 'y_test', table=True, mode='a', format="table")
         chunks = np.array([x_train.chunks[0], x_test.chunks[0]])
         np.save('chunks.npy', chunks)
         #arrays = [chunks] + prearrays
