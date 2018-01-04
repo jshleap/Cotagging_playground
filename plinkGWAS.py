@@ -26,10 +26,9 @@ from utilities4cotagging import *
 from sklearn.model_selection import train_test_split
 from qtraitsimulation import qtraits_simulation
 from multiprocessing import Pool, cpu_count
-
+from collections import Counter
 plt.style.use('ggplot')
-
-from numba import jit
+from numba import jit, prange
 
 lr = jit(stats.linregress)
 
@@ -263,32 +262,68 @@ def regression_iter(x, y, threads):
 # ----------------------------------------------------------------------
 @jit
 def st_mod(x, y):
-    X = sm.add_constant(x)
-    model = sm.OLS(y, X)
-    results = model.fit()
     cols = ['slope', 'intercept', 'r_value', 'p_value', 'std_err', 'b_pval',
-            'b_std_err']
+           'b_std_err']
     LinregressResult = namedtuple('LinregressResult', cols)
-    slope, intercept = results.params
-    p_value, b_pval = results.pvalues
-    r_value = results.rsquared_adj
-    std_err, b_std_err = results.bse
+    if np.allclose(x.var(), 0.0):
+        slope = intercept = p_value = b_pval = r_value = std_err = b_std_err = np.nan
+    else:
+        X = sm.add_constant(x)
+        model = sm.OLS(y, X)
+        results = model.fit()
+        intercept, slope = results.params
+        b_pval, p_value = results.pvalues
+        r_value = results.rsquared
+        b_std_err, std_err,  = results.bse
     return LinregressResult(slope, intercept, r_value, p_value, std_err, b_pval,
                             b_std_err)
 
 
 # ----------------------------------------------------------------------
-def load_previous_run(prefix):
+def load_previous_run(prefix, threads):
+    # TODO: not working check chinks
     pfn = '%s_phenos.hdf5' % prefix
     gfn = '%s.geno.hdf5' % prefix
     f = h5py.File(gfn, 'r')
     chunks = np.load('chunks.npy')
-    x_train = da.from_array(f.get('x_train'), chunks=chunks[0])
-    x_test = da.from_array(f.get('x_test'), chunks=chunks[1])
+    chunks = [estimate_chunks(i, threads) for i in chunks]
+    x_train = da.from_array(f.get('x_train'), chunks=tuple(chunks[0]))
+    x_test = da.from_array(f.get('x_test'), chunks=tuple(chunks[1]))
     y_train = pd.read_hdf(pfn, key='y_train')
     y_test = pd.read_hdf(pfn, key='y_test')
     res = pd.read_csv('%s.gwas' % prefix, sep='\t')
     return res, x_train, x_test, y_train, y_test
+
+
+# ----------------------------------------------------------------------
+@jit(parallel=True)
+def func(snp):
+    if np.unique(snp).shape[0] < 3:
+        nsnp = snp
+    else:
+        c = np.bincount(snp) / snp.shape[0]
+        frq = c[0] + (0.5 * c[1])
+        ofrq = c[2] + (0.5 * c[1])
+        if frq > ofrq:
+            nsnp = da.from_array((snp - 2) * -1, chunks=snp.chunks)
+        else:
+            nsnp = snp
+    return nsnp
+
+
+# ----------------------------------------------------------------------
+@jit(parallel=True)
+def flip(G):
+    print('fixing possible flips (this might take a while)')
+    #delayed_results = [dask.delayed(func)(G[i, :]) for i in range(G.shape[0])]
+    #r = list(dask.compute(*delayed_results, num_workers=threads))
+    #p = Pool(threads); r = p.map(func, (G[i,:] for i in range(G.shape[0])))
+    r = []
+    rppend = r.append
+    for i in prange(G.shape[0]):
+        rppend(func(G[i, :]))
+    darray = da.stack(r)
+    return darray
 
 
 # ----------------------------------------------------------------------
@@ -310,7 +345,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
     pfn = '%s_phenos.hdf5' % prefix
     gfn = '%s.geno.hdf5' % prefix
     if os.path.isfile(pfn):
-        res, x_train, x_test, y_train, y_test = load_previous_run(prefix)
+        res, x_train, x_test, y_train, y_test = load_previous_run(prefix,
+                                                                  threads)
         # f = h5py.File(filename, 'r')
         # x_train = da.from_array(f.get('x_train'))
         # x_test = da.from_array(f.get('x_test'))
@@ -326,7 +362,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
         print('using seed %d' % seed)
         np.random.seed(seed=seed)
         if isinstance(geno, str):
-            (bim, fam, geno) = read_plink(bfile)
+            (bim, fam, geno) = read_plink(geno)
             geno = geno.T
             geno = (geno - geno.mean(axis=0)) / geno.std(axis=0)
         else:
@@ -337,6 +373,9 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
         if pheno is None:
             pheno, gen = qtraits_simulation(prefix, **kwargs)
             (geno, bim, truebeta, vec) = gen
+        elif isinstance(pheno, str):
+            pheno = pd.read_table(pheno, delim_whitespace=True, header=None,
+                                  names=['fid', 'iid', 'PHENO'])
         x = geno.rechunk((geno.shape[0], geno.chunks[1]))
         try:
             y = pheno.compute(num_workers=threads)
@@ -349,6 +388,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                 x, y, test_size=1 / validate, random_state=seed)
         else:
             x_train, x_test, y_train, y_test = x, x, y, y
+        # write test and train IDs
+        opts = dict(sep=' ', index=False, header=False)
+        y_test.to_csv('%s_testIDs.txt' % prefix, **opts)
+        y_train.to_csv('%s_trainIDs.txt' % prefix, **opts)
         chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
                                ).astype(int))
         x_train = x_train.rechunk(chunks)
@@ -359,8 +402,13 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
                            in range(x_train.shape[1])]
         r = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.DataFrame.from_records(r, columns=r[0]._fields)
-        res['snp'] = bim.snp
-        # Make a manhatan plot
+        assert res.shape[0] == bim.shape[0]
+        res = pd.concat((res, bim), axis=1)
+        # check if flips
+        # if 'flip' in res.columns:
+        #     res['slope_old'] = res.slope
+        #     res.loc[res.flip, 'slope'] = res[res.flip].slope * -1
+        # # Make a manhatan plot
         if plot:
             manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
                            alpha=0.05)
@@ -371,7 +419,9 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
         arrays = [x_train, x_test]
         y_train.to_hdf(pfn, 'y_train', table=True, mode='a', format="table")
         y_test.to_hdf(pfn, 'y_test', table=True, mode='a', format="table")
-        chunks = np.array([x_train.chunks[0], x_test.chunks[0]])
+        assert len(x_train.shape) == 2
+        assert len(x_test.shape) == 2
+        chunks = np.array([x_train.shape, x_test.shape])
         np.save('chunks.npy', chunks)
         #arrays = [chunks] + prearrays
         data = dict(zip(labels, arrays))
@@ -390,7 +440,7 @@ if __name__ == '__main__':
                         )
     parser.add_argument('-a', '--allele_file', default='EUR.allele',
                         help='File with the allele order. A1 in position 3 and '
-                             'id in position2', required=True)
+                             'id in position2')
     parser.add_argument('-v', '--validate', default=None, type=int)
     parser.add_argument('-V', '--validsnpsfile', default=None)
     parser.add_argument('-C', '--covs', default=None, action='store')
@@ -401,9 +451,11 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-t', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=1700, type=int)
+    parser.add_argument('--use_statsmodels', action='store_true')
     args = parser.parse_args()
     plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
-                    plot=args.plot, threads=args.threads, seed=args.seed)
+                    plot=args.plot, threads=args.threads, seed=args.seed,
+                    stmd=args.use_statsmodels)
     # plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
     #            args.allele_file,  covs=args.covs, nosex=args.nosex,
     #            threads=args.threads, maxmem=args.maxmem, validate=args.validate,

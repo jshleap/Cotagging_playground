@@ -437,9 +437,8 @@ def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
     if not os.path.isfile(picklfn):
         d, r, qr, merge = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats,
                                   phenofile, alphastep, plinkexe, tar,
-                                  prune_step,
-                                  qrangefn, maxmem, threads, strategy, every,
-                                  score_type)
+                                  prune_step, qrangefn, maxmem, threads,
+                                  strategy, every, score_type)
         df = pd.concat(d)
         df.to_csv(outfn, sep='\t', index=False)
         with open(picklfn, 'wb') as F:

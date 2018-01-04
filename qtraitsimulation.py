@@ -59,37 +59,26 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
     # read rhe genotype files
-    (bim, fam, G) = read_geno(bfile)
+    (bim, fam, G) = read_geno(bfile, f_thr, threads)
     # get MAFs
     m, n = G.shape
-    mafs = G.sum(axis=1) / (2 * n)
-    if f_thr > 0:
-        # filter by MAF
-        good = (mafs < (1 - f_thr)) & (mafs > f_thr)
-        good = good.compute(num_workers=threads)
-        G = G[good, :]
-        bim = bim[good].reset_index(drop=True)
-        bim['i'] = bim.index.tolist()
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
-        (bim2, fam2, G2) = read_geno(bfile2)
-        mafs2 = G2.sum(axis=1) / (2 * G2.shape[1])
-        good2 = ((mafs2 < (1 - f_thr)) & (mafs2 > f_thr)).compute(
-            num_workers=threads)
-        indices = bim.snp.isin(bim2[good2].snp)
-        # bim = bim.merge(bim2, on=bim.columns.tolist())
+        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads)
+        indices = bim.snp.isin(bim2.snp)
         # subset the genotype file
-        G = G[indices.tolist(), :]
+        G = G[:, indices.tolist()]
         bim = bim[indices].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
-    pi = G.var(axis=1).mean() if usepi else 1
+    pi = G.var(axis=0).mean() if usepi else 1
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
-        G = (G.T - G.mean(axis=1)) / G.std(axis=1)
-    else:
-        # Transpose G so is n x m
-        G = G.transpose()
+        # G = (G.T - G.mean(axis=1)) / G.std(axis=1)
+        G = (G - G.mean(axis=0)) / G.std(axis=0)
+    # else:
+    #     # Transpose G so is n x m
+    #     G = G.transpose()
     # Set some local variables
     allele = '%s.alleles' % prefix
     totalsnps = '%s.totalsnps' % prefix
@@ -134,7 +123,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals = causals.dropna()
     nc = causals.reindex(columns=['snp', 'beta'])
     bidx = bim[bim.snp.isin(nc.snp)].index.tolist()
-    bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i'])
+    bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i',
+                               'mafs', 'flip'])
     bim.loc[bidx, 'beta'] = nc.beta.values.tolist()
     print(bim.dropna().head())
     idx = bim.dropna().i.values
@@ -230,7 +220,7 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
             #    g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
             causals.loc[:, 'eff'] = g_eff
         # write snps and effect to score file
-        mafs = causals.loc[:, maf]
+        mafs = causals.maf
         causals.loc[:, 'norm'] = np.sqrt(2 * mafs * (1 - mafs))
         causals.loc[:, 'beta'] = causals.loc[:, 'eff'] / causals.norm
         scfile = causals.sort_index()
@@ -309,7 +299,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     prs_true.to_csv(outfn, sep='\t', compression='gzip', index=False)
     ofn = '%s.pheno' % prefix
     opts = dict(sep=' ', header=False, index=False)
-    prs_true.reindex(columns=['FID', 'IID', 'PHENO']).to_csv(ofn, **opts)
+    prs_true.reindex(columns=['fid', 'iid', 'PHENO']).to_csv(ofn, **opts)
     # return the dataframe
     return prs_true
 
@@ -359,8 +349,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     :param bool uniform: pick uniformingly distributed causal variants
     """
     now = time.time()
-    print("Performing simulation with h2=%.2f, and %d causal variants" % (h2,
-                                                                          ncausal))
+    line = "Performing simulation with h2=%.2f, and %d causal variants"
+    print(line % (h2, ncausal))
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)

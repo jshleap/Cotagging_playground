@@ -290,13 +290,35 @@ def helper_smartsort2(grouped, key):
 
 
 # ---------------------------------------------------------------------------
-def read_geno(bfile):
+def read_geno(bfile, freq_thresh, threads):
     (bim, fam, G) = read_plink(bfile)
     # remove constant variants
-    G_std = G.std(axis=1).compute()
+    G_std = G.std(axis=1).compute(num_workers=threads)
+    m, n = G.shape
+    # remove invariant sites
     idx = (G_std != 0)
     G = G[idx, :]
-    bim = bim[idx].reset_index(drop=True)
+    bim = bim[idx]
+    mafs = G.sum(axis=1) / (2 * n)
+    bim['mafs'] = mafs
+    # check possible flips
+    flips = np.zeros(bim.shape[0], dtype=bool)
+    flips[np.where(mafs > 0.5)[0]] = True
+    bim['flip'] = flips
+    vec = np.zeros(flips.shape[0])
+    vec[flips] = 2
+    # perform the flipping
+    G = abs(G.T - vec)
+    # bim[flips].a0= bim[flips].a1
+    # bim[flips, 'a1'] = bim[flips, 'a0']
+    # Filter MAF
+    if freq_thresh > 0:
+        good = (mafs < (1 - freq_thresh)) & (mafs > freq_thresh)
+        good = good.compute(num_workers=threads)
+        G = G[:, good]
+        bim = bim[good]#.reset_index(drop=True)
+    bim = bim.reset_index(drop=True)
+    bim['i'] = bim.index.tolist()
     return bim, fam, G
 
 
@@ -317,7 +339,8 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        grouped = gwascotag.groupby(column, as_index=False).first()
+        grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
+            column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
         tail = gwascotag[~gwascotag.snp.isin(grouped.snp)]
         # keys = sorted(grouped.groups.keys(), reverse=True)
@@ -645,6 +668,9 @@ def single_window(df, rgeno, tgeno):
     cot = da.diag(da.dot(D_r, D_t))
     ref = da.diag(da.dot(D_r, D_r))
     tar = da.diag(da.dot(D_t, D_t))
+    # cot = D_r * D_t
+    # ref = D_r**2
+    # tar = D_t**2
     stacked = da.stack([df.snp, ref, tar, cot], axis=1)
     return dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar', 'cotag']
                               ).compute()
@@ -654,11 +680,12 @@ def single_window(df, rgeno, tgeno):
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1):
     mbim = rbim.merge(tbim, on=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1'],
                       suffixes=['_ref', '_tar'])
-    nbins = max(mbim.pos)/kbwindow
-    bins = np.linspace(min(mbim.pos), max(mbim.pos) + 1, num=nbins,
-                       endpoint=True)
-    mbim['windows'] = pd.cut(mbim['pos'], bins, labels=bins[1:])
+    nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+    bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
+                       )
+    mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
     delayed_results = [dask.delayed(single_window)(df, rgeno, tgeno)
                        for window, df in mbim.groupby('windows')]
     r = list(dask.compute(*delayed_results, num_workers=threads))
+    r = pd.concat(r)
     return r

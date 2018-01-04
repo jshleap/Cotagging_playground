@@ -473,8 +473,8 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     elif isinstance(cotagfn, pd.core.frame.DataFrame):
         cotags = cotagfn
     else:
-        cotags = pd.concat(get_ld(rgeno, rbim, tgeno, tbim,
-                                  kbwindow=kwargs['window'], threads=threads))
+        cotags = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=kwargs['window'],
+                        threads=threads)
         # D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
         # D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
         # cot = da.diag(da.dot(D_r, D_t))
@@ -492,26 +492,33 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     # Cotagging
     sortedcot, beforetail = smartcotagsort(prefix, gwas, column='cotag',
                                            ascending=False)
-    sortedcot = sortedcot.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+    assert sortedcot[sortedcot.snp.isin(tbim)].i.equals(tbim[tbim.snp.isin(
+        sortedcot)].i)
+    sortedcot = sortedcot.merge(tbim.reindex(columns=['snp', 'i']), on=['snp',
+                                                                        'i'])
 
     # Tagging Target
     params = dict(column='tar', ascending=False)
     sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
     # sortedtagT['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
     #                            sortedtagT.snp]
-    sortedtagT = sortedtagT.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
-
+    assert sortedtagT[sortedtagT.snp.isin(tbim)].i.equals(
+        tbim[tbim.snp.isin(sortedtagT)].i)
+    sortedtagT = sortedtagT.merge(tbim.reindex(columns=['snp', 'i']), on=['snp',
+                                                                          'i'])
     # Tagging Reference
     params.update(dict(column='ref'))
     sortedtagR, beforetailR = smartcotagsort(prefix, gwas, **params)
-    sortedtagR = sortedtagR.merge(rbim.reindex(columns=['snp', 'i']), on='snp')
-
+    assert sortedtagR[sortedtagR.snp.isin(tbim)].i.equals(
+        tbim[tbim.snp.isin(sortedtagR)].i)
+    sortedtagR = sortedtagR.merge(rbim.reindex(columns=['snp', 'i']), on=['snp',
+                                                                          'i'])
     # Random model
     rand = gwas.sample(frac=1).reset_index(drop=True)
     rand['rand_index'] = rand.index.tolist()
     random, beforetailrand = smartcotagsort(prefix, rand, column='rand_index',
                                            ascending=False)
-    random = random.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+    random = random.merge(tbim.reindex(columns=['snp', 'i']), on=['snp', 'i'])
     # make sure that all have the same total SNPS
     assert sorted(sortedtagT.snp) == sorted(sortedcot.snp)
     assert sorted(sortedtagT.snp) == sorted(sortedtagR.snp)
@@ -527,7 +534,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
                        kwargs['r_range'], kwargs['p_tresh'], bim=rbim,
                        split=kwargs['split'])[-1]
         params.update(dict(column='index', ascending=True))
-        ppt_r, _ = smartcotagsort(prefix, ppt_r, **params)
+        ppt_r, _ = smartcotagsort('%s_%s' % (prefix, refl), ppt_r, **params)
         # # get the full lenght with apropriate inidces
         # tagged_r = [y for x in ppt_r for y in x if y]
         # tagged_r = sumstats[sumstats.snp.isin(tagged_r)].reindex(
@@ -540,7 +547,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         ppt_t = pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats,
                        kwargs['r_range'], kwargs['p_tresh'], bim=tbim,
                        split=kwargs['split'])[-1]
-        ppt_t, _ = smartcotagsort(prefix, ppt_t, **params)
+        ppt_t, _ = smartcotagsort('%s_%s' % (prefix, tarl), ppt_t, **params)
         # # get the full lenght with apropriate inidces
         # tagged_t = [y for x in ppt_r for y in x if y]
         # tagged_t = sumstats[sumstats.snp.isin(tagged_t)].reindex(
@@ -561,6 +568,9 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     # prune tag ref
     results.append(prune_it(sortedtagR, X_test, y_test, 'Tagging %s' % refl,
                             step=prunestep, threads=threads))
+    results.append(
+        prune_it(sortedtagR, tgeno, tpheno, 'Tagging %s on tar' % refl,
+                 step=prunestep, threads=threads))
     # prune and score the random model
     results.append(prune_it(random, tgeno, tpheno, 'Random', step=prunestep,
                             threads=threads))
