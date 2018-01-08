@@ -276,7 +276,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     else:
         va = prs_true.gen_eff.var()
         # std = np.sqrt((va / h2) - va)
-        std = np.sqrt(1 - va)
+        std = np.sqrt(max(1 - va, 0))
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
         # for small sample sizes force to be close to the expected heritability
         # while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
@@ -288,7 +288,10 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
     # Check that the estimated heritability matches the expected one
     est_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
-    print('Estimated heritability (Va/Vp) : %.4f' % est_h2)
+    line = 'Estimated heritability (Va/Vp) : %.4f' % est_h2
+    with open('realized_h2.txt', 'w') as F:
+        F.write(line)
+        print(line)
     den = prs_true.gen_eff.var() + prs_true.env_eff.var()
     est_h2 = prs_true.gen_eff.var() / den
     print('Estimated heritability (Va/(Va + Ve)) : %.4f' % est_h2)

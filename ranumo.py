@@ -475,16 +475,6 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     else:
         cotags = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=kwargs['window'],
                         threads=threads)
-        # D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
-        # D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
-        # cot = da.diag(da.dot(D_r, D_t))
-        # ref = da.diag(da.dot(D_r, D_r))
-        # tar = da.diag(da.dot(D_t, D_t))
-        # stacked = da.stack([mbim.snp, ref, tar, cot], axis=1)
-        # cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
-        #                                               'cotag']).compute(
-        #     num_tasks=threads)
-
         cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
     gwas = cotags.merge(sumstats, on='snp')
     # Sort the sumstats based on scores

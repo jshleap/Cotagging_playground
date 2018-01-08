@@ -51,6 +51,7 @@ def strategy_hyperbola(x, y, alpha):
 
 
 # ----------------------------------------------------------------------
+@jit
 def strategy_sum(x, y, alpha):
     """
     strategy for new rank with hypergeometry
@@ -59,7 +60,9 @@ def strategy_sum(x, y, alpha):
     :param :class pd.Series y: Series with the second range to be combined
     :param float alpha: Float with the weight to be combined by
     """
-    return (alpha * x) + ((1 - alpha) * y)
+    rank = (alpha * x) + ((1 - alpha) * y)
+    alphas = [alpha] * len(rank)
+    return pd.DataFrame({'New_rank':rank, 'alpha':alphas})
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +356,8 @@ def prankcster_plink(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     train, test = cv.keys()
     phe_tr, phe_te = [x[1] for x in cv.values()]
     # Optimize the alphas
-    df, qrange, qr, merged = optimize_alpha_plink(prefix, train, sorted_cotag, clumpe,
+    df, qrange, qr, merged = optimize_alpha_plink(prefix, train, sorted_cotag,
+                                                  clumpe,
                                             scorefn, phe_tr, plinkexe,
                                             alpha_step, tar, prune_step,
                                             qrangefn, maxmem, threads, strategy,
@@ -407,60 +411,78 @@ def prankcster_plink(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
 
 
 # ---------------------------------------------------------------------------
-def optimize_alpha(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
-                   plinkexe, alphastep, tar, prune_step=1, qrangefn=None,
-                   maxmem=1700, threads=1, strategy='sum', every=False,
-                   score_type='SUM'):
+def optimize_alpha(prefix, bfile, pheno, merged, alphastep, prune_step=1,
+                   threads=1, index_type='cotag'):
     """
     Do a line search for the best alpha in nrank = alpha*rankP+T + (1-alpha)*cot
 
     :param str prefix: Prefix for outputs
-    :param str bfile: Prefix of plink-bed fileset
+    :param dask bfile: Dask array with genotype
     :param :class pd.Dataframe sorted_cotag:Filename with results in the sorting
-    :param list clumpe: List of tuples with the P+T results
-    :param str sumstats: File with the summary statistics in plink format
-    :param str phenofile: Filename with the phenotype
+    :param :class pd.Dataframe clumpe: Dataframe of merged P+T results
+    :param str sumstats: File with the summary statistics
+    :param :class pd.Dataframe phenofile: Dataframe with the phenotype
     :param float alphastep: Step of the alpha to be explored
-    :param str plinkexe: Path and executable of plink
     :param str tar: Label of target population
     :param int prune_step: Step of the prunning
-    :param str qrangefn: Filename of a previously made qrange
-    :param int maxmem: Maximum allowed memory
     :param int trheads: Maximum number of threads to use
     :param str strategy: Suffix of the function with the selection strategy
-    :param bool every: test one snp at a time
     """
     # Set output name
     outfn = '%s_optimized.tsv' % prefix
     picklfn = '%s_optimized.pickle' % prefix
     # Execute the ranking
     if not os.path.isfile(picklfn):
-        d, r, qr, merge = rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats,
-                                  phenofile, alphastep, plinkexe, tar,
-                                  prune_step, qrangefn, maxmem, threads,
-                                  strategy, every, score_type)
-        df = pd.concat(d)
-        df.to_csv(outfn, sep='\t', index=False)
+        # Generate the alpha-space
+        space = np.concatenate(
+            (np.array([0, 0.05]), np.arange(0.1, 1 + alphastep,
+                                            alphastep)))
+        x = merged.loc[:,'index_PpT']
+        y = merged.loc[:,'index_%s' % index_type]
+        print('computing weighted sum')
+        res = Parallel(n_jobs=int(threads))(
+            delayed(strategy_sum)(x, y, alpha) for alpha in tqdm(space))
+        df = pd.concat(res)
+        # score it
+        opts = dict(step=int(prune_step), threads=threads)
+        scored = pd.DataFrame()
+        datas = pd.DataFrame()
+        grouped = df.groupby('alpha')
+        for label, d in grouped:
+            data = pd.concat((merged, d), axis=1).sort_values(by='New_rank')
+            data['alpha'] = label
+            datas = datas.append(data)
+            scored = scored.append(
+                prune_it(data, bfile, pheno, label, **opts))
+
+        scored.sort_values(by='R2', ascending=False).to_csv(outfn, sep='\t',
+                                                            index=False)
         with open(picklfn, 'wb') as F:
-            pickle.dump((df, r, qr, merge), F)
+            pickle.dump((df, scored, grouped), F)
     else:
         # df = pd.read_table(outfn, sep='\t')
         with open(picklfn, 'rb') as F:
-            df, r, qr, merge = pickle.load(F)
+            df, scored, grouped = pickle.load(F)
     # Plot the optimization
-    piv = df.loc[:, ['SNP kept', 'alpha', 'R2']]
-    piv = piv.pivot(index='SNP kept', columns='alpha', values='R2').sort_index()
+    scored.rename(columns={'type': 'alpha'}, inplace=True)
+    piv = scored.reindex(columns=['Number of SNPs', 'alpha', 'R2'])
+    piv = piv.pivot(index='Number of SNPs', columns='alpha',
+                    values='R2').sort_index()
     piv.plot(colormap='copper', alpha=0.5)
     plt.ylabel('$R^2$')
     plt.tight_layout()
     plt.savefig('%s_alphas.pdf' % (prefix))
     # Returned the sorted result dataframe
-    results = df.sort_values('R2', ascending=False).reset_index(drop=True)
-    return results, r, qr, merge
+    results = scored.sort_values('R2', ascending=False).reset_index(drop=True)
+    gr = datas.groupby('alpha')
+    best = gr.get_group(results.iloc[0].alpha)
+    return results, best
+
 
 # ----------------------------------------------------------------------
-def prankcster(prefix, tbed, rbed, tpheno, labels, sumstats=None, cotag=None,
-               freq_threshold=0.01, splits=3, threads=1, seed=None, **kwargs):
+def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
+               cotag=None, freq_threshold=0.01, splits=3, threads=1, seed=None,
+               **kwargs):
     seed = np.random.randint(1e4) if seed is None else seed
     print('Performing prankcster')
     # Unpack population labels
@@ -481,33 +503,41 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, sumstats=None, cotag=None,
         tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=3, threads=threads, bim=rbim))
-        sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
+        sumstats, X_train, X_test, Y_train, Y_test = plink_free_gwas(**opts)
     # Read summary statistics
-    elif isinstance(sumstats, str):
-        sumstats = pd.read_table(sumstats, delim_whitespace=True)
+    elif ('sumstats' in kwargs) and isinstance(kwargs['sumstats'], str):
+        sumstats = pd.read_table(kwargs['sumstats'], delim_whitespace=True)
     else:
-        assert isinstance(sumstats, pd.DataFrame)
+        assert isinstance(kwargs['sumstats'], pd.core.frame.DataFrame)
+        sumstats = kwargs['sumstats']
+        rgeno = rbed
+        tgeno = tbed
+        tbim = kwargs['tbim']
+        rbim = kwargs['rbim']
+        X_test = kwargs['X_test']
+        Y_test = kwargs['Y_test']
     # Read the cotag scores
     if os.path.isfile('%s_cotags.tsv' % prefix):
-        sorted_cotag = pd.read_table('%s_cotags.tsv' % prefix, sep='\t')
+       cotags = pd.read_table('%s_cotags.tsv' % prefix, sep='\t')
     elif isinstance(cotag, str):
-        sorted_cotag = pd.read_table(cotag, sep='\t')
+       sorted_cotag = pd.read_table(cotag, sep='\t')
     elif cotag is None:
+        try:
+            assert 'sumstats' in kwargs
+        except AssertionError:
+            print('Please provide the sumary statistics as a keyword argument')
         cotags = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=kwargs['window'],
                         threads=threads)
-        # D_r = da.dot(rgeno.T, rgeno) / rgeno.shape[0]
-        # D_t = da.dot(tgeno.T, tgeno) / tgeno.shape[0]
-        # cot = da.diag(da.dot(D_r, D_t))
-        # ref = da.diag(da.dot(D_r, D_r))
-        # tar = da.diag(da.dot(D_t, D_t))
-        # stacked = da.stack([tbim.snp, ref, tar, cot], axis=1)
-        # cotags = dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar',
-        #                                               'cotag']).compute(
-        #     num_tasks=threads)
         cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
-
-    nsnps = sorted_cotag.shape[0]
-    frac_snps = nsnps / 100
+    sorted_cotag, _ = smartcotagsort(prefix, cotags, column='cotag')
+    sorted_cotag = sorted_cotag.merge(
+        sumstats.reindex(columns=['snp', 'i', 'slope']), on='snp')
+    sorted_tagr, _ = smartcotagsort(prefix, cotags, column='ref')
+    sorted_tagr = sorted_tagr.merge(
+        sumstats.reindex(columns=['snp', 'i', 'slope']), on='snp')
+    sorted_tagt, _ = smartcotagsort(prefix, cotags, column='tar')
+    sorted_tagt = sorted_tagt.merge(
+        sumstats.reindex(columns=['snp', 'i', 'slope']), on='snp')
     # Read and sort the P + T results
     if os.path.isfile('%s.sorted_ppt' % tarl):
         clumpetar = pd.read_table('%s.sorted_ppt' % tarl, sep='\t')
@@ -517,77 +547,85 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, sumstats=None, cotag=None,
     if os.path.isfile('%s.sorted_ppt' % refl):
         clumperef = pd.read_table('%s.sorted_ppt' % refl, sep='\t')
     else:
-        clumperef =  pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats,
+        clumperef = pplust('%s_ppt' % refl, X_test, Y_test, sumstats,
                            kwargs['r_range'], kwargs['p_tresh'], bim=tbim)[-1]
     # clumperef = clumperef[clumperef.SNP.isin(frqs.SNP)]
-    clumpe = [(clumpetar, tarl), (clumperef, refl)]
+    clumpe = clumpetar.merge(clumperef, on='snp', suffixes=['_%sPpT' % tarl,
+                                                            '_%sPpT' % refl])
+    # Merge the sorted cotag and the P+T
+    cols = ['snp']
+    if 'i' in clumpetar.columns and 'i' in sorted_cotag.columns:
+        cols += ['i']
+    if 'slope' in clumpetar.columns and 'slope' in sorted_cotag.columns:
+        cols += ['slope']
+        test = sorted_cotag.merge(clumpetar, on='snp', suffixes=['_cotag',
+                                                                 '_PpT'])
+        assert all(test.slope_PpT == test.slope_cotag)
+    merge = sorted_cotag.merge(clumpetar, on=cols, suffixes=['_cotag', '_PpT'])
+    mtagr = sorted_tagr.merge(clumpetar, on=cols, suffixes=['_tagr', '_PpT'])
+    mtagt = sorted_tagt.merge(clumpetar, on=cols, suffixes=['_tagt', '_PpT'])
+
+    # merge = merge.rename(columns={'Index': 'Index_Cotag'})
     # Create crossvalidation
     x_train, x_test, y_train, y_test = train_test_split(tgeno, tpheno,
                                                         test_size=1 / splits,
                                                         random_state=seed)
-
     # Optimize the alphas
-    df, qrange, qr, merged = optimize_alpha(prefix, train, sorted_cotag, clumpe,
-                                            scorefn, phe_tr, plinkexe,
-                                            alpha_step, tar, prune_step,
-                                            qrangefn, maxmem, threads, strategy,
-                                            every, score_type=score_type)
-    best_alpha = df.alpha.iloc[0]
+    z = zip(['cotag', 'tagr', 'tagt'], [merge, mtagr, mtagt])
+    todos = {
+    t[0]: optimize_alpha('%s_%s' % (prefix, t[0]), x_train, y_train, t[1],
+                         alpha_step, prune_step, threads, t[0]) for t in z}
+    # results, best_alpha = optimize_alpha(prefix, x_train, y_train, merge,
+    #                                      alpha_step, prune_step, threads)
     # Score with test-set
-    res_pr = '%s_testset' % prefix
-    best = single_alpha_qr(res_pr, best_alpha, merged, plinkexe, test, scorefn,
-                           qrange, qr, tar, allele_file, maxmem=maxmem,
-                           threads=threads, strategy=strategy,
-                           score_type=score_type)
-    # Get the best alpha of the optimization
-    # grouped = df.groupby('alpha')
-    # best = grouped.get_group(df.loc[0,'alpha'])
-    if isinstance(sortresults, str):
-        prevs = pd.read_table(sortresults, sep='\t')
-    else:
-        prevs = sortresults
-    merged = best.merge(prevs, on='SNP kept')
-    # Get the weighted squares
-    wout = '%s_weighted' % prefix
-    if 'BETA' not in sorted_cotag.columns:
-        gwas = pd.read_table(sumstats, delim_whitespace=True)
-        sortedcotag = sorted_cotag.merge(gwas, on='SNP')
-    else:
-        sortedcotag = sorted_cotag
-    wqfile = weighted_squares(wout, sortedcotag)
-    qdf = qrscore(plinkexe, targetbed, scorefn, qrange, wqfile, allele_file,
-                  wout, qr, maxmem, threads, 'weighted', prefix)
-    merged = merged.merge(qdf, on='SNP kept', suffixes=['_hybrid', '_weighted'])
-    f, ax = plt.subplots()
-    # plot cotagging
-    merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_cotag', label=column,
-                        c='r', s=2, alpha=0.5, ax=ax)
-    merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_clum%s' % tar, ax=ax,
-                        label='Clump Sort %s' % tar, c='k', s=2, alpha=0.5)
-    merged.plot.scatter(x='SNP kept', y=r'$R^{2}$_clum%s' % ref, ax=ax, s=2,
-                        label='Clump Sort %s' % ref, c='0.5', marker='*',
-                        alpha=0.5)
-    merged.plot.scatter(x='SNP kept', y='R2_hybrid', label='Hybrid', c='g', s=2,
-                        alpha=0.5, ax=ax)
-    merged.plot.scatter(x='SNP kept', y='R2_weighted', label='Weighted', s=2,
-                        c='purple', alpha=0.5, ax=ax)
-    if h2 is not None:
-        ax.axhline(h2, c='0.5', ls='--')
-    plt.ylabel('$R^2$')
-    plt.tight_layout()
-    plt.savefig('%s_compare.pdf' % prefix)
-    # Write resulted marged dataframe to file
-    merged.to_csv('%s.tsv' % prefix, sep='\t', index=False)
-
+    opts = dict(step=prune_step, threads=threads)
+    # prune tags
+    # TODO: Check P + T seems that complete LD is not being clumped
+    pre = [prune_it(clumperef, X_test, Y_test, 'PPT %s' % refl, **opts),
+           prune_it(clumpetar, x_test, y_test, 'PPT %s' % tarl, **opts),
+           prune_it(sorted_cotag, x_test, y_test, 'CoTagging', **opts),
+           prune_it(sorted_tagr, x_test, y_test, 'Tagging %s' % refl, **opts),
+           prune_it(sorted_tagt, x_test, y_test, 'Tagging %s' % tarl, **opts)]
+    with open('%s_merged.pickle' % prefix, 'wb') as F:
+        pickle.dump(pre, F)
+    dfs = []
+    for lab, best_alpha in todos.items():
+        alpha = prune_it(best_alpha[1], x_test, y_test, 'hybrid %s' % lab,
+                         **opts)
+        res = pd.concat([alpha] + pre)
+        dfs.append((lab, res))
+    # plot
+    for lab, res in dfs:
+        colors = iter(['r', 'b', 'm', 'g', 'c', 'k','y'])
+        f, ax = plt.subplots()
+        for t, df in res.groupby('type'):
+            df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True,
+                    s=3, c=next(colors), ax=ax, label=t)
+        plt.tight_layout()
+        plt.savefig('%s_%s_prankcster.pdf' % (prefix, lab))
+        plt.close()
+        res.to_csv('%s_%s_cotag.tsv' % (prefix, lab), sep='\t', index=False)
+    return pre
 
 if __name__ == '__main__':
+    class Store_as_arange(argparse._StoreAction):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = np.arange(values[0], values[1], values[2])
+            return super().__call__(parser, namespace, values, option_string)
+
+
+    class Store_as_array(argparse._StoreAction):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = np.array(values)
+            return super().__call__(parser, namespace, values, option_string)
+
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-p', '--prefix', help='prefix for outputs',
                         required=True)
     parser.add_argument('-a', '--allele_file', default='EUR.allele',
                         help='File with the allele order. A1 in position 3 and '
-                             'id in position2', required=True)
+                             'id in position2')
     parser.add_argument('-b', '--reference', required=True,
                         help=('prefix of the bed fileset in reference'))
     parser.add_argument('-c', '--target', required=True,
@@ -600,15 +638,14 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--ref_ppt', default=None,
                         help=('Filename with results for the P+Toptimization in'
                               ' the reference population'))
-    parser.add_argument('-R', '--sortresults', required=True,
-                        help=('Filename with results in the sorting inlcuding '
-                              'path'))
-    parser.add_argument('-d', '--cotagfn', required=True,
+    parser.add_argument('-R', '--sortresults', help=(
+        'Filename with results in the sorting inlcuding path'))
+    parser.add_argument('-d', '--cotagfn', default=None,
                         help=('Filename tsv with cotag results'))
-    parser.add_argument('-s', '--sumstats', required=True,
+    parser.add_argument('-s', '--sumstats', default=None,
                         help=('Filename of the summary statistics in plink '
                               'format'))
-    parser.add_argument('-f', '--pheno', required=True,
+    parser.add_argument('-f', '--pheno', default=None,
                         help=('Filename of the true phenotype of the target '
                               'population'))
     parser.add_argument('-S', '--alpha_step', default=0.1, type=float,
@@ -636,12 +673,26 @@ if __name__ == '__main__':
         'weighted sum (sum)'))
     parser.add_argument('--window', default=1000, help='kbwindow for ld',
                         type=int)
+    parser.add_argument('--seed', default=None)
+    parser.add_argument('--ncausal', default=200, type=int)
+    parser.add_argument('--normalize', default=False, action='store_true')
+    parser.add_argument('--uniform', default=False, action='store_true')
+    parser.add_argument('--r_range', default=None, nargs=3,
+                        action=Store_as_arange, type=float)
+    parser.add_argument('--p_tresh', default=None, nargs='+',
+                        action=Store_as_array, type=float)
     args = parser.parse_args()
-    prankcster(args.prefix, args.target, args.reference, args.cotagfn,
-               args.target_ppt, args.ref_ppt, args.sumstats, args.pheno,
-               args.plinkexe, args.alpha_step, args.labels, args.prune_step,
-               args.sortresults, args.allele_file, h2=args.h2,
-               freq_threshold=args.freq_threshold,
-               qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
-               strategy=args.strategy, every=args.every, column=args.column,
-               splits=args.splits, weight=args.weight)
+    # prankcster_plink(args.prefix, args.target, args.reference, args.cotagfn,
+    #            args.target_ppt, args.ref_ppt, args.sumstats, args.pheno,
+    #            args.plinkexe, args.alpha_step, args.labels, args.prune_step,
+    #            args.sortresults, args.allele_file, h2=args.h2,
+    #            freq_threshold=args.freq_threshold,
+    #            qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
+    #            strategy=args.strategy, every=args.every, column=args.column,
+    #            splits=args.splits, weight=args.weight)
+    prankcster(args.prefix, args.target, args.reference, args.pheno, args.labels,
+               args.alpha_step, args.prune_step,  cotag=args.cotagfn,
+               freq_threshold=args.freq_threshold, splits=args.splits,
+               seed=args.seed, h2=args.h2, ncausal=args.ncausal,
+               normalize=args.normalize, uniform=args.uniform,
+               r_range=args.r_range, p_tresh=args.p_tresh, window=args.window)

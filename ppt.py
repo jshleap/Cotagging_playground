@@ -360,7 +360,8 @@ def single_clump(df, R2, block, r_thresh, field='pvalue'):
     out = {}
     r2 = R2[block]
     # generate a graph
-    g = igraph.Graph.Adjacency((r2 < r_thresh).values.tolist(), mode=1)
+    g = igraph.Graph.Adjacency((r2 < r_thresh).values.astype(int).tolist(),
+                               mode='UPPER')
     g.vs['label'] = r2.columns.tolist()
     sg = g.components().subgraphs()
     for l in sg:
@@ -434,6 +435,7 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue'):
 # ----------------------------------------------------------------------
 def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
            threads=1, window=250, pv_field='pvalue',  **kwargs):
+    print(kwargs)
     X_train = None
     now = time.time()
     print ('Performing P + T!')
@@ -526,6 +528,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
 
 
 if __name__ == '__main__':
+    #TODO: make the custom pval threshold not splitted by commas
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--bfile', help='plink fileset prefix',
                         required=True)
@@ -576,13 +579,12 @@ if __name__ == '__main__':
     parser.add_argument('-S', '--score_type', default='sum')
     parser.add_argument('--h2', default=None, type=float)
     parser.add_argument('--ncausal', default=None, type=int)
-    parser.add_argument('--normalize', default=None, type=bool)
-    parser.add_argument('--uniform', default=None, type=bool)
+    parser.add_argument('--normalize', default=False, action='store_true')
+    parser.add_argument('--uniform', default=False, action='store_true')
     parser.add_argument('--nsplits', default=2, type=int)
     parser.add_argument('--pvalue_field', default='pvalue')
     parser.add_argument('--seed', default=None, type=int)
     args = parser.parse_args()
-
     LDs = [x if x <= 0.99 else 0.99 for x in sorted(
         np.arange(args.rstart, args.rstop + args.rstep, args.rstep),
         reverse=True)]

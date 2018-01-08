@@ -23,6 +23,7 @@ from pandas_plink import read_plink
 import dask
 import dask.dataframe as dd
 from numba import jit
+from collections import ChainMap
 
 lr = jit(linregress)
 # ----------------------------------------------------------------------
@@ -111,24 +112,54 @@ def read_freq(bfile, plinkexe, freq_threshold=0.1, maxmem=1700, threads=1):
     return frq[(frq.MAF < high) & (frq.MAF > low)]
 
 
+
 # ----------------------------------------------------------------------
-def blocked_R2(bim, geno, window):
+@jit
+def single_block(geno, df, block):
+    idx = df.i.tolist()
+    sub = geno[:, idx]
+    assert sub.shape[1] == len(idx)
+    r2 = dd.from_dask_array(sub, columns=df.snp.tolist()).corr() ** 2
+    return {block: r2}
+
+
+
+# ----------------------------------------------------------------------
+def blocked_R2(bim, geno, kbwindow=1000, threads=1):
+    # subset = lambda x, d: x[:, d.i.tolist()]
     assert bim.shape[0] == geno.shape[1]
-    bim['pos_kb'] = bim.pos / 1000
-    ma = bim.pos_kb.max()
-    mi = bim.pos_kb.min()
-    r2_block = {}
-    curr = 0
-    for i, b in enumerate(np.arange(mi, ma, window, dtype=int)):
-        boole = (bim.pos_kb < b + window - 1) & (bim.pos_kb > curr)
-        bim.loc[boole, 'block'] = i
-        curr = bim.pos_kb[boole].max()
-        idx = bim.i[boole].tolist()
-        sub = geno[:, idx]
-        assert sub.shape[1] == len(idx)
-        r2_block[i] = dd.from_dask_array(sub, columns=bim.snp[boole].tolist()
-                                         ).corr()**2
-    return bim, r2_block
+    nbins = np.ceil(max(bim.pos) / (kbwindow * 1000)).astype(int)
+    bins = np.linspace(0, max(bim.pos) + 1, num=nbins, endpoint=True, dtype=int)
+    bim['block'] = pd.cut(bim['pos'], bins, include_lowest=True)
+    # delayed_results = [dask.delayed(single_block)(df, geno) for block, df in
+    #                    bim.groupby('block')]
+    r = Parallel(n_jobs=int(threads))(
+        delayed(single_block)(geno, df, block) for block, df in
+        bim.groupby('block'))
+    #r = list(dask.compute(*delayed_results, num_workers=threads))
+    R2 = dict(ChainMap(*r))#dd.concat(r, interleave_partitions=True)
+    return bim, R2
+
+
+# # ----------------------------------------------------------------------
+# def blocked_R2(bim, geno, kbwindow):
+#     window = kbwindow * 1000
+#     assert bim.shape[0] == geno.shape[1]
+#     # bim['pos_kb'] = bim.pos #/ 1000
+#     ma = bim.pos.max()
+#     mi = bim.pos.min()
+#     r2_block = {}
+#     curr = 0
+#     for i, b in enumerate(np.arange(mi, ma, window, dtype=int)):
+#         boole = (bim.pos < b + window - 1) & (bim.pos > curr)
+#         bim.loc[boole, 'block'] = i
+#         curr = bim.pos[boole].max()
+#         idx = bim.i[boole].tolist()
+#         sub = geno[:, idx]
+#         assert sub.shape[1] == len(idx)
+#         r2_block[i] = dd.from_dask_array(sub, columns=bim.snp[boole].tolist()
+#                                          ).corr()**2
+#     return bim, r2_block
 
 
 # ----------------------------------------------------------------------
@@ -332,7 +363,6 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
     :param :class pd.DataFrame gwascotag: merged dataframe of cotag and gwas
     :param str column: name of the column to be sorted by in the cotag file
     """
-    #gwascotag = gwascotag.sort_values(by=column, ascending=ascending)
     picklefile = '%s_%s.pickle' % (prefix, ''.join(column.split()))
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
@@ -343,19 +373,12 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
             column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
         tail = gwascotag[~gwascotag.snp.isin(grouped.snp)]
-        # keys = sorted(grouped.groups.keys(), reverse=True)
-        # tup = Parallel(n_jobs=int(threads))(delayed(helper_smartsort2)(
-        #     grouped, key) for key in tqdm(keys, total=len(keys)))
-        # if isinstance(tup[0], pd.core.series.Series):
-        #     sorteddf = pd.concat(tup, axis=1).transpose()
-        # else:
-        #     sorteddf = pd.concat(tup)
-
         beforetail = sorteddf.shape[0]
         df = sorteddf.copy()
         if not tail.empty:
             df = df.append(tail.sample(frac=1))
         df = df.reset_index(drop=True)
+        df['index'] = df.index.tolist()
         #df['gen_index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
@@ -529,14 +552,15 @@ def estimate_size(shape):
 
 
 # ----------------------------------------------------------------------
-def estimate_chunks(shape, threads):
-    avail_mem = psutil.virtual_memory().available / 1E7  # a tenth of the memory
+def estimate_chunks(shape, threads, memory=None):
+    total = psutil.virtual_memory().available / 1E7
+    avail_mem = total if memory is None else memory  # a tenth of the memory
     usage = estimate_size(shape) * threads
     if usage < avail_mem:
         return shape
     else:
         n_chunks = np.floor(usage / avail_mem).astype(int)
-        return tuple([max([1, i]) for i in np.array(shape) / n_chunks])
+        return tuple([int(max([1, i])) for i in np.array(shape) / n_chunks])
 
 
 # ----------------------------------------------------------------------
@@ -613,18 +637,11 @@ def single_score_plink(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
 
 
 # ----------------------------------------------------------------------
+@jit
 def single_score(subdf, geno, pheno, label):
-# def single_score(df, idxs, i, geno, pheno, label):
-    # idx = idxs[: i]
-    # try:
-    #     prs = geno[:, df.gen_index[idx]].dot(df.slope[idx]).compute()
-    # except AttributeError:
-    #     prs = geno[:, df.gen_index[idx]].dot(df.slope[idx])
     indices = subdf.i.tolist()#gen_index.tolist()
     prs = geno[:, indices].dot(subdf.slope)
-    #print(subdf.head(), '\n')
     regress = lr(pheno.PHENO, prs)
-    #print(regress)
     return {'Number of SNPs': subdf.shape[0], 'R2': regress.rvalue **2,
             'type': label}
 
@@ -650,7 +667,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
-                range(201, df.shape[0], step))
+                range(201, df.shape[0], int(step)))
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
         res += list(dask.compute(*delayed_results, num_workers=threads))
     return pd.DataFrame(res)
@@ -658,34 +675,35 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
 
 # ----------------------------------------------------------------------
 @jit
-def single_window(df, rgeno, tgeno):
+def single_window(df, rgeno, tgeno, justd=False):
     ridx = df.i_ref.values
     tidx = df.i_tar.values
     rg = rgeno[:, ridx]
     tg = tgeno[:, tidx]
     D_r = da.dot(rg.T, rg) / rg.shape[0]
     D_t = da.dot(tg.T, tg) / tg.shape[0]
+    if justd:
+        return df.snp, D_r, D_t
     cot = da.diag(da.dot(D_r, D_t))
     ref = da.diag(da.dot(D_r, D_r))
     tar = da.diag(da.dot(D_t, D_t))
-    # cot = D_r * D_t
-    # ref = D_r**2
-    # tar = D_t**2
     stacked = da.stack([df.snp, ref, tar, cot], axis=1)
     return dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar', 'cotag']
                               ).compute()
 
 
 # ----------------------------------------------------------------------
-def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1):
+def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, justd=False):
     mbim = rbim.merge(tbim, on=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1'],
                       suffixes=['_ref', '_tar'])
     nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
     bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
                        )
     mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
-    delayed_results = [dask.delayed(single_window)(df, rgeno, tgeno)
+    delayed_results = [dask.delayed(single_window)(df, rgeno, tgeno, justd)
                        for window, df in mbim.groupby('windows')]
     r = list(dask.compute(*delayed_results, num_workers=threads))
+    if justd:
+        return r
     r = pd.concat(r)
     return r
