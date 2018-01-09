@@ -371,7 +371,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
             except AssertionError:
                 assert isinstance(geno, np.ndarray)
         if pheno is None:
-            pheno, gen = qtraits_simulation(prefix, **kwargs)
+            pheno, h2, gen = qtraits_simulation(prefix, **kwargs)
             (geno, bim, truebeta, vec) = gen
         elif isinstance(pheno, str):
             pheno = pd.read_table(pheno, delim_whitespace=True, header=None,

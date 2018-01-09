@@ -446,12 +446,12 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
                 'bfile2': targeno}
-        rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+        rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
         opts.update(dict(outprefix=tarl, bfile=targeno, causaleff=rbim.dropna(),
                          bfile2=refgeno, validate=kwargs['split']))
-        tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
+        tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=kwargs['split'], threads=threads, bim=rbim))
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)

@@ -287,8 +287,8 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     prs_true['PHENO'] = prs_true.gen_eff + prs_true.env_eff
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
     # Check that the estimated heritability matches the expected one
-    est_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
-    line = 'Estimated heritability (Va/Vp) : %.4f' % est_h2
+    realized_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
+    line = 'Estimated heritability (Va/Vp) : %.4f' % realized_h2
     with open('realized_h2.txt', 'w') as F:
         F.write(line)
         print(line)
@@ -304,7 +304,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     opts = dict(sep=' ', header=False, index=False)
     prs_true.reindex(columns=['fid', 'iid', 'PHENO']).to_csv(ofn, **opts)
     # return the dataframe
-    return prs_true
+    return prs_true, realized_h2
 
 
 # ----------------------------------------------------------------------
@@ -371,14 +371,15 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         with open(picklefile, 'rb') as F:
             G, bim, truebeta, vec = pickle.load(F)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
-        pheno = create_pheno(outprefix, h2, truebeta, noenv=noenv)
+        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv)
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
+        realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
     if plothist:
         plot_pheno(outprefix, pheno, quality=quality)
     bim.dropna().to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
     print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
-    return pheno, (G, bim, truebeta, vec)
+    return pheno, realized_h2, (G, bim, truebeta, vec)
 
 
 if __name__ == '__main__':
