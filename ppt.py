@@ -454,7 +454,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
                 'h2': kwargs['h2'], 'ncausal': kwargs['ncausal'],
                 'normalize': kwargs['normalize'], 'uniform': kwargs['uniform'],
                 'seed': seed}
-        pheno, (geno, bim, truebeta, vec) = qtraits_simulation(**opts)
+        pheno, h2, (geno, bim, truebeta, vec) = qtraits_simulation(**opts)
         assert bim.shape[0] == geno.shape[1]
         opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': geno,
                 'validate': 2, 'seed': seed, 'threads': threads, 'bim':bim}

@@ -314,12 +314,12 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
                 'bfile2': targeno}
-        rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+        rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
         opts.update(dict(outprefix=tarl, bfile=targeno, causaleff=rbim.dropna(),
                          bfile2=refgeno, validate=kwargs['split']))
-        tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
+        tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=kwargs['split'], threads=threads, bim=rbim))
     elif isinstance(refgeno, str):
@@ -351,7 +351,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                            for i, locus in enumerate(loci)]
         res = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.concat(res)
-        res.to_csv(resfile, index=False, sep='\t')
+        res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
+                  on='snp').to_csv(resfile, index=False, sep='\t')
     else:
         res = pd.read_csv(resfile, sep='\t')
     #result = res.sort_values('ese', ascending=False).reset_index(drop=True)

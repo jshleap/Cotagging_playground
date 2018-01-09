@@ -495,12 +495,12 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
                 'bfile2': tbed, 'f_thr': freq_threshold}
-        rpheno, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+        rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
         opts.update(dict(outprefix=tarl, bfile=tbed, causaleff=rbim.dropna(),
                          bfile2=rbed))
-        tpheno, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
+        tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=3, threads=threads, bim=rbim))
         sumstats, X_train, X_test, Y_train, Y_test = plink_free_gwas(**opts)
