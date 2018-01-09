@@ -359,7 +359,7 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     result['Index'] = result.index.tolist()
     result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
     result = result.merge(sumstats.reindex(columns=['snp', 'slope']), on='snp')
-    prod, _ = smartcotagsort(prefix, result, column='Index')
+    prod, _ = smartcotagsort(prefix, result, column='Index', ascending=True)
     trans = prune_it(prod, tgeno, tpheno, 'ese', threads=threads)
     if merged is not None:
         #merged = pd.read_table(merged, sep='\t')
