@@ -474,7 +474,7 @@ def optimize_alpha(prefix, bfile, pheno, merged, alphastep, prune_step=1,
     plt.savefig('%s_alphas.pdf' % (prefix))
     # Returned the sorted result dataframe
     results = scored.sort_values('R2', ascending=False).reset_index(drop=True)
-    gr = datas.groupby('alpha')
+    gr = results.groupby('alpha')
     best = gr.get_group(results.iloc[0].alpha)
     return results, best
 
