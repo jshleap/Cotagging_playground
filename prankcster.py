@@ -562,9 +562,14 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
                                                                  '_PpT'])
         assert all(test.slope_PpT == test.slope_cotag)
     merge = sorted_cotag.merge(clumpetar, on=cols, suffixes=['_cotag', '_PpT'])
+    if 'i' not in merge.columns:
+        merge = merge.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
     mtagr = sorted_tagr.merge(clumpetar, on=cols, suffixes=['_tagr', '_PpT'])
+    if 'i' not in mtagr.columns:
+        mtagr = mtagr.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
     mtagt = sorted_tagt.merge(clumpetar, on=cols, suffixes=['_tagt', '_PpT'])
-
+    if 'i' not in mtagt.columns:
+        mtagt = mtagt.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
     # merge = merge.rename(columns={'Index': 'Index_Cotag'})
     # Create crossvalidation
     x_train, x_test, y_train, y_test = train_test_split(tgeno, tpheno,
