@@ -355,11 +355,11 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                   on='snp').to_csv(resfile, index=False, sep='\t')
     else:
         res = pd.read_csv(resfile, sep='\t')
-    #result = res.sort_values('ese', ascending=False).reset_index(drop=True)
-    #result['Index'] = result.index.tolist()
-    result = res.merge(tbim.reindex(columns=['snp','i']), on='snp')
+    result = res.sort_values('ese', ascending=False).reset_index(drop=True)
+    result['Index'] = result.index.tolist()
+    result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
     result = result.merge(sumstats.reindex(columns=['snp', 'slope']), on='snp')
-    prod, _ = smartcotagsort(prefix, result, column='ese')
+    prod, _ = smartcotagsort(prefix, result, column='Index')
     trans = prune_it(prod, tgeno, tpheno, 'ese', threads=threads)
     if merged is not None:
         #merged = pd.read_table(merged, sep='\t')
