@@ -214,7 +214,7 @@ def make_plink(vcf_filename, plink_exe, threads=1):
 def main(args):
     one_native_settings = out_of_africa_with_native(n_natives=args.n_natives,
                                                     recomb=args.recomb_map,
-                                                    nvars=args.nvars
+                                                    nvars=args.nvars,
                                                     debug=args.debug)
     ts = msprime.simulate(**one_native_settings)
     print("There are {0} total variant sites\n".format(ts.get_num_mutations()))
