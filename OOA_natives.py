@@ -8,6 +8,7 @@ import argparse
 import matplotlib.pylab as plt, matplotlib
 import numpy as np
 from utilities4cotagging import executeLine
+import pandas as pd
 
 
 def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
@@ -210,9 +211,14 @@ def privates(nativesample, ts):
 
 
 def make_plink(vcf_filename, plink_exe, threads=1):
+    sed = "sed s'/_//'g %s > temp; mv temp %s" % (vcf_filename, vcf_filename)
+    executeLine(sed)
     prefix = vcf_filename[: vcf_filename.rfind('.')]
     line = '%s --vcf %s --recode --out %s --threads %d'
     executeLine(line  % (plink_exe, vcf_filename, prefix, threads))
+    df = pd.read_table('%s.bim' % prefix, delim_whitespace=True, header=None)
+    df.loc[:, 1] = ['SNP%d' % x for x in range(1, df.shape[0] + 1)]
+    df.to_csv('%s.bim' % prefix, sep='\t', index=False, header=False)
 
 
 def main(args):
