@@ -76,11 +76,13 @@ def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
                                              initial_size=N_O, growth_rate=r_O)
             for x in range( n_natives)]
     migration_matrix = [
-                           [0, m_AF_EU, m_AF_AS, 0] + [0] * n_natives,
-                           [m_AF_EU, 0, m_EU_AS, 0] + [0] * n_natives,
-                           [m_AF_AS, m_EU_AS, 0, 0] + [0] * n_natives,
-                           [0, 0, 0, 0] + [0] * n_natives
-                       ] + [[0] * (n_natives + 4)] * n_natives
+                           [0, m_AF_EU, m_AF_AS] + [0] * n_natives,
+                           [m_AF_EU, 0, m_EU_AS] + [0] * n_natives,
+                           [m_AF_AS, m_EU_AS, 0] + [0] * n_natives,
+                           [0, 0, 0] + [0] * n_natives
+                       ]
+    if n_natives > 1:
+        migration_matrix += [[0] * (n_natives + 3)] * n_natives
     native_demev = [msprime.MassMigration(
         time=T_O, source=x, destination=3, proportion=1.0) for x in
         range(4, 4 + n_natives)]
