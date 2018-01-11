@@ -19,7 +19,8 @@ def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
     :param str recomb: recombination map. If none, will use the param values
     :param tuple nvars: number of variamts to simulate
     """
-    assert len(nhaps) == np.sum(n_natives, 4) # AFR, EUR, ASN, MX
+    assert n_natives > 0 # at least one native pop must be provided
+    assert len(nhaps) == (n_natives + 3) # AFR, EUR, ASN
     # First we set out the maximum likelihood values of the various parameters
     # given in Table 1.
     N_A = 7300
@@ -69,7 +70,7 @@ def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
                                         sample_size=nhaps[3], initial_size=N_MX,
                                         growth_rate=r_MX)
                                 ]
-    if n_natives > 0:
+    if n_natives > 1:
         population_configurations += [
             msprime.PopulationConfiguration( sample_size=nhaps[4 + x],
                                              initial_size=N_O, growth_rate=r_O)
