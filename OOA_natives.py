@@ -81,12 +81,13 @@ def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
                            [m_AF_AS, m_EU_AS, 0] + [0] * n_natives,
                            [0, 0, 0] + [0] * n_natives
                        ]
+    demographic_events = []
     if n_natives > 1:
         migration_matrix += [[0] * (n_natives + 3)] * n_natives
-    native_demev = [msprime.MassMigration(
-        time=T_O, source=x, destination=3, proportion=1.0) for x in
-        range(4, 4 + n_natives)]
-    demographic_events = native_demev + [
+        demographic_events = [msprime.MassMigration(
+            time=T_O, source=x, destination=3, proportion=1.0) for x in
+            range(4, 4 + n_natives)]
+    demographic_events += [
         # CEU and CHB merge into B with rate changes at T_EU_AS
         msprime.MassMigration(
             time=T_MX, source=3, destination=2, proportion=1.0),
