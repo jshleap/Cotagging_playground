@@ -214,6 +214,7 @@ def make_plink(vcf_filename, plink_exe, threads=1):
 
 def main(args):
     one_native_settings = out_of_africa_with_native(n_natives=args.n_natives,
+                                                    nhaps=args.nhaps,
                                                     recomb=args.recomb_map,
                                                     nvars=args.nvars,
                                                     debug=args.debug)
