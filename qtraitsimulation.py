@@ -37,7 +37,7 @@ def get_SNP_dist(bfile, causals):
 # ----------------------------------------------------------------------
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.1, seed=None, causaleff=None, uniform=False, usepi=False,
-             snps=None, threads=1):
+             snps=None, threads=1, flip=False):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -59,7 +59,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
     # read rhe genotype files
-    (bim, fam, G) = read_geno(bfile, f_thr, threads)
+    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip)
     # get MAFs
     m, n = G.shape
     if bfile2 is not None:
@@ -104,7 +104,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.snp[bim.index[idx]]
-        av_dist = (np.around(bim.pos.diff().mean() / 1000)).astype(int)
+        av_dist = (np.around(causals.pos.diff().mean() / 1000)).astype(int)
+        # making sure is a copy of the DF
         causals = bim[bim.snp.isin(causals)].copy()
         print('Causal SNPs are %d kbp apart on average' % av_dist)
     elif snps is None:
@@ -151,7 +152,8 @@ def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
     Generate TRUE causal effects and PRS. Also, subset the SNPs based on
     frequency
 
-    DEPRECATED??
+
+    ??
 
     :param seed: Random seed for the random functions
     :param threads: Number of threads to use in plink
@@ -327,7 +329,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
                        noenv=False, plothist=False, freqthreshold=0.01,
                        bfile2=None, quality='png', seed=None, uniform=False,
-                       normalize=False, **kwargs):
+                       normalize=False, flip=False, **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -363,7 +365,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
     if not os.path.isfile(picklefile):
         opts = dict(prefix=outprefix, bfile=bfile, h2=h2, ncausal=ncausal,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
-                    causaleff=causaleff, uniform=uniform, f_thr=freqthreshold)
+                    causaleff=causaleff, uniform=uniform, f_thr=freqthreshold,
+                    flip=flip)
         G, bim, truebeta, vec = true_prs(**opts)
         with open(picklefile, 'wb') as F:
             pickle.dump((G, bim, truebeta, vec), F)
@@ -401,8 +404,8 @@ if __name__ == '__main__':
                                               'this code with the extension '
                                               'full'), default=None)
     parser.add_argument('-f', '--freqthreshold', help=('Lower threshold to filt'
-                                                       'er MAF by'),
-                        default=0.1, type=float)
+                                                       'er MAF by'), type=float,
+                        default=0.1)
     parser.add_argument('-2', '--bfile2', help=('prefix of the plink bedfileset'
                                                 'o n a second population'))
     parser.add_argument('-u', '--uniform', default=False, action='store_true')
@@ -410,6 +413,8 @@ if __name__ == '__main__':
                         type=int)
     parser.add_argument('-M', '--maxmem', default=False, action='store')
     parser.add_argument('-s', '--seed', default=None, type=int)
+    parser.add_argument('-F', '--flip', default=False, action='store_true')
+
 
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal,
@@ -417,4 +422,4 @@ if __name__ == '__main__':
                        causaleff=args.causal_eff, quality=args.quality,
                        freqthreshold=args.freqthreshold, bfile2=args.bfile2,
                        maxmem=args.maxmem, threads=args.threads,
-                       seed=args.seed, uniform=args.uniform)
+                       seed=args.seed, uniform=args.uniform, flip=args.flip)

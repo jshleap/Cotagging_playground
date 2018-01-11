@@ -327,7 +327,7 @@ def flip(G):
 
 
 # ----------------------------------------------------------------------
-def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
+def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
                     causal_pos=None, plot=False, threads=cpu_count(),
                     stmd=False, **kwargs):
     """
@@ -398,13 +398,15 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None,
         #y_train = y_train.rechunk(chunks[0])
         print('using dask delayed')
         func = st_mod if stmd else lr
-        delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO) for i
-                           in range(x_train.shape[1])]
+        delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO) for
+                           i in range(x_train.shape[1])]
         r = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.DataFrame.from_records(r, columns=r[0]._fields)
         assert res.shape[0] == bim.shape[0]
         res = pd.concat((res, bim), axis=1)
         # check if flips
+        if flip:
+            res.loc[res.flip, 'slope'] = res.loc[res.flip].slope * -1
         # if 'flip' in res.columns:
         #     res['slope_old'] = res.slope
         #     res.loc[res.flip, 'slope'] = res[res.flip].slope * -1
@@ -452,10 +454,11 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=1700, type=int)
     parser.add_argument('--use_statsmodels', action='store_true')
+    parser.add_argument('--flip', action='store_true')
     args = parser.parse_args()
     plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
                     plot=args.plot, threads=args.threads, seed=args.seed,
-                    stmd=args.use_statsmodels)
+                    stmd=args.use_statsmodels, flip=args.flip)
     # plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
     #            args.allele_file,  covs=args.covs, nosex=args.nosex,
     #            threads=args.threads, maxmem=args.maxmem, validate=args.validate,

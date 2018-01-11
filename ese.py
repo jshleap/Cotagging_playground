@@ -88,7 +88,7 @@ def integral_b(vs, mu, snps):
     :param snps: names of snps in order
     """
     exp = np.exp(np.power(vs, 2) / (4 * mu))
-    lhs = (((2 * mu) + np.power(vs, 2))) / (4 * np.power(mu, 2))
+    lhs = ((2 * mu) + np.power(vs, 2)) / (4 * np.power(mu, 2))
     rhs = exp / exp.sum()
     vec = lhs * rhs
     return pd.Series(vec, index=snps)
@@ -107,9 +107,10 @@ def per_locus(locus, sumstats, avh2, h2, n):
     mu = ((n / (2 * (1 - h2_l))) + (m / (2 * h2)))
     vjs = ((n * locus.slope.values) / (2 * (1 - h2_l)))
     I = integral_b(vjs, mu, snps)
+    assert np.all(I > 0)
     expcovs = (D_r * D_t).dot(I)
     return pd.DataFrame({'snp': snps, #expcovs.index.tolist(),
-                         'ese': expcovs})#expcovs.values.tolist()})
+                         'ese': abs(expcovs)})#expcovs.values.tolist()})
 
 # ----------------------------------------------------------------------
 def per_locus2(locus, sumstats, avh2, h2, N, ld1, ld2, M):
@@ -313,7 +314,7 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         opts = {'outprefix': refl, 'bfile': refgeno, 'h2': h2,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
-                'bfile2': targeno}
+                'bfile2': targeno, 'flip':kwargs['gflip']}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
@@ -321,7 +322,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                          bfile2=refgeno, validate=kwargs['split']))
         tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate=kwargs['split'], threads=threads, bim=rbim))
+                         validate=kwargs['split'], threads=threads, bim=rbim,
+                         flip=kwargs['flip']))
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_plink(refgeno)
         rgeno = rgeno.T
@@ -351,15 +353,19 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                            for i, locus in enumerate(loci)]
         res = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.concat(res)
-        res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
-                  on='snp').to_csv(resfile, index=False, sep='\t')
+        result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
+                           on='snp')
+        result.to_csv(resfile, index=False, sep='\t')
     else:
-        res = pd.read_csv(resfile, sep='\t')
-    result = res.sort_values('ese', ascending=False).reset_index(drop=True)
-    result['Index'] = result.index.tolist()
-    result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
-    result = result.merge(sumstats.reindex(columns=['snp', 'slope']), on='snp')
-    prod, _ = smartcotagsort(prefix, result, column='Index', ascending=True)
+        result = pd.read_csv(resfile, sep='\t')
+    #result = res.sort_values('ese', ascending=False).reset_index(drop=True)
+    #result['Index'] = result.index.tolist()
+    if 'i' not in result.columns:
+        result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+    if 'slope' not in result.columns:
+        result = result.merge(sumstats.reindex(columns=['snp', 'slope']),
+                              on='snp')
+    prod, _ = smartcotagsort(prefix, result, column='ese')
     trans = prune_it(prod, tgeno, tpheno, 'ese', threads=threads)
     if merged is not None:
         #merged = pd.read_table(merged, sep='\t')
@@ -448,11 +454,14 @@ if __name__ == '__main__':
                         action=Store_as_arange, type=float)
     parser.add_argument('--p_tresh', default=None, nargs='+',
                         action=Store_as_array, type=float)
+    parser.add_argument('--flip', action='store_true', help='flip sumstats')
+    parser.add_argument('--gflip', action='store_true', help='flip genotype')
+
     args = parser.parse_args()
     transferability(args.prefix, args.reference, args.refpheno, args.target,
                     args.tarpheno, args.h2, args.labels, args.window,
                     args.sumstats, refld=args.refld, tarld=args.tarld,
                     seed=args.seed, threads=args.threads, merged=args.merged,
                     ncausal=args.ncausal, normalize=True, uniform=args.uniform,
-                    r_range=args.r_range, p_tresh=args.p_tresh, split=args.split
-                    )
+                    r_range=args.r_range, p_tresh=args.p_tresh, split=args.split,
+                    flip=args.flip, gflip=args.gflip)

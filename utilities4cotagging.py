@@ -321,7 +321,7 @@ def helper_smartsort2(grouped, key):
 
 
 # ---------------------------------------------------------------------------
-def read_geno(bfile, freq_thresh, threads):
+def read_geno(bfile, freq_thresh, threads, flip=False):
     (bim, fam, G) = read_plink(bfile)
     # remove constant variants
     G_std = G.std(axis=1).compute(num_workers=threads)
@@ -336,12 +336,11 @@ def read_geno(bfile, freq_thresh, threads):
     flips = np.zeros(bim.shape[0], dtype=bool)
     flips[np.where(mafs > 0.5)[0]] = True
     bim['flip'] = flips
-    vec = np.zeros(flips.shape[0])
-    vec[flips] = 2
-    # perform the flipping
-    G = abs(G.T - vec)
-    # bim[flips].a0= bim[flips].a1
-    # bim[flips, 'a1'] = bim[flips, 'a0']
+    if flip:
+        vec = np.zeros(flips.shape[0])
+        vec[flips] = 2
+        # perform the flipping
+        G = abs(G.T - vec)
     # Filter MAF
     if freq_thresh > 0:
         good = (mafs < (1 - freq_thresh)) & (mafs > freq_thresh)

@@ -62,7 +62,7 @@ def strategy_sum(x, y, alpha):
     """
     rank = (alpha * x) + ((1 - alpha) * y)
     alphas = [alpha] * len(rank)
-    return pd.DataFrame({'New_rank':rank, 'alpha':alphas})
+    return pd.DataFrame({'New_rank': rank, 'alpha': alphas})
 
 
 # ---------------------------------------------------------------------------
@@ -164,10 +164,11 @@ def rank_qr(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile, alphastep,
 
 
 # ---------------------------------------------------------------------------
-def optimize_alpha_plink(prefix, bfile, sorted_cotag, clumpe, sumstats, phenofile,
-                   plinkexe, alphastep, tar, prune_step=1, qrangefn=None,
-                   maxmem=1700, threads=1, strategy='sum', every=False,
-                   score_type='SUM'):
+def optimize_alpha_plink(prefix, bfile, sorted_cotag, clumpe, sumstats,
+                         phenofile,
+                         plinkexe, alphastep, tar, prune_step=1, qrangefn=None,
+                         maxmem=1700, threads=1, strategy='sum', every=False,
+                         score_type='SUM'):
     """
     Do a line search for the best alpha in nrank = alpha*rankP+T + (1-alpha)*cot
     
@@ -358,10 +359,11 @@ def prankcster_plink(prefix, targetbed, referencebed, cotagfn, ppt_results_tar,
     # Optimize the alphas
     df, qrange, qr, merged = optimize_alpha_plink(prefix, train, sorted_cotag,
                                                   clumpe,
-                                            scorefn, phe_tr, plinkexe,
-                                            alpha_step, tar, prune_step,
-                                            qrangefn, maxmem, threads, strategy,
-                                            every, score_type=score_type)
+                                                  scorefn, phe_tr, plinkexe,
+                                                  alpha_step, tar, prune_step,
+                                                  qrangefn, maxmem, threads,
+                                                  strategy,
+                                                  every, score_type=score_type)
     best_alpha = df.alpha.iloc[0]
     # Score with test-set
     res_pr = '%s_testset' % prefix
@@ -437,8 +439,8 @@ def optimize_alpha(prefix, bfile, pheno, merged, alphastep, prune_step=1,
         space = np.concatenate(
             (np.array([0, 0.05]), np.arange(0.1, 1 + alphastep,
                                             alphastep)))
-        x = merged.loc[:,'index_PpT']
-        y = merged.loc[:,'index_%s' % index_type]
+        x = merged.loc[:, 'index_PpT']
+        y = merged.loc[:, 'index_%s' % index_type]
         print('computing weighted sum')
         res = Parallel(n_jobs=int(threads))(
             delayed(strategy_sum)(x, y, alpha) for alpha in tqdm(space))
@@ -458,11 +460,11 @@ def optimize_alpha(prefix, bfile, pheno, merged, alphastep, prune_step=1,
         scored.sort_values(by='R2', ascending=False).to_csv(outfn, sep='\t',
                                                             index=False)
         with open(picklfn, 'wb') as F:
-            pickle.dump((df, scored, grouped), F)
+            pickle.dump((df, scored, grouped, datas), F)
     else:
         # df = pd.read_table(outfn, sep='\t')
         with open(picklfn, 'rb') as F:
-            df, scored, grouped = pickle.load(F)
+            df, scored, grouped, datas = pickle.load(F)
     # Plot the optimization
     scored.rename(columns={'type': 'alpha'}, inplace=True)
     piv = scored.reindex(columns=['Number of SNPs', 'alpha', 'R2'])
@@ -474,7 +476,7 @@ def optimize_alpha(prefix, bfile, pheno, merged, alphastep, prune_step=1,
     plt.savefig('%s_alphas.pdf' % (prefix))
     # Returned the sorted result dataframe
     results = scored.sort_values('R2', ascending=False).reset_index(drop=True)
-    gr = results.groupby('alpha')
+    gr = datas.groupby('alpha')
     best = gr.get_group(results.iloc[0].alpha)
     return results, best
 
@@ -518,9 +520,9 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
         Y_test = kwargs['Y_test']
     # Read the cotag scores
     if os.path.isfile('%s_cotags.tsv' % prefix):
-       cotags = pd.read_table('%s_cotags.tsv' % prefix, sep='\t')
+        cotags = pd.read_table('%s_cotags.tsv' % prefix, sep='\t')
     elif isinstance(cotag, str):
-       sorted_cotag = pd.read_table(cotag, sep='\t')
+        sorted_cotag = pd.read_table(cotag, sep='\t')
     elif cotag is None:
         try:
             assert 'sumstats' in kwargs
@@ -561,15 +563,16 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
         test = sorted_cotag.merge(clumpetar, on='snp', suffixes=['_cotag',
                                                                  '_PpT'])
         assert all(test.slope_PpT == test.slope_cotag)
+    i_s = tbim.reindex(columns=['snp', 'i'])
     merge = sorted_cotag.merge(clumpetar, on=cols, suffixes=['_cotag', '_PpT'])
     if 'i' not in merge.columns:
-        merge = merge.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+        merge = merge.merge(i_s, on='snp')
     mtagr = sorted_tagr.merge(clumpetar, on=cols, suffixes=['_tagr', '_PpT'])
     if 'i' not in mtagr.columns:
-        mtagr = mtagr.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+        mtagr = mtagr.merge(i_s, on='snp')
     mtagt = sorted_tagt.merge(clumpetar, on=cols, suffixes=['_tagt', '_PpT'])
     if 'i' not in mtagt.columns:
-        mtagt = mtagt.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+        mtagt = mtagt.merge(i_s, on='snp')
     # merge = merge.rename(columns={'Index': 'Index_Cotag'})
     # Create crossvalidation
     x_train, x_test, y_train, y_test = train_test_split(tgeno, tpheno,
@@ -578,8 +581,8 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
     # Optimize the alphas
     z = zip(['cotag', 'tagr', 'tagt'], [merge, mtagr, mtagt])
     todos = {
-    t[0]: optimize_alpha('%s_%s' % (prefix, t[0]), x_train, y_train, t[1],
-                         alpha_step, prune_step, threads, t[0]) for t in z}
+        t[0]: optimize_alpha('%s_%s' % (prefix, t[0]), x_train, y_train, t[1],
+                             alpha_step, prune_step, threads, t[0]) for t in z}
     # results, best_alpha = optimize_alpha(prefix, x_train, y_train, merge,
     #                                      alpha_step, prune_step, threads)
     # Score with test-set
@@ -595,13 +598,16 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
         pickle.dump(pre, F)
     dfs = []
     for lab, best_alpha in todos.items():
-        alpha = prune_it(best_alpha[1], x_test, y_test, 'hybrid %s' % lab,
+        df = best_alpha[1]
+        if 'i' not in df.columns:
+            df = df.merge(i_s, on='snp')
+        alpha = prune_it(df, x_test, y_test, 'hybrid %s' % lab,
                          **opts)
         res = pd.concat([alpha] + pre)
         dfs.append((lab, res))
     # plot
     for lab, res in dfs:
-        colors = iter(['r', 'b', 'm', 'g', 'c', 'k','y'])
+        colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
         f, ax = plt.subplots()
         for t, df in res.groupby('type'):
             df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True,
@@ -611,6 +617,7 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
         plt.close()
         res.to_csv('%s_%s_cotag.tsv' % (prefix, lab), sep='\t', index=False)
     return pre
+
 
 if __name__ == '__main__':
     class Store_as_arange(argparse._StoreAction):
@@ -623,6 +630,7 @@ if __name__ == '__main__':
         def __call__(self, parser, namespace, values, option_string=None):
             values = np.array(values)
             return super().__call__(parser, namespace, values, option_string)
+
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -695,8 +703,9 @@ if __name__ == '__main__':
     #            qrangefn=args.qrangefn, maxmem=args.maxmem, threads=args.threads,
     #            strategy=args.strategy, every=args.every, column=args.column,
     #            splits=args.splits, weight=args.weight)
-    prankcster(args.prefix, args.target, args.reference, args.pheno, args.labels,
-               args.alpha_step, args.prune_step,  cotag=args.cotagfn,
+    prankcster(args.prefix, args.target, args.reference, args.pheno,
+               args.labels,
+               args.alpha_step, args.prune_step, cotag=args.cotagfn,
                freq_threshold=args.freq_threshold, splits=args.splits,
                seed=args.seed, h2=args.h2, ncausal=args.ncausal,
                normalize=args.normalize, uniform=args.uniform,
