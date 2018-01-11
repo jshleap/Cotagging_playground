@@ -329,7 +329,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False):
     # remove invariant sites
     idx = (G_std != 0)
     G = G[idx, :]
-    bim = bim[idx]
+    bim = bim[idx].copy()
     mafs = G.sum(axis=1) / (2 * n)
     bim['mafs'] = mafs
     # check possible flips
@@ -341,12 +341,14 @@ def read_geno(bfile, freq_thresh, threads, flip=False):
         vec[flips] = 2
         # perform the flipping
         G = abs(G.T - vec)
+    else:
+        G = G.T
     # Filter MAF
     if freq_thresh > 0:
         good = (mafs < (1 - freq_thresh)) & (mafs > freq_thresh)
         good = good.compute(num_workers=threads)
         G = G[:, good]
-        bim = bim[good]#.reset_index(drop=True)
+        bim = bim[good]
     bim = bim.reset_index(drop=True)
     bim['i'] = bim.index.tolist()
     return bim, fam, G
