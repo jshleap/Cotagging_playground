@@ -58,18 +58,24 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     seed = np.random.randint(1e4) if seed is None else seed
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
-    # read rhe genotype files
-    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip)
-    # get MAFs
-    m, n = G.shape
+    snps2 = None
+    # get indices of second pop if needed
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
         (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads)
-        indices = bim.snp.isin(bim2.snp)
+        snps2 = bim2.snp
+        del bim2, fam2, G2
+    # read rhe genotype files
+    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip)
+    if snps2 is not None:
         # subset the genotype file
+        indices = bim.snp.isin(snps2)
         G = G[:, indices.tolist()]
         bim = bim[indices].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
+    # get MAFs
+    m, n = G.shape
+
     pi = G.var(axis=0).mean() if usepi else 1
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
@@ -104,9 +110,9 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.snp[bim.index[idx]]
-        av_dist = (np.around(causals.pos.diff().mean() / 1000)).astype(int)
         # making sure is a copy of the DF
         causals = bim[bim.snp.isin(causals)].copy()
+        av_dist = (np.around(causals.pos.diff().mean() / 1000)).astype(int)
         print('Causal SNPs are %d kbp apart on average' % av_dist)
     elif snps is None:
         causals = bim.sample(ncausal, replace=False, random_state=seed).copy()
