@@ -37,7 +37,7 @@ def get_SNP_dist(bfile, causals):
 # ----------------------------------------------------------------------
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.1, seed=None, causaleff=None, uniform=False, usepi=False,
-             snps=None, threads=1, flip=False):
+             snps=None, threads=1, flip=False, max_memory=None):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -62,11 +62,12 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # get indices of second pop if needed
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
-        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads)
+        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, memory=max_memory)
         snps2 = bim2.snp
         del bim2, fam2, G2
     # read rhe genotype files
-    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip)
+    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip,
+                              memory=max_memory)
     if snps2 is not None:
         # subset the genotype file
         indices = bim.snp.isin(snps2)
@@ -335,7 +336,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
                        noenv=False, plothist=False, freqthreshold=0.01,
                        bfile2=None, quality='png', seed=None, uniform=False,
-                       normalize=False, flip=False, **kwargs):
+                       normalize=False, flip=False, max_memory=None, **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -372,7 +373,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         opts = dict(prefix=outprefix, bfile=bfile, h2=h2, ncausal=ncausal,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
                     causaleff=causaleff, uniform=uniform, f_thr=freqthreshold,
-                    flip=flip)
+                    flip=flip, max_memory=max_memory)
         G, bim, truebeta, vec = true_prs(**opts)
         with open(picklefile, 'wb') as F:
             pickle.dump((G, bim, truebeta, vec), F)
@@ -417,7 +418,7 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--uniform', default=False, action='store_true')
     parser.add_argument('-t', '--threads', default=False, action='store',
                         type=int)
-    parser.add_argument('-M', '--maxmem', default=False, action='store')
+    parser.add_argument('-M', '--maxmem', default=None, action='store')
     parser.add_argument('-s', '--seed', default=None, type=int)
     parser.add_argument('-F', '--flip', default=False, action='store_true')
 
@@ -428,4 +429,5 @@ if __name__ == '__main__':
                        causaleff=args.causal_eff, quality=args.quality,
                        freqthreshold=args.freqthreshold, bfile2=args.bfile2,
                        maxmem=args.maxmem, threads=args.threads,
-                       seed=args.seed, uniform=args.uniform, flip=args.flip)
+                       seed=args.seed, uniform=args.uniform, flip=args.flip,
+                       max_memory=args.maxmem)

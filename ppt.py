@@ -355,7 +355,7 @@ def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
 
 
 # ----------------------------------------------------------------------
-@jit
+#@jit
 def single_clump(df, R2, block, r_thresh, field='pvalue'):
     out = {}
     r2 = R2[block]
@@ -377,12 +377,16 @@ def single_clump(df, R2, block, r_thresh, field='pvalue'):
 
 
 # ----------------------------------------------------------------------
-def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue'):
+def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None):
     sub = sumstats[sumstats.loc[:, field] < p_thr]#.sort_values(by='p_value')
     delayed_results = [dask.delayed(single_clump)(df, R2, block, r_thr, field)
                        for block, df in sub.groupby('block')]
-    r = list(dask.compute(*delayed_results, num_workers=threads))
-    #ds = [d for d in r if d is not None]
+    if max_memory is not None:
+        cache = dask.Chest(path='.', available_memory=max_memory)
+        r = list(dask.compute(*delayed_results, num_workers=threads,
+                              cache=cache))
+    else:
+        r = list(dask.compute(*delayed_results, num_workers=threads))
     clumps = dict(pair for d in r for pair in d.items())
     # set dataframe
     cols = ['snp', field, 'slope', 'i']
@@ -415,12 +419,14 @@ def new_plot(prefix, ppt, geno, pheno, threads):
 
 
 # ----------------------------------------------------------------------
-def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue'):
+def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
+          max_memory=None):
     print('Scoring with p-val %.2g and R2 %.2g' % (p_t, r_t))
     if isinstance(pheno, pd.core.frame.DataFrame):
         pheno = pheno.PHENO.values
     #assert isinstance(pheno, np.ndarray)
-    clumps, df2 = clump(R2, sumstats, r_t, p_t, threads, field=field)
+    clumps, df2 = clump(R2, sumstats, r_t, p_t, threads, field=field,
+                        max_memory=max_memory)
     #print(df2)
     #assert isinstance(clumps, pd.core.frame.DataFrame)
     index = clumps.snp.tolist()
@@ -434,7 +440,7 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue'):
 
 # ----------------------------------------------------------------------
 def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
-           threads=1, window=250, pv_field='pvalue',  **kwargs):
+           threads=1, window=250, pv_field='pvalue', max_memory=None, **kwargs):
     print(kwargs)
     X_train = None
     now = time.time()
@@ -453,7 +459,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         opts = {'outprefix': 'ppt_simulation', 'bfile': geno,
                 'h2': kwargs['h2'], 'ncausal': kwargs['ncausal'],
                 'normalize': kwargs['normalize'], 'uniform': kwargs['uniform'],
-                'seed': seed}
+                'seed': seed, 'max_memory': max_memory}
         pheno, h2, (geno, bim, truebeta, vec) = qtraits_simulation(**opts)
         assert bim.shape[0] == geno.shape[1]
         opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': geno,
@@ -494,7 +500,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         r = pd.read_csv('%s_ppt.results.tsv' % prefix, sep='\t')
     else:
         r = sorted([score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
-                          field=pv_field)
+                          field=pv_field, max_memory=max_memory)
                     for r_t, p_t in product(r_range, p_thresh)],
                    key=itemgetter(2),
                    reverse=True)
@@ -505,7 +511,8 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     best_rt, best_pt, best_r2 = r.nlargest(n=1, columns='R2').values.flat
     # score in test set
     r_t, p_t, fit, clumps, sc, df2 = score(X_test, y_test, sumstats, best_rt,
-                                          best_pt, R2, threads, field=pv_field)
+                                          best_pt, R2, threads, field=pv_field,
+                                           max_memory=max_memory)
     if isinstance(sc, np.ndarray):
         if isinstance(y_test, pd.core.frame.DataFrame):
             prs = y_test.reindex(columns=['fid', 'iid'])
@@ -572,7 +579,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--sort_file', default=None,
                         help='File to sort the snps by instead of pvalue')
     parser.add_argument('-T', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=3000, type=int)
+    parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('-S', '--score_type', default='sum')
     parser.add_argument('--h2', default=None, type=float)
     parser.add_argument('--ncausal', default=None, type=int)
@@ -587,7 +594,7 @@ if __name__ == '__main__':
                  args.r_range, args.p_thresh, seed=args.seed, split=args.nsplits,
                  threads=args.threads, h2=args.h2, ncausal=args.ncausal,
                  uniform=args.uniform, pv_field=args.pvalue_field,
-                 normalize=args.normalize,)
+                 normalize=args.normalize, max_memory=args.maxmem)
     # pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
     #              args.pheno, args.plinkexe, args.allele_file,
     #              clump_field=args.clump_field, sort_file=args.sort_file,

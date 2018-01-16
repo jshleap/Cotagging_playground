@@ -321,8 +321,11 @@ def helper_smartsort2(grouped, key):
 
 
 # ---------------------------------------------------------------------------
-def read_geno(bfile, freq_thresh, threads, flip=False):
+def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
+
     (bim, fam, G) = read_plink(bfile)
+    chunks = estimate_chunks(G.shape, threads, memory=memory)
+    G = da.rechunk(G, chunks=chunks)
     # remove constant variants
     G_std = G.std(axis=1).compute(num_workers=threads)
     m, n = G.shape
@@ -554,8 +557,8 @@ def estimate_size(shape):
 
 # ----------------------------------------------------------------------
 def estimate_chunks(shape, threads, memory=None):
-    total = psutil.virtual_memory().available / 1E7
-    avail_mem = total if memory is None else memory  # a tenth of the memory
+    total = psutil.virtual_memory().available / 1E7 # a tenth of the memory
+    avail_mem = total if memory is None else memory
     usage = estimate_size(shape) * threads
     if usage < avail_mem:
         return shape

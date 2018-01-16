@@ -484,7 +484,7 @@ def optimize_alpha(prefix, bfile, pheno, merged, alphastep, prune_step=1,
 # ----------------------------------------------------------------------
 def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
                cotag=None, freq_threshold=0.01, splits=3, threads=1, seed=None,
-               **kwargs):
+               max_memory= None, **kwargs):
     seed = np.random.randint(1e4) if seed is None else seed
     print('Performing prankcster')
     # Unpack population labels
@@ -496,7 +496,8 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
         opts = {'outprefix': refl, 'bfile': rbed, 'h2': kwargs['h2'],
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
-                'bfile2': tbed, 'f_thr': freq_threshold}
+                'bfile2': tbed, 'f_thr': freq_threshold, 'max_memory':max_memory
+                }
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
@@ -677,7 +678,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--threads', default=1, action='store', type=int)
     parser.add_argument('-H', '--h2', default=0.66, type=float,
                         help=('Heritability of the simulated phenotype'))
-    parser.add_argument('-M', '--maxmem', default=1700, type=int)
+    parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('-F', '--freq_threshold', default=0.1, type=float)
     parser.add_argument('-Q', '--qrangefn', default=None, help=(
         'Specific pre-made qrange file'))
@@ -704,9 +705,9 @@ if __name__ == '__main__':
     #            strategy=args.strategy, every=args.every, column=args.column,
     #            splits=args.splits, weight=args.weight)
     prankcster(args.prefix, args.target, args.reference, args.pheno,
-               args.labels,
-               args.alpha_step, args.prune_step, cotag=args.cotagfn,
+               args.labels,args.alpha_step, args.prune_step, cotag=args.cotagfn,
                freq_threshold=args.freq_threshold, splits=args.splits,
                seed=args.seed, h2=args.h2, ncausal=args.ncausal,
                normalize=args.normalize, uniform=args.uniform,
-               r_range=args.r_range, p_tresh=args.p_tresh, window=args.window)
+               r_range=args.r_range, p_tresh=args.p_tresh, window=args.window,
+               max_memory=args.maxmem)

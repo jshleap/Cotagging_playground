@@ -452,13 +452,14 @@ if __name__ == '__main__':
     parser.add_argument('-S', '--seed', help=('Random seed'),
                         default=None)
     parser.add_argument('-t', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=1700, type=int)
+    parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('--use_statsmodels', action='store_true')
     parser.add_argument('--flip', action='store_true')
     args = parser.parse_args()
     plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
                     plot=args.plot, threads=args.threads, seed=args.seed,
-                    stmd=args.use_statsmodels, flip=args.flip)
+                    stmd=args.use_statsmodels, flip=args.flip,
+                    max_memory=args.maxmem)
     # plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
     #            args.allele_file,  covs=args.covs, nosex=args.nosex,
     #            threads=args.threads, maxmem=args.maxmem, validate=args.validate,
