@@ -528,7 +528,17 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
 
 
 if __name__ == '__main__':
-    #TODO: make the custom pval threshold not splitted by commas
+    class Store_as_arange(argparse._StoreAction):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = np.arange(values[0], values[1], values[2])
+            return super().__call__(parser, namespace, values, option_string)
+
+
+    class Store_as_array(argparse._StoreAction):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = np.array(values)
+            return super().__call__(parser, namespace, values, option_string)
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--bfile', help='plink fileset prefix',
                         required=True)
@@ -547,23 +557,10 @@ if __name__ == '__main__':
                         help='Physical distance threshold ' +
                              'for clumping in kb (250kb by default)', type=int,
                         default=250)
-    parser.add_argument('-c', '--rstart', help='minimum R2 threshold. '
-                                               'Default: 0.1', type=float,
-                        default=0.1)
-    parser.add_argument('-d', '--rstop', help='maximum R2 threshold. '
-                                              'Default: 0.8', type=float,
-                        default=0.8)
-    parser.add_argument('-e', '--rstep', help='step for R2 threshold. '
-                                              'Default: 0.1', type=float,
-                        default=0.1)
-    parser.add_argument('-v', '--pstart',
-                        help='Minimum value for for the Pval' +
-                             ' range. Default: 1E-8', type=float, default=1E-8)
-    parser.add_argument('-w', '--pstop', help='Maximum value for for the Pval' +
-                                              ' range. Default: 1', type=float,
-                        default=1)
-    parser.add_argument('-C', '--customP', help='Custom pvalue range.' +
-                                                'Default: (None)', default=None)
+    parser.add_argument('--r_range', default=None, nargs=3,
+                        action=Store_as_arange, type=float)
+    parser.add_argument('--p_thresh', default=None, nargs='+',
+                        action=Store_as_array, type=float)
     parser.add_argument('-z', '--clean', help='Cleanup the clump and profiles',
                         default=False, action='store_true')
     parser.add_argument('-L', '--label', help='Label of the populations being' +
@@ -585,23 +582,12 @@ if __name__ == '__main__':
     parser.add_argument('--pvalue_field', default='pvalue')
     parser.add_argument('--seed', default=None, type=int)
     args = parser.parse_args()
-    LDs = [x if x <= 0.99 else 0.99 for x in sorted(
-        np.arange(args.rstart, args.rstop + args.rstep, args.rstep),
-        reverse=True)]
-    if args.customP:
-        if args.customP != 'infer':
-            Ps = [float('%.1g' % float(x)) for x in args.customP.split(',')]
-            Ps = sorted(Ps, reverse=True)
-        else:
-            Ps = 'infer'
-    else:
-        sta, sto = np.log10(args.pstart), np.log10(args.pstop)
-        Ps = sorted([float('%.1g' % 10 ** (x)) for x in np.concatenate(
-            (np.arange(sta, sto), [sto]), axis=0)], reverse=True)
-    prs = pplust(args.prefix, args.bfile, args.pheno, args.sumstats, LDs, Ps,
-                 seed=args.seed, threads=args.threads, h2=args.h2,
-                 split=args.nsplits, ncausal=args.ncausal, uniform=args.uniform,
-                 pv_field=args.pvalue_field, normalize=args.normalize,)
+
+    prs = pplust(args.prefix, args.bfile, args.pheno, args.sumstats,
+                 args.r_range, args.p_thresh, seed=args.seed, split=args.nsplits,
+                 threads=args.threads, h2=args.h2, ncausal=args.ncausal,
+                 uniform=args.uniform, pv_field=args.pvalue_field,
+                 normalize=args.normalize,)
     # pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
     #              args.pheno, args.plinkexe, args.allele_file,
     #              clump_field=args.clump_field, sort_file=args.sort_file,

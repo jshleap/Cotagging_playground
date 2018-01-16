@@ -333,7 +333,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         sumstats = pd.read_table(sumstats, delim_whitespace=True)
     else:
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-
+    print("reference bim's shape: %d, %d" % (rbim.shape[0], rbim.shape[1]))
+    print("target bim's shape: %d, %d" % (tbim.shape[0], tbim.shape[1]))
     sum_snps = sumstats.snp.tolist()
     if refld is None:
         # Compute Ds
