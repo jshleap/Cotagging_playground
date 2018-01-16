@@ -367,6 +367,7 @@ def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
     g = igraph.Graph.Adjacency((op[ld_operation](r2,  r_thresh)).values.astype(
         int).tolist(), mode='UPPER')
     g.vs['label'] = r2.columns.tolist()
+    del g
     sg = g.components().subgraphs()
     for l in sg:
         snps = l.vs['label']
@@ -377,6 +378,9 @@ def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
             else:
                 values = []
             out[sub.iloc[0].snp] = values
+    # Help garbage collection
+    del r2, sg, l, snps, sub, values
+    gc.collect()
     return out
 
 
@@ -393,6 +397,8 @@ def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None,
                               cache=cache))
     else:
         r = list(dask.compute(*delayed_results, num_workers=threads))
+    del r
+    gc.collect()
     clumps = dict(pair for d in r for pair in d.items())
     # set dataframe
     cols = ['snp', field, 'slope', 'i']
@@ -401,6 +407,8 @@ def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None,
     df2 = df.sort_values(by=field)
     # tagged = [x for v in df.snp for x in clumps[v]]
     df['Tagged'] = [';'.join(clumps[v]) for v in df.snp]
+    del clumps
+    gc.collect()
     # tail = sub[sub.snp.isin(tagged)].reindex(columns=cols).sample(frac=1)
     tail = sumstats[~sumstats.snp.isin(df2.snp)].reindex(columns=cols)
     df2 = df2.append(tail).reset_index(drop=True)
