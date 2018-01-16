@@ -679,7 +679,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
 
 # ----------------------------------------------------------------------
 @jit
-def single_window(df, rgeno, tgeno, justd=False):
+def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False):
     ridx = df.i_ref.values
     tidx = df.i_tar.values
     rg = rgeno[:, ridx]
@@ -692,20 +692,25 @@ def single_window(df, rgeno, tgeno, justd=False):
     ref = da.diag(da.dot(D_r, D_r))
     tar = da.diag(da.dot(D_t, D_t))
     stacked = da.stack([df.snp, ref, tar, cot], axis=1)
-    return dd.from_dask_array(stacked, columns=['snp', 'ref', 'tar', 'cotag']
-                              ).compute()
+    c_h_u_n_k_s = estimate_chunks(stacked.shape, threads, max_memory)
+    stacked = da.rechunk(stacked, chunks=c_h_u_n_k_s)
+    columns=['snp', 'ref', 'tar', 'cotag']
+    return dd.from_dask_array(stacked, columns=columns).compute()
 
 
 # ----------------------------------------------------------------------
-def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, justd=False):
+def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
+           justd=False):
     mbim = rbim.merge(tbim, on=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1'],
                       suffixes=['_ref', '_tar'])
     nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
     bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
                        )
     mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
-    delayed_results = [dask.delayed(single_window)(df, rgeno, tgeno, justd)
-                       for window, df in mbim.groupby('windows')]
+    delayed_results = [
+        dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
+                                    justd) for window, df in
+        mbim.groupby('windows')]
     r = list(dask.compute(*delayed_results, num_workers=threads))
     if justd:
         return r

@@ -15,6 +15,9 @@ matplotlib.use('Agg')
 from qtraitsimulation import *
 from plinkGWAS import *
 import gc
+from chest import Chest
+from tempfile import TemporaryFile
+import operator
 plt.style.use('ggplot')
 
 
@@ -355,13 +358,14 @@ def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
 
 
 # ----------------------------------------------------------------------
-#@jit
-def single_clump(df, R2, block, r_thresh, field='pvalue'):
+@jit
+def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
+    op = {'lt': operator.lt, 'gt': operator.gt}
     out = {}
     r2 = R2[block]
     # generate a graph
-    g = igraph.Graph.Adjacency((r2 < r_thresh).values.astype(int).tolist(),
-                               mode='UPPER')
+    g = igraph.Graph.Adjacency((op[ld_operation](r2,  r_thresh)).values.astype(
+        int).tolist(), mode='UPPER')
     g.vs['label'] = r2.columns.tolist()
     sg = g.components().subgraphs()
     for l in sg:
@@ -377,12 +381,14 @@ def single_clump(df, R2, block, r_thresh, field='pvalue'):
 
 
 # ----------------------------------------------------------------------
-def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None):
+def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None,
+          ld_operator='lt'):
     sub = sumstats[sumstats.loc[:, field] < p_thr]#.sort_values(by='p_value')
-    delayed_results = [dask.delayed(single_clump)(df, R2, block, r_thr, field)
-                       for block, df in sub.groupby('block')]
+    delayed_results = [
+        dask.delayed(single_clump)(df, R2, block, r_thr, field, ld_operator) for
+        block, df in sub.groupby('block')]
     if max_memory is not None:
-        cache = dask.Chest(path='.', available_memory=max_memory)
+        cache = Chest(path='.', available_memory=max_memory)
         r = list(dask.compute(*delayed_results, num_workers=threads,
                               cache=cache))
     else:
@@ -420,13 +426,13 @@ def new_plot(prefix, ppt, geno, pheno, threads):
 
 # ----------------------------------------------------------------------
 def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
-          max_memory=None):
+          max_memory=None, ld_operator='lt'):
     print('Scoring with p-val %.2g and R2 %.2g' % (p_t, r_t))
     if isinstance(pheno, pd.core.frame.DataFrame):
         pheno = pheno.PHENO.values
     #assert isinstance(pheno, np.ndarray)
     clumps, df2 = clump(R2, sumstats, r_t, p_t, threads, field=field,
-                        max_memory=max_memory)
+                        max_memory=max_memory, ld_operator=ld_operator)
     #print(df2)
     #assert isinstance(clumps, pd.core.frame.DataFrame)
     index = clumps.snp.tolist()
@@ -440,7 +446,8 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
 
 # ----------------------------------------------------------------------
 def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
-           threads=1, window=250, pv_field='pvalue', max_memory=None, **kwargs):
+           threads=1, window=250, pv_field='pvalue', max_memory=None,
+           ld_operator='lt', **kwargs):
     print(kwargs)
     X_train = None
     now = time.time()
@@ -500,9 +507,9 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         r = pd.read_csv('%s_ppt.results.tsv' % prefix, sep='\t')
     else:
         r = sorted([score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
-                          field=pv_field, max_memory=max_memory)
-                    for r_t, p_t in product(r_range, p_thresh)],
-                   key=itemgetter(2),
+                          field=pv_field, max_memory=max_memory,
+                          ld_operator=ld_operator) for r_t, p_t in
+                    product(r_range, p_thresh)], key=itemgetter(2),
                    reverse=True)
         get = itemgetter(0,1,2)
         r = pd.DataFrame.from_records([get(x) for x in r], columns=[
@@ -512,7 +519,8 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     # score in test set
     r_t, p_t, fit, clumps, sc, df2 = score(X_test, y_test, sumstats, best_rt,
                                           best_pt, R2, threads, field=pv_field,
-                                           max_memory=max_memory)
+                                           max_memory=max_memory,
+                                           ld_operator=ld_operator)
     if isinstance(sc, np.ndarray):
         if isinstance(y_test, pd.core.frame.DataFrame):
             prs = y_test.reindex(columns=['fid', 'iid'])
@@ -579,7 +587,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--sort_file', default=None,
                         help='File to sort the snps by instead of pvalue')
     parser.add_argument('-T', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=None, type=int)
+    parser.add_argument('-M', '--maxmem', default=None, type=float)
     parser.add_argument('-S', '--score_type', default='sum')
     parser.add_argument('--h2', default=None, type=float)
     parser.add_argument('--ncausal', default=None, type=int)
@@ -588,13 +596,15 @@ if __name__ == '__main__':
     parser.add_argument('--nsplits', default=2, type=int)
     parser.add_argument('--pvalue_field', default='pvalue')
     parser.add_argument('--seed', default=None, type=int)
+    parser.add_argument('--ld_operator', default='lt')
     args = parser.parse_args()
 
     prs = pplust(args.prefix, args.bfile, args.pheno, args.sumstats,
                  args.r_range, args.p_thresh, seed=args.seed, split=args.nsplits,
                  threads=args.threads, h2=args.h2, ncausal=args.ncausal,
                  uniform=args.uniform, pv_field=args.pvalue_field,
-                 normalize=args.normalize, max_memory=args.maxmem)
+                 normalize=args.normalize, max_memory=args.maxmem,
+                 ld_operator=args.ld_operator)
     # pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
     #              args.pheno, args.plinkexe, args.allele_file,
     #              clump_field=args.clump_field, sort_file=args.sort_file,
