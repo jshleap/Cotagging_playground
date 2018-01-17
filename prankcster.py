@@ -545,13 +545,17 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
     if os.path.isfile('%s.sorted_ppt' % tarl):
         clumpetar = pd.read_table('%s.sorted_ppt' % tarl, sep='\t')
     else:
-        clumpetar = pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats,
-                           kwargs['r_range'], kwargs['p_tresh'], bim=tbim)[-1]
+        clumpetar = \
+        pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats, kwargs['r_range'],
+               kwargs['p_tresh'], bim=tbim, d_operator=kwargs['ld_operator'],
+               graph=kwargs['graph'])[-1]
     if os.path.isfile('%s.sorted_ppt' % refl):
         clumperef = pd.read_table('%s.sorted_ppt' % refl, sep='\t')
     else:
-        clumperef = pplust('%s_ppt' % refl, X_test, Y_test, sumstats,
-                           kwargs['r_range'], kwargs['p_tresh'], bim=tbim)[-1]
+        clumperef = \
+        pplust('%s_ppt' % refl, X_test, Y_test, sumstats, kwargs['r_range'],
+               kwargs['p_tresh'], bim=tbim, ld_operator=kwargs['ld_operator'],
+               graph=kwargs['graph'])[-1]
     # clumperef = clumperef[clumperef.SNP.isin(frqs.SNP)]
     clumpe = clumpetar.merge(clumperef, on='snp', suffixes=['_%sPpT' % tarl,
                                                             '_%sPpT' % refl])
@@ -695,6 +699,8 @@ if __name__ == '__main__':
                         action=Store_as_arange, type=float)
     parser.add_argument('--p_tresh', default=None, nargs='+',
                         action=Store_as_array, type=float)
+    parser.add_argument('--ld_operator', default='lt')
+    parser.add_argument('--graph', action='store_true')
     args = parser.parse_args()
     # prankcster_plink(args.prefix, args.target, args.reference, args.cotagfn,
     #            args.target_ppt, args.ref_ppt, args.sumstats, args.pheno,
@@ -705,9 +711,10 @@ if __name__ == '__main__':
     #            strategy=args.strategy, every=args.every, column=args.column,
     #            splits=args.splits, weight=args.weight)
     prankcster(args.prefix, args.target, args.reference, args.pheno,
-               args.labels,args.alpha_step, args.prune_step, cotag=args.cotagfn,
-               freq_threshold=args.freq_threshold, splits=args.splits,
-               seed=args.seed, h2=args.h2, ncausal=args.ncausal,
-               normalize=args.normalize, uniform=args.uniform,
-               r_range=args.r_range, p_tresh=args.p_tresh, window=args.window,
-               max_memory=args.maxmem)
+               args.labels, args.alpha_step, args.prune_step,
+               cotag=args.cotagfn, freq_threshold=args.freq_threshold,
+               splits=args.splits, seed=args.seed, h2=args.h2,
+               ncausal=args.ncausal, normalize=args.normalize,
+               uniform=args.uniform, r_range=args.r_range, p_tresh=args.p_tresh,
+               window=args.window, max_memory=args.maxmem,
+               ld_operator=args.ld_operator, graph=args.graph)

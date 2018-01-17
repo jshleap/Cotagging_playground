@@ -457,12 +457,15 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
 
 # ----------------------------------------------------------------------
 @jit
-def single_pair(r_t, p_t, g, sumstats):
+def single_pair(r_t, p_t, g, sumstats, ld_operator):
     print('    Processing r_t %.2g, p_t %.2g' % (r_t, p_t))
     out=[]
     opp=out.append
     sg = g.vs.select(pvalue_lt=p_t).subgraph()
-    sg = sg.es.select(weight_lt=r_t).subgraph()
+    if ld_operator == 'lt':
+        sg = sg.es.select(weight_lt=r_t).subgraph()
+    else:
+        sg = sg.es.select(weight_gt=r_t).subgraph()
     for component in sg.components().subgraphs():
         index = component.vs.select(pvalue_eq=min(component.vs['pvalue']
                                                   ))['snp'][0]
@@ -475,18 +478,27 @@ def single_pair(r_t, p_t, g, sumstats):
 
 
 # ----------------------------------------------------------------------
-def graph_clump(R2, r_range, p_thresh, sumstats, threads):
-    pairs = list(product(r_range, p_thresh))
-    clumps = []
-    capp = clumps.extend
-    for block, block_df in R2.items():
-        print('Clumping by block', block)
-        # fun = [dask.delayed(graph_from_block)(block_df, sumstats)]
-        # g = dask.compute(*fun, num_workers=threads)
-        g = graph_from_block(block_df, sumstats, threads)
-        capp(Parallel(n_jobs=threads)(
-            delayed(single_pair)(r_t, p_t, g, sumstats) for r_t, p_t in pairs))
-    return pd.DataFrame(clumps)
+def graph_clump(R2, r_range, p_thresh, sumstats, threads, ld_operator):
+    pickefile = 'graph_clump.pickle'
+    if not os.path.isfile(pickefile):
+        pairs = list(product(r_range, p_thresh))
+        clumps = []
+        capp = clumps.extend
+        for block, block_df in R2.items():
+            print('Clumping by block', block)
+            # fun = [dask.delayed(graph_from_block)(block_df, sumstats)]
+            # g = dask.compute(*fun, num_workers=threads)
+            g = graph_from_block(block_df, sumstats, threads)
+            capp(Parallel(n_jobs=threads)(
+                delayed(single_pair)(r_t, p_t, g, sumstats, ld_operator) for
+                r_t, p_t in pairs))
+        clumps = pd.DataFrame(clumps)
+        with open(pickefile, 'wb') as F:
+            pickle.dump(clumps, F)
+    else:
+        with open(pickefile, 'rb') as F:
+            clumps = pickle.load(F)
+    return clumps
 
 
 # ----------------------------------------------------------------------
@@ -583,7 +595,8 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     print('Smallest p-value in summary statistics\n', sumstats.iloc[0])
     if graph:
         import sys
-        clumps = graph_clump(R2, r_range, p_thresh, sumstats, threads)
+        clumps = graph_clump(R2, r_range, p_thresh, sumstats, threads,
+                             ld_operator)
         scored = score_graph(clumps, X_train, y_train, threads)
         print(scored)
         sys.exit()
