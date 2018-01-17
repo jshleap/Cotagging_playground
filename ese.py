@@ -381,12 +381,12 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         # do prancster
         merged = prankcster('%s_prancster' % prefix, tgeno, rgeno, tpheno,
                             (refl, tarl), 0.1, 5, splits=kwargs['split'],
-                            threads=threads, seed=seed,
+                            threads=threads, seed=seed, graph=kwargs['graph'],
                             r_range=kwargs['r_range'],
                             p_tresh=kwargs['p_tresh'], sumstats=sumstats,
                             tbim=tbim, rbim=rbim, window=LDwindow,
-                            X_test=X_test, Y_test=y_test
-                            )
+                            X_test=X_test, Y_test=y_test,
+                            ld_operator=kwargs['ld_operator'])
     res = pd.concat([trans] + merged)
     # plot
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k','y'])
@@ -463,6 +463,8 @@ if __name__ == '__main__':
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
     parser.add_argument('--gflip', action='store_true', help='flip genotype')
     parser.add_argument('--within', action='store_true', help='Use only ref')
+    parser.add_argument('--ld_operator', default='lt')
+    parser.add_argument('--graph', action='store_true')
 
     args = parser.parse_args()
     transferability(args.prefix, args.reference, args.refpheno, args.target,
@@ -470,5 +472,7 @@ if __name__ == '__main__':
                     args.sumstats, refld=args.refld, tarld=args.tarld,
                     seed=args.seed, threads=args.threads, merged=args.merged,
                     ncausal=args.ncausal, normalize=True, uniform=args.uniform,
-                    r_range=args.r_range, p_tresh=args.p_tresh, split=args.split,
-                    flip=args.flip, gflip=args.gflip, within=args.within)
+                    r_range=args.r_range, p_tresh=args.p_tresh,
+                    split=args.split, flip=args.flip, gflip=args.gflip,
+                    within=args.within, ld_operator=args.ld_operator,
+                    graph=args.graph)
