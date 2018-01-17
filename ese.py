@@ -96,7 +96,7 @@ def integral_b(vs, mu, snps):
 
 # ----------------------------------------------------------------------
 @jit
-def per_locus(locus, sumstats, avh2, h2, n):
+def per_locus(locus, sumstats, avh2, h2, n, within=False):
     """
     compute the per-locus expectation
     """
@@ -108,7 +108,10 @@ def per_locus(locus, sumstats, avh2, h2, n):
     vjs = ((n * locus.slope.values) / (2 * (1 - h2_l)))
     I = integral_b(vjs, mu, snps)
     assert np.all(I > 0)
-    expcovs = (D_r * D_t).dot(I)
+    if within:
+        expcovs = (D_r * D_r).dot(I)
+    else:
+        expcovs = (D_r * D_t).dot(I)
     return pd.DataFrame({'snp': snps, #expcovs.index.tolist(),
                          'ese': abs(expcovs)})#expcovs.values.tolist()})
 
@@ -245,6 +248,7 @@ def transferability_plink(args):
     product['Index'] = product.index.tolist()
     nsnps = product.shape[0]
     percentages = set_first_step(nsnps, 5, every=False)
+    percentages = set_first_step(nsnps, 5, every=False)
     snps = np.around((percentages * nsnps) / 100).astype(int)
     qfile = '%s.qfile' % args.prefix
     if args.qrange is None:
@@ -296,7 +300,8 @@ def transferability_plink(args):
 # ----------------------------------------------------------------------
 def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                     LDwindow, sumstats, refld=None, tarld=None, seed=None,
-                    threads=1, merged=None, max_memory=None, **kwargs):
+                    max_memory=None, threads=1, merged=None, within=False,
+                    **kwargs):
     """
     Execute trasnferability code
     """
@@ -351,8 +356,9 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         # res = Parallel(n_jobs=int(threads))(
         #     delayed(per_locus)(locus, sumstats, avh2, h2, n) for
         #     i, locus in tqdm(enumerate(loci), total=len(loci)))
-        delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n)
-                           for i, locus in enumerate(loci)]
+        delayed_results = [
+            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, within=within)
+            for i, locus in enumerate(loci)]
         res = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.concat(res)
         result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
@@ -459,6 +465,7 @@ if __name__ == '__main__':
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
     parser.add_argument('--gflip', action='store_true', help='flip genotype')
     parser.add_argument('--freq_thresh', type=float, help='filter by mafs')
+    parser.add_argument('--within', action='store_true', help='Use only ref')
 
     args = parser.parse_args()
     transferability(args.prefix, args.reference, args.refpheno, args.target,
@@ -466,6 +473,7 @@ if __name__ == '__main__':
                     args.sumstats, refld=args.refld, tarld=args.tarld,
                     seed=args.seed, threads=args.threads, merged=args.merged,
                     ncausal=args.ncausal, normalize=True, uniform=args.uniform,
-                    r_range=args.r_range, p_tresh=args.p_tresh, split=args.split,
-                    flip=args.flip, gflip=args.gflip, max_memory=args.maxmem,
-                    freq_thresh=args.freq_thresh)
+                    r_range=args.r_range, p_tresh=args.p_tresh,
+                    split=args.split, max_memory=args.maxmem, flip=args.flip,
+                    gflip=args.gflip, within=args.within)
+
