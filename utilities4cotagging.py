@@ -324,8 +324,8 @@ def helper_smartsort2(grouped, key):
 def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
 
     (bim, fam, G) = read_plink(bfile)
-    chunks = estimate_chunks(G.shape, threads, memory=memory)
-    G = da.rechunk(G, chunks=chunks)
+    #chunks = estimate_chunks(G.shape, threads, memory=memory)
+    #G = da.rechunk(G, chunks=chunks)
     # remove constant variants
     G_std = G.std(axis=1).compute(num_workers=threads)
     m, n = G.shape

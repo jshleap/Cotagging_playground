@@ -16,7 +16,7 @@ from qtraitsimulation import *
 from plinkGWAS import *
 import gc
 from chest import Chest
-from tempfile import TemporaryFile
+from tempfile import TemporaryFile, tempdir
 import operator
 plt.style.use('ggplot')
 
@@ -360,6 +360,7 @@ def pplust_plink(outpref, bfile, sumstats, r2range, prange, snpwindow, phenofn,
 # ----------------------------------------------------------------------
 @jit
 def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
+    print('\t Processing block', block)
     op = {'lt': operator.lt, 'gt': operator.gt}
     out = {}
     r2 = R2[block]
@@ -367,7 +368,7 @@ def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
     g = igraph.Graph.Adjacency((op[ld_operation](r2,  r_thresh)).values.astype(
         int).tolist(), mode='UPPER')
     g.vs['label'] = r2.columns.tolist()
-    del g
+    #del g
     sg = g.components().subgraphs()
     for l in sg:
         snps = l.vs['label']
@@ -379,7 +380,7 @@ def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
                 values = []
             out[sub.iloc[0].snp] = values
     # Help garbage collection
-    del r2, sg, l, snps, sub, values
+    #del r2, sg, l, snps, sub, values
     gc.collect()
     return out
 
@@ -387,19 +388,21 @@ def single_clump(df, R2, block, r_thresh, field='pvalue', ld_operation='lt'):
 # ----------------------------------------------------------------------
 def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None,
           ld_operator='lt'):
+    print('    Clumping with R2 %.2g and P_thresh of %.2g, with operator %s' % (
+        r_thr, p_thr, ld_operator))
     sub = sumstats[sumstats.loc[:, field] < p_thr]#.sort_values(by='p_value')
     delayed_results = [
         dask.delayed(single_clump)(df, R2, block, r_thr, field, ld_operator) for
         block, df in sub.groupby('block')]
     if max_memory is not None:
-        cache = Chest(path='.', available_memory=max_memory)
+        cache = Chest(path=tempdir, available_memory=max_memory)
         r = list(dask.compute(*delayed_results, num_workers=threads,
                               cache=cache))
     else:
         r = list(dask.compute(*delayed_results, num_workers=threads))
+    clumps = dict(pair for d in r for pair in d.items())
     del r
     gc.collect()
-    clumps = dict(pair for d in r for pair in d.items())
     # set dataframe
     cols = ['snp', field, 'slope', 'i']
     df = sub[sub.snp.isin(list(clumps.keys()))].reindex(columns=cols)
