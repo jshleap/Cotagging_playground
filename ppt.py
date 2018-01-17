@@ -603,11 +603,18 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     elif os.path.isfile('%s_ppt.results.tsv' % prefix):
         r = pd.read_csv('%s_ppt.results.tsv' % prefix, sep='\t')
     else:
-        r = sorted([score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
-                          field=pv_field, max_memory=max_memory,
-                          ld_operator=ld_operator) for r_t, p_t in
-                    product(r_range, p_thresh)], key=itemgetter(2),
-                   reverse=True)
+        # r = sorted([score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
+        #                   field=pv_field, max_memory=max_memory,
+        #                   ld_operator=ld_operator) for r_t, p_t in
+        #             product(r_range, p_thresh)], key=itemgetter(2),
+        #            reverse=True)
+        r = []
+        rapp = r.append
+        for r_t, p_t in product(r_range, p_thresh):
+            rapp(score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
+                       field=pv_field, max_memory=max_memory,
+                       ld_operator=ld_operator))
+        r = sorted(r,  key=itemgetter(2), reverse=True)
         get = itemgetter(0,1,2)
         r = pd.DataFrame.from_records([get(x) for x in r], columns=[
             'LD threshold', 'P-value threshold', 'R2'])
