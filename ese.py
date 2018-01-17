@@ -300,7 +300,8 @@ def transferability_plink(args):
 # ----------------------------------------------------------------------
 def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                     LDwindow, sumstats, refld=None, tarld=None, seed=None,
-                    threads=1, merged=None, within=False, **kwargs):
+                    max_memory=None, threads=1, merged=None, within=False,
+                    **kwargs):
     """
     Execute trasnferability code
     """
@@ -318,7 +319,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         opts = {'outprefix': refl, 'bfile': refgeno, 'h2': h2,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
-                'bfile2': targeno, 'flip':kwargs['gflip']}
+                'bfile2': targeno, 'flip':kwargs['gflip'],
+                'max_memory': max_memory}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
@@ -329,10 +331,10 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                          validate=kwargs['split'], threads=threads, bim=rbim,
                          flip=kwargs['flip']))
     elif isinstance(refgeno, str):
-        (rbim, rfam, rgeno) = read_plink(refgeno)
-        rgeno = rgeno.T
-        (tbim, tfam, tgeno) = read_plink(targeno)
-        tgeno = tgeno.T
+        (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
+                                        memory=max_memory)
+        (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
+                                        memory=max_memory)
     if isinstance(sumstats, str):
         sumstats = pd.read_table(sumstats, delim_whitespace=True)
     else:
@@ -445,7 +447,7 @@ if __name__ == '__main__':
                         help=('Size of the LD window. a.k.a locus'))
     parser.add_argument('-P', '--plinkexe', default=None)
     parser.add_argument('-T', '--threads', default=1, type=int)
-    parser.add_argument('-M', '--maxmem', default=3000, type=int)
+    parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('-m', '--merged', default=None, help=('Merge file of '
                                                               'prankcster run'
                                                               ))
@@ -462,6 +464,7 @@ if __name__ == '__main__':
                         action=Store_as_array, type=float)
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
     parser.add_argument('--gflip', action='store_true', help='flip genotype')
+    parser.add_argument('--freq_thresh', type=float, help='filter by mafs')
     parser.add_argument('--within', action='store_true', help='Use only ref')
     parser.add_argument('--ld_operator', default='lt')
     parser.add_argument('--graph', action='store_true')
@@ -473,6 +476,6 @@ if __name__ == '__main__':
                     seed=args.seed, threads=args.threads, merged=args.merged,
                     ncausal=args.ncausal, normalize=True, uniform=args.uniform,
                     r_range=args.r_range, p_tresh=args.p_tresh,
-                    split=args.split, flip=args.flip, gflip=args.gflip,
-                    within=args.within, ld_operator=args.ld_operator,
-                    graph=args.graph)
+                    max_memory=args.maxmem, split=args.split, flip=args.flip,
+                    gflip=args.gflip, within=args.within,
+                    ld_operator=args.ld_operator, graph=args.graph)
