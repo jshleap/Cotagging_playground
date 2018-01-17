@@ -456,9 +456,76 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
 
 
 # ----------------------------------------------------------------------
+@jit
+def single_pair(r_t, p_t, g, sumstats):
+    print('    Processing r_t %.2g, p_t %.2g' % (r_t, p_t))
+    out=[]
+    opp=out.append
+    sg = g.vs.select(pvalue_lt=p_t).subgraph()
+    sg = sg.es.select(weight_lt=r_t).subgraph()
+    for component in sg.components().subgraphs():
+        index = component.vs.select(pvalue_eq=min(component.vs['pvalue']
+                                                  ))['snp'][0]
+        i, slope, pvalue = sumstats[sumstats.snp == index].reindex(
+            columns=['i', 'slope', 'pvalue'])
+        tagged = component.vs.select(snp_notin=[index])['snp']
+        opp({'r_t': r_t, 'p_t': p_t, 'index': index, 'i': i, 'slope': slope,
+             'pvalue': pvalue, 'tagged': ';'.join(tagged)})
+    return out
+
+
+# ----------------------------------------------------------------------
+def graph_clump(R2, r_range, p_thresh, sumstats, threads):
+    pairs = list(product(r_range, p_thresh))
+    clumps = []
+    capp = clumps.extend
+    for block, block_df in R2.items():
+        print('Clumping by block', block)
+        # fun = [dask.delayed(graph_from_block)(block_df, sumstats)]
+        # g = dask.compute(*fun, num_workers=threads)
+        g = graph_from_block(block_df, sumstats, threads)
+        capp(Parallel(n_jobs=threads)(
+            delayed(single_pair)(r_t, p_t, g, sumstats) for r_t, p_t in pairs))
+    return pd.DataFrame(clumps)
+
+
+# ----------------------------------------------------------------------
+def group_score(df, geno, pheno):
+    idx = df.i.tolist()
+    betas = df.slope.tolist()
+    prs = geno[:, idx].dot(betas)
+    slope, intercept, r_value, p_value, std_err = lr(pheno, prs)
+    r2 = r_value ** 2
+    return (r2, df)
+
+
+# ----------------------------------------------------------------------
+def score_graph(clumps, geno, pheno, threads):
+    delayed_results = [dask.delayed(group_score)(df, geno, pheno) for gr, df in
+                       clumps.groupby(['r_t', 'p_t'])]
+    scores = list(dask.compute(*delayed_results, num_workers=threads))
+    return dict(scores)
+
+
+# ----------------------------------------------------------------------
+#@jit
+def graph_from_block(block, sumstats, threads):
+    print('    Creating graph...')
+    A = block.values.compute(num_workers=threads)
+    snps = block.columns.tolist()
+    g = igraph.Graph.Full(len(snps))
+    g.es['weight'] = A[A.nonzero()]
+    g.vs['snp'] = snps
+    g.vs['pvalue'] = [sumstats[sumstats.snp == i].pvalue.values[0] for i in
+                      g.vs['snp']]
+    print('    Graph Done...')
+    return g
+
+
+# ----------------------------------------------------------------------
 def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
            threads=1, window=250, pv_field='pvalue', max_memory=None,
-           ld_operator='lt', **kwargs):
+           ld_operator='lt', graph=False, **kwargs):
     print(kwargs)
     X_train = None
     now = time.time()
@@ -512,9 +579,15 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
     # do clumping
     sumstats = sumstats.merge(bim.reindex(columns=['snp', 'block']),
                               on='snp').dropna(subset=[pv_field])
-    print('Largest p-value in summary statistics', sumstats.iloc[-1])
-    print('Smallest p-value in summary statistics', sumstats.iloc[0])
-    if os.path.isfile('%s_ppt.results.tsv' % prefix):
+    print('Largest p-value in summary statistics\n', sumstats.iloc[-1])
+    print('Smallest p-value in summary statistics\n', sumstats.iloc[0])
+    if graph:
+        import sys
+        clumps = graph_clump(R2, r_range, p_thresh, sumstats, threads)
+        scored = score_graph(clumps, X_train, y_train, threads)
+        print(scored)
+        sys.exit()
+    elif os.path.isfile('%s_ppt.results.tsv' % prefix):
         r = pd.read_csv('%s_ppt.results.tsv' % prefix, sep='\t')
     else:
         r = sorted([score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
@@ -608,6 +681,7 @@ if __name__ == '__main__':
     parser.add_argument('--pvalue_field', default='pvalue')
     parser.add_argument('--seed', default=None, type=int)
     parser.add_argument('--ld_operator', default='lt')
+    parser.add_argument('--graph', action='store_true')
     args = parser.parse_args()
 
     prs = pplust(args.prefix, args.bfile, args.pheno, args.sumstats,
@@ -615,7 +689,7 @@ if __name__ == '__main__':
                  threads=args.threads, h2=args.h2, ncausal=args.ncausal,
                  uniform=args.uniform, pv_field=args.pvalue_field,
                  normalize=args.normalize, max_memory=args.maxmem,
-                 ld_operator=args.ld_operator)
+                 ld_operator=args.ld_operator, graph=args.graph)
     # pplust_plink(args.prefix, args.bfile, args.sumstats, LDs, Ps, args.LDwindow,
     #              args.pheno, args.plinkexe, args.allele_file,
     #              clump_field=args.clump_field, sort_file=args.sort_file,
