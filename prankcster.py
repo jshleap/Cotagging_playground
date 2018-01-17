@@ -547,7 +547,7 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
     else:
         clumpetar = \
         pplust('%s_ppt' % tarl, tgeno, tpheno, sumstats, kwargs['r_range'],
-               kwargs['p_tresh'], bim=tbim, d_operator=kwargs['ld_operator'],
+               kwargs['p_tresh'], bim=tbim, ld_operator=kwargs['ld_operator'],
                graph=kwargs['graph'])[-1]
     if os.path.isfile('%s.sorted_ppt' % refl):
         clumperef = pd.read_table('%s.sorted_ppt' % refl, sep='\t')
