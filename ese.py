@@ -108,8 +108,10 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False):
     vjs = ((n * locus.slope.values) / (2 * (1 - h2_l)))
     I = integral_b(vjs, mu, snps)
     assert np.all(I > 0)
-    if within:
+    if within == 1:
         expcovs = (D_r * D_r).dot(I)
+    elif within == 2:
+        expcovs = (D_t * D_t).dot(I)
     else:
         expcovs = (D_r * D_t).dot(I)
     return pd.DataFrame({'snp': snps, #expcovs.index.tolist(),
@@ -465,7 +467,8 @@ if __name__ == '__main__':
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
     parser.add_argument('--gflip', action='store_true', help='flip genotype')
     parser.add_argument('--freq_thresh', type=float, help='filter by mafs')
-    parser.add_argument('--within', action='store_true', help='Use only ref')
+    parser.add_argument('--within', default=0, type=int,
+                        help='0=cross; 1=reference; 2=target')
     parser.add_argument('--ld_operator', default='lt')
     parser.add_argument('--graph', action='store_true')
 
