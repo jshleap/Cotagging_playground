@@ -474,7 +474,7 @@ def single_pair(r_t, p_t, g, sumstats, ld_operator):
         tagged = component.vs.select(snp_notin=[index])['snp']
         opp({'r_t': r_t, 'p_t': p_t, 'index': index, 'i': i, 'slope': slope,
              'pvalue': pvalue, 'tagged': ';'.join(tagged)})
-    return out
+    return pd.DataFrame(out)
 
 
 # ----------------------------------------------------------------------
@@ -492,7 +492,7 @@ def graph_clump(R2, r_range, p_thresh, sumstats, threads, ld_operator):
             capp(Parallel(n_jobs=threads)(
                 delayed(single_pair)(r_t, p_t, g, sumstats, ld_operator) for
                 r_t, p_t in pairs))
-        clumps = pd.DataFrame(clumps)
+        clumps = pd.concat(clumps)
         with open(pickefile, 'wb') as F:
             pickle.dump(clumps, F)
     else:
