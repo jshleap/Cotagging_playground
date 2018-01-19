@@ -510,15 +510,17 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
     # Read summary statistics
     elif ('sumstats' in kwargs) and isinstance(kwargs['sumstats'], str):
         sumstats = pd.read_table(kwargs['sumstats'], delim_whitespace=True)
-    else:
-        assert isinstance(kwargs['sumstats'], pd.core.frame.DataFrame)
-        sumstats = kwargs['sumstats']
         rgeno = rbed
         tgeno = tbed
+    else:
+        rgeno = rbed
+        tgeno = tbed
+        sumstats = kwargs['sumstats']
         tbim = kwargs['tbim']
         rbim = kwargs['rbim']
         X_test = kwargs['X_test']
         Y_test = kwargs['Y_test']
+
     # Read the cotag scores
     if os.path.isfile('%s_cotags.tsv' % prefix):
         cotags = pd.read_table('%s_cotags.tsv' % prefix, sep='\t')

@@ -701,7 +701,7 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False):
 # ----------------------------------------------------------------------
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
            justd=False):
-    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1'],
+    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
                       suffixes=['_ref', '_tar'])
     nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
     bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
