@@ -50,19 +50,18 @@ def main(args):
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
     # expecetd square effect
-    resfile = '%s_res.tsv' % args.prefix
-    print('Compute expected beta square per locus...')
-    delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
-                                               within=args.within) for i, locus
-                       in enumerate(loci)]
-    res = list(dask.compute(*delayed_results, num_workers=args.threads))
-    res = pd.concat(res)
-    result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
-                       on='snp')
-    result.to_csv(resfile, index=False, sep='\t')
-    prod, _ = smartcotagsort(args.prefix, result, column='ese')
+    eses = [individual_ese(sumstats, avh2, h2, n, x, loci) for x in [0, 1, 2]]
     # prune by pval
     pval, _ = smartcotagsort('%s_pval' % args.prefix, sumstats, column='pvalue')
+    # plot them
+    res = pd.concat(eses + [pval])
+    colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
+    f, ax = plt.subplots()
+    for t, df in res.groupby('type'):
+        df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True,
+                s=3, c=next(colors), ax=ax, label=t)
+    plt.tight_layout()
+    plt.savefig('%s_transferability.pdf' % args.prefix)
 
 
 
