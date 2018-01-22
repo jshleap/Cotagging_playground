@@ -134,3 +134,4 @@ if __name__ == '__main__':
     parser.add_argument('--graph', action='store_true')
 
     args = parser.parse_args()
+    main(args)
