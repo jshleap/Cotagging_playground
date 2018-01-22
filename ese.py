@@ -87,11 +87,11 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    exp = np.exp(np.power(vs, 2) / (4 * mu))
+    exp = np.exp(np.power(vs, 2) / (4 * mu), dtype=np.longfloat)
     lhs = ((2 * mu) + np.power(vs, 2)) / (4 * np.power(mu, 2))
     rhs = exp / exp.sum()
     vec = lhs * rhs
-    return pd.Series(vec, index=snps)
+    return pd.Series(vec, index=snps, dtype=np.longfloat)
 
 
 # ----------------------------------------------------------------------
@@ -105,17 +105,17 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False):
     m = snps.shape[0]
     h2_l = avh2 * m
     mu = ((n / (2 * (1 - h2_l))) + (m / (2 * h2)))
-    vjs = ((n * locus.slope.values) / (2 * (1 - h2_l)))
+    vjs = ((n * locus.slope.values) / (1 - h2_l)) #(2 * (1 - h2_l)))
     I = integral_b(vjs, mu, snps)
-    assert np.all(I > 0)
+    assert np.all(I >= 0) # make sure integral is positive
+    assert max(I) > 0 # check if at least one is different than 0
     if within == 1:
         expcovs = (D_r * D_r).dot(I)
     elif within == 2:
         expcovs = (D_t * D_t).dot(I)
     else:
         expcovs = (D_r * D_t).dot(I)
-    return pd.DataFrame({'snp': snps, #expcovs.index.tolist(),
-                         'ese': abs(expcovs)})#expcovs.values.tolist()})
+    return pd.DataFrame({'snp': snps, 'ese': abs(expcovs)})
 
 # ----------------------------------------------------------------------
 def per_locus2(locus, sumstats, avh2, h2, N, ld1, ld2, M):

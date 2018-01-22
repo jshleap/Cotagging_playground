@@ -376,7 +376,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
         grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
             column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
-        tail = gwascotag[~gwascotag.snp.isin(grouped.snp)]
+        tail = gwascotag[~gwascotag.snp.isin(sorteddf.snp)]
         beforetail = sorteddf.shape[0]
         df = sorteddf.copy()
         if not tail.empty:
