@@ -84,9 +84,9 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--allele_file', default='EUR.allele',
                         help='File with the allele order. A1 in position 3 and '
                              'id in position2')
-    parser.add_argument('-b', '--reference', required=True,
+    parser.add_argument('-b', '--refgeno', required=True,
                         help=('prefix of the bed fileset in reference'))
-    parser.add_argument('-g', '--target', required=True,
+    parser.add_argument('-g', '--targeno', required=True,
                         help=('prefix of the bed fileset in target'))
     parser.add_argument('-L', '--labels', help=('Populations labels'), nargs=2)
     parser.add_argument('-l', '--refld', default=None,
