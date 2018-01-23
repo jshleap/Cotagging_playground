@@ -9,9 +9,9 @@ within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix):
+    within = within_dict[within]
     prefix = '%s_%s' % (prefix, '_'.join(within.split()))
     print('Compute expected beta square per locus...')
-    within = within_dict[within]
     resfile = '%s_%s_res.tsv' % (prefix, '_'.join(within.split()))
     if not os.path.isfile(resfile):
         delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
