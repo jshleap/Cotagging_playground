@@ -24,6 +24,7 @@ import dask
 import dask.dataframe as dd
 from numba import jit
 from collections import ChainMap
+import msgpack
 
 lr = jit(linregress)
 # ----------------------------------------------------------------------
@@ -358,6 +359,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
 
 
 # ---------------------------------------------------------------------------
+#@jit
 def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in 
@@ -699,24 +701,50 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False):
 
 
 # ----------------------------------------------------------------------
+def large_pickle(obj, file_path):
+    n_bytes = 2 ** 31
+    max_bytes = 2 ** 31 - 1
+    data = bytearray(n_bytes)
+    bytes_out = pickle.dumps(obj)
+    with open(file_path, 'wb') as f_out:
+        for idx in range(0, n_bytes, max_bytes):
+            f_out.write(bytes_out[idx:idx + max_bytes])
+
+
+
+# ----------------------------------------------------------------------
+def large_unpickle(file_path):
+    n_bytes = 2 ** 31
+    max_bytes = 2 ** 31 - 1
+    bytes_in = bytearray(0)
+    input_size = os.path.getsize(file_path)
+    with open(file_path, 'rb') as f_in:
+        for _ in range(0, input_size, max_bytes):
+            bytes_in += f_in.read(max_bytes)
+    obj = pickle.loads(bytes_in)
+    return obj
+
+
+# ----------------------------------------------------------------------
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
            justd=False):
-    if os.path.isfile('ld_perwindow.pickle'):
-        with open('ld_perwindow.pickle', 'rb') as F:
-            r = pickle.load(F)
-    else:
-        print('Computing LD score per window')
-        mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
-                          suffixes=['_ref', '_tar'])
-        nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
-        bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
-                           )
-        mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
-        delayed_results = [
-            dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
-                                        justd) for window, df in
-            mbim.groupby('windows')]
-        r = list(dask.compute(*delayed_results, num_workers=threads))
+    # pickle_file = 'ld_perwindow.pickle'
+    # if os.path.isfile(pickle_file):
+    #     r = large_unpickle(pickle_file)
+    # else:
+    print('Computing LD score per window')
+    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
+                      suffixes=['_ref', '_tar'])
+    nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+    bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
+                       )
+    mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
+    delayed_results = [
+        dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
+                                    justd) for window, df in
+        mbim.groupby('windows')]
+    r = list(dask.compute(*delayed_results, num_workers=threads))
+        # large_pickle(r, pickle_file)
     if justd:
         return r
     r = pd.concat(r)

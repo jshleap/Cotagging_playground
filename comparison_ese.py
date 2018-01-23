@@ -9,10 +9,10 @@ within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix):
-    within = within_dict[within]
-    prefix = '%s_%s' % (prefix, '_'.join(within.split()))
+    within_str = within_dict[within]
+    prefix = '%s_%s' % (prefix, '_'.join(within_str.split()))
     print('Compute expected beta square per locus...')
-    resfile = '%s_%s_res.tsv' % (prefix, '_'.join(within.split()))
+    resfile = '%s_res.tsv' % prefix
     if not os.path.isfile(resfile):
         delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
                                                    within=within) for i, locus
@@ -21,7 +21,7 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         res = pd.concat(res)
         result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
                            on='snp')
-        result = result.rename(columns={'ese':within})
+        result = result.rename(columns={'ese':within_str})
         if 'i' not in result.columns:
             result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
         if 'slope' not in result.columns:
@@ -30,9 +30,9 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         result.to_csv(resfile, index=False, sep='\t')
     else:
         result = pd.read_csv(resfile, sep='\t')
-    prod, _ = smartcotagsort(prefix, result,
-                             column=within, ascending=True)
-    prod = prune_it(prod, tgeno, tpheno, within, threads=threads)
+    prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
+    prod = prune_it(prod, tgeno, tpheno, within_str, threads=threads)
+    #prod['type'] = within
     return prod
 
 
@@ -52,7 +52,7 @@ def main(args):
     opts.update(dict(outprefix=tarl, bfile=args.targeno,
                      causaleff=rbim.dropna(), bfile2=args.refgeno,
                      validate=args.split))
-    tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
+    tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
     opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                      validate=args.split, threads=args.threads, bim=rbim,
                      flip=args.flip))
@@ -70,7 +70,7 @@ def main(args):
     resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
     if not os.path.isfile(resfile):
         pval, _ = smartcotagsort('%s_pval' % args.prefix, sumstats,
-                                 column='pvalue')
+                                 column='pvalue', ascending=True)
         pval = prune_it(pval, tgeno, tpheno, 'pval', threads=args.threads)
         pval.to_csv(resfile, index=False, sep='\t')
     else:

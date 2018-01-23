@@ -70,9 +70,9 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
                               memory=max_memory)
     if snps2 is not None:
         # subset the genotype file
-        indices = bim.snp.isin(snps2)
+        indices = bim[bim.snp.isin(snps2)].i
         G = G[:, indices.tolist()]
-        bim = bim[indices].reset_index(drop=True)
+        bim = bim[bim.i.isin(indices)].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
     # get MAFs
     m, n = G.shape
@@ -110,9 +110,9 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
-        causals = bim.snp[bim.index[idx]]
+        causals = bim.iloc[idx].copy()
         # making sure is a copy of the DF
-        causals = bim[bim.snp.isin(causals)].copy()
+        # causals = bim[bim.snp.isin(causals)].copy()
         av_dist = (np.around(causals.pos.diff().mean() / 1000)).astype(int)
         print('Causal SNPs are %d kbp apart on average' % av_dist)
     elif snps is None:
@@ -305,7 +305,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     est_h2 = prs_true.gen_eff.var() / den
     print('Estimated heritability (Va/(Va + Ve)) : %.4f' % est_h2)
     if not np.allclose(h2, est_h2, rtol=0.05):
-        Warning('Estimated heritability is different than expected')
+        print(Warning('Estimated heritability is different than expected'))
     # Write it to file
     outfn = '%s.prs_pheno.gz' % prefix
     prs_true.to_csv(outfn, sep='\t', compression='gzip', index=False)
