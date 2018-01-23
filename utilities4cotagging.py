@@ -701,17 +701,22 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False):
 # ----------------------------------------------------------------------
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
            justd=False):
-    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
-                      suffixes=['_ref', '_tar'])
-    nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
-    bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
-                       )
-    mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
-    delayed_results = [
-        dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
-                                    justd) for window, df in
-        mbim.groupby('windows')]
-    r = list(dask.compute(*delayed_results, num_workers=threads))
+    if os.path.isfile('ld_perwindow.pickle'):
+        with open('ld_perwindow.pickle', 'rb') as F:
+            r = pickle.load(F)
+    else:
+        print('Computing LD score per window')
+        mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
+                          suffixes=['_ref', '_tar'])
+        nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+        bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
+                           )
+        mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
+        delayed_results = [
+            dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
+                                        justd) for window, df in
+            mbim.groupby('windows')]
+        r = list(dask.compute(*delayed_results, num_workers=threads))
     if justd:
         return r
     r = pd.concat(r)

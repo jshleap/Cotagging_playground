@@ -7,19 +7,33 @@ from ese import *
 within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
 
 
-def individual_ese(sumstats, avh2, h2, n, within, loci):
-    within = within_dict[within]
-    resfile = '%s_res.tsv' % args.prefix
+def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
+                   tbim, prefix):
+    prefix = '%s_%s' % (prefix, '_'.join(within.split()))
     print('Compute expected beta square per locus...')
-    delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
-                                               within=within) for i, locus
-                       in enumerate(loci)]
-    res = list(dask.compute(*delayed_results, num_workers=args.threads))
-    res = pd.concat(res)
-    result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
-                       on='snp')
-    result.to_csv(resfile, index=False, sep='\t')
-    prod, _ = smartcotagsort(args.prefix, result, column='ese')
+    within = within_dict[within]
+    resfile = '%s_%s_res.tsv' % (prefix, '_'.join(within.split()))
+    if not os.path.isfile(resfile):
+        delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
+                                                   within=within) for i, locus
+                           in enumerate(loci)]
+        res = list(dask.compute(*delayed_results, num_workers=args.threads))
+        res = pd.concat(res)
+        result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
+                           on='snp')
+        result = result.rename(columns={'ese':within})
+        if 'i' not in result.columns:
+            result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
+        if 'slope' not in result.columns:
+            result = result.merge(sumstats.reindex(columns=['snp', 'slope']),
+                                  on='snp')
+        result.to_csv(resfile, index=False, sep='\t')
+    else:
+        result = pd.read_csv(resfile, sep='\t')
+    prod, _ = smartcotagsort(prefix, result,
+                             column=within, ascending=True)
+    prod = prune_it(prod, tgeno, tpheno, within, threads=threads)
+    return prod
 
 
 def main(args):
@@ -31,7 +45,7 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.max_memory}
+            'max_memory': args.maxmem}
     rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
     # make simulation for target
     print('Simulating phenotype for target population %s \n' % tarl)
@@ -45,14 +59,22 @@ def main(args):
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     sum_snps = sumstats.snp.tolist()
-    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args. LDwindow,
+    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
     # expecetd square effect
-    eses = [individual_ese(sumstats, avh2, h2, n, x, loci) for x in [0, 1, 2]]
+    eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
+                           args.threads, tbim, args.prefix) for x in [0, 1, 2]]
     # prune by pval
-    pval, _ = smartcotagsort('%s_pval' % args.prefix, sumstats, column='pvalue')
+    resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
+    if not os.path.isfile(resfile):
+        pval, _ = smartcotagsort('%s_pval' % args.prefix, sumstats,
+                                 column='pvalue')
+        pval = prune_it(pval, tgeno, tpheno, 'pval', threads=args.threads)
+        pval.to_csv(resfile, index=False, sep='\t')
+    else:
+        pval = pd.read_csv(resfile, sep='\t')
     # plot them
     res = pd.concat(eses + [pval])
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
