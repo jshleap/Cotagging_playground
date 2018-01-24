@@ -105,7 +105,7 @@ def main(args):
         beta = sumstats.copy()
         beta['beta_sq'] = beta.slope ** 2
         beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
-                                 column='beta_sq', ascending=True)
+                                 column='beta_sq', ascending=False)
         beta = prune_it(beta, tgeno, tpheno, 'beta^2', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
