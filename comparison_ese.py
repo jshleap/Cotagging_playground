@@ -101,17 +101,17 @@ def main(args):
         pval = pd.read_csv(resfile, sep='\t')
     # prune by estimated beta
     betafile = '%s_%s_res.tsv' % (args.prefix, 'slope')
-    if not os.path.isfile(resfile):
+    if not os.path.isfile(betafile):
         beta, _ = smartcotagsort('%s_slope' % args.prefix, sumstats,
                                  column='slope', ascending=True)
         beta = prune_it(pval, tgeno, tpheno, 'beta', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
     else:
-        pval = pd.read_csv(resfile, sep='\t')
+        beta = pd.read_csv(betafile, sep='\t')
 
     # plot them
-    res = pd.concat(eses + [pval])
+    res = pd.concat(eses + [pval, beta])
     best_r2 = lr(
         tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
         tpheno.PHENO).rvalue ** 2
