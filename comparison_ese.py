@@ -103,10 +103,10 @@ def main(args):
     betafile = '%s_%s_res.tsv' % (args.prefix, 'slope')
     if not os.path.isfile(betafile):
         beta = sumstats.copy()
-        beta['abs(beta)'] = abs(beta.slope)
+        beta['beta_sq'] = beta.slope ** 2
         beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
-                                 column='abs(beta)', ascending=True)
-        beta = prune_it(pval, tgeno, tpheno, 'beta', step=prunestep,
+                                 column='beta_sq', ascending=True)
+        beta = prune_it(beta, tgeno, tpheno, 'beta^2', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
     else:
