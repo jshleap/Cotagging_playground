@@ -65,7 +65,7 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.maxmem, 'f_thr':args.freq_thresh}
+            'max_memory': args.maxmem, 'freqthreshold':args.freq_thresh}
     rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
     # make simulation for target
     print('Simulating phenotype for target population %s \n' % tarl)
