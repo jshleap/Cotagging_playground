@@ -37,6 +37,24 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
     return prod
 
 
+@jit
+def dirty_pval(locus, sumstats, geno, pheno):
+    snps, D_r, D_t = locus
+    D_r = dd.from_dask_array(D_r, columns=snps)
+    locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope',
+                                                               'pvalue'])
+    # filter pvalue
+    r = 0
+    pvals = [1, 0.05, 1E-4, 1E-8]
+    ldval = [0.1, 0.2, 0.4, 0.8]
+    pairs = product(pvals, ldval)
+    for p, l in pairs:
+        sub = sumstats[sumstats.pvalue < p].sort_values('pvalue', ascending=True
+                                                        )
+        prs = geno[ : , sub.i.values].dot(sub.slope)
+        est = np.corrcoef(prs, pheno)[1, 0]
+
+
 def main(args):
 
     seed = np.random.randint(1e4) if args.seed is None else args.seed
@@ -47,7 +65,7 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.maxmem}
+            'max_memory': args.maxmem, 'f_thr':args.freq_thresh}
     rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
     # make simulation for target
     print('Simulating phenotype for target population %s \n' % tarl)
@@ -71,8 +89,11 @@ def main(args):
     # prune by pval
     resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
     if not os.path.isfile(resfile):
-        pval, _ = smartcotagsort('%s_pval' % args.prefix, sumstats,
-                                 column='pvalue', ascending=True)
+        pval = sumstats.sort_values('pvalue', ascending=True).reset_index(
+            drop=True)
+        pval['index'] = pval.index
+        pval, _ = smartcotagsort('%s_pval' % args.prefix, pval, column='index',
+                                 ascending=True)
         pval = prune_it(pval, tgeno, tpheno, 'pval', step=prunestep,
                         threads=args.threads)
         pval.to_csv(resfile, index=False, sep='\t')
