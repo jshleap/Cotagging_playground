@@ -38,9 +38,38 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
 
 
 @jit
+def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats, geno):
+    index = []
+    ippend = index.append
+    tag = []
+    text = tag.extend
+    while snp_list != []:
+        # get lowest pvalue snp in the locus
+        curr_high = locus.nsmallest(1, 'pvalue')#.snp.values[0]
+        if curr_high.pval < p_thresh:
+            ippend(curr_high)
+            chidx = np.where(D_r.columns == curr_high)[0]
+            # get snps in LD
+            vec = D_r.loc[chidx, :]
+            tagged = vec[vec > ld_thr].columns.tolist()
+            if curr_high in tagged:
+                tagged.pop(tagged.index(curr_high))
+            text(tagged)
+            snp_list = [snp for snp in snp_list if snp not in tagged]
+            snp_list.pop(snp_list.index(curr_high))
+        else:
+            low = locus.snp.tolist()
+            text(low)
+            snp_list = [snp for snp in snp_list if snp not in low]
+        locus = sumstats[sumstats.snp.isin(snp_list)]
+
+    return index, tag
+
+
 def dirty_pval(locus, sumstats, geno, pheno):
     snps, D_r, D_t = locus
-    D_r = dd.from_dask_array(D_r, columns=snps)
+    snp_list = snps.tolist()
+    D_r = dd.from_dask_array(D_r, columns=snps) ** 2
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope',
                                                                'pvalue'])
     # filter pvalue
@@ -49,9 +78,7 @@ def dirty_pval(locus, sumstats, geno, pheno):
     ldval = [0.1, 0.2, 0.4, 0.8]
     pairs = product(pvals, ldval)
     for p, l in pairs:
-        sub = sumstats[sumstats.pvalue < p].sort_values('pvalue', ascending=True
-                                                        )
-        prs = geno[ : , sub.i.values].dot(sub.slope)
+        index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
         est = np.corrcoef(prs, pheno)[1, 0]
 
 
