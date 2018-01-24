@@ -69,11 +69,14 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip,
                               memory=max_memory)
     if snps2 is not None:
+        print('Filtering current population with second set')
+        print('Genotype matrix shape before', G.shape)
         # subset the genotype file
         indices = bim[bim.snp.isin(snps2)].i
         G = G[:, indices.tolist()]
         bim = bim[bim.i.isin(indices)].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
+        print('Genotype matrix shape after', G.shape)
     # get MAFs
     m, n = G.shape
 
@@ -123,9 +126,6 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     if causaleff is None:
         # chunks = estimate_chunks((ncausal,), threads)
         pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
-        #while not np.allclose(pre_beta.var(), std, rtol=1E-4, atol=1E-4):
-           # pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
-        # pre_beta = np.random.normal(size=ncausal)#, chunks=chunks)
         # Store them
         causals['beta'] = pre_beta  # .compute()
         causals = causals.dropna()

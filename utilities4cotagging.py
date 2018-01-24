@@ -349,10 +349,13 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
         G = G.T
     # Filter MAF
     if freq_thresh > 0:
+        print('Filtering MAFs smaller than', freq_thresh)
+        print('Genotype matrix shape before', G.shape)
         good = (mafs < (1 - freq_thresh)) & (mafs > freq_thresh)
         good = good.compute(num_workers=threads)
         G = G[:, good]
         bim = bim[good]
+        print('Genotype matrix shape after', G.shape)
     bim = bim.reset_index(drop=True)
     bim['i'] = bim.index.tolist()
     return bim, fam, G
