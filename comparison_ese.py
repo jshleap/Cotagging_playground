@@ -5,7 +5,7 @@ Code to execute parts of ese and plot the different sorts
 from ese import *
 
 within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
-
+prunestep=30
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix):
@@ -31,12 +31,14 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
     else:
         result = pd.read_csv(resfile, sep='\t')
     prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
-    prod = prune_it(prod, tgeno, tpheno, within_str, threads=threads)
+    prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
+                    threads=threads)
     #prod['type'] = within
     return prod
 
 
 def main(args):
+
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     refl, tarl = args.labels
     # make simulations
@@ -71,17 +73,33 @@ def main(args):
     if not os.path.isfile(resfile):
         pval, _ = smartcotagsort('%s_pval' % args.prefix, sumstats,
                                  column='pvalue', ascending=True)
-        pval = prune_it(pval, tgeno, tpheno, 'pval', threads=args.threads)
+        pval = prune_it(pval, tgeno, tpheno, 'pval', step=prunestep,
+                        threads=args.threads)
         pval.to_csv(resfile, index=False, sep='\t')
     else:
         pval = pd.read_csv(resfile, sep='\t')
+    # prune by estimated beta
+    betafile = '%s_%s_res.tsv' % (args.prefix, 'slope')
+    if not os.path.isfile(resfile):
+        beta, _ = smartcotagsort('%s_slope' % args.prefix, sumstats,
+                                 column='slope', ascending=True)
+        beta = prune_it(pval, tgeno, tpheno, 'beta', step=prunestep,
+                        threads=args.threads)
+        beta.to_csv(betafile, index=False, sep='\t')
+    else:
+        pval = pd.read_csv(resfile, sep='\t')
+
     # plot them
     res = pd.concat(eses + [pval])
+    best_r2 = lr(
+        tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
+        tpheno.PHENO).rvalue ** 2
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
     f, ax = plt.subplots()
     for t, df in res.groupby('type'):
         df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True,
                 s=3, c=next(colors), ax=ax, label=t)
+    ax.axhline(best_r2, ls='--', c='0.5')
     plt.tight_layout()
     plt.savefig('%s_transferability.pdf' % args.prefix)
 
