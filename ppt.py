@@ -436,8 +436,8 @@ def new_plot(prefix, ppt, geno, pheno, threads):
 
 
 # ----------------------------------------------------------------------
-def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
-          max_memory=None, ld_operator='lt'):
+def score(geno, pheno, sumstats, r_t, p_t, R2, threads, approx=False,
+          field='pvalue', max_memory=None, ld_operator='lt'):
     print('Scoring with p-val %.2g and R2 %.2g' % (p_t, r_t))
     if isinstance(pheno, pd.core.frame.DataFrame):
         pheno = pheno.PHENO.values
@@ -450,7 +450,10 @@ def score(geno, pheno, sumstats, r_t, p_t, R2, threads, field='pvalue',
     idx = sumstats[sumstats.snp.isin(index)].i.tolist()
     betas = sumstats[sumstats.snp.isin(index)].slope
     prs = geno[:, idx].dot(betas)
-    slope, intercept, r_value, p_value, std_err = lr(pheno, prs)
+    if approx:
+        r_value = np.corrcoef(prs, pheno)[1, 0]
+    else:
+        slope, intercept, r_value, p_value, std_err = lr(pheno, prs)
     print('Done clumping for this configuration. R2=%.3f\n' % r_value ** 2)
     return r_t, p_t, r_value ** 2, clumps, prs, df2
 
@@ -612,7 +615,7 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         rapp = r.append
         for r_t, p_t in product(r_range, p_thresh):
             rapp(score(X_train, y_train, sumstats, r_t, p_t, R2, threads,
-                       field=pv_field, max_memory=max_memory,
+                       field=pv_field, approx=True, max_memory=max_memory,
                        ld_operator=ld_operator))
         r = sorted(r,  key=itemgetter(2), reverse=True)
         get = itemgetter(0,1,2)
