@@ -7,6 +7,7 @@ from ese import *
 within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
 prunestep=30
 
+
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix):
     within_str = within_dict[within]
@@ -47,6 +48,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats, geno):
         # get lowest pvalue snp in the locus
         curr_high = locus.nsmallest(1, 'pvalue')#.snp.values[0]
         if curr_high.pval < p_thresh:
+            curr_high = curr_high.snp.values[0]
             ippend(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
             # get snps in LD
@@ -66,24 +68,44 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats, geno):
     return index, tag
 
 
-def dirty_pval(locus, sumstats, geno, pheno):
-    snps, D_r, D_t = locus
-    snp_list = snps.tolist()
-    D_r = dd.from_dask_array(D_r, columns=snps) ** 2
-    locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope',
-                                                               'pvalue'])
-    # filter pvalue
-    r = 0
-    pvals = [1, 0.05, 1E-4, 1E-8]
-    ldval = [0.1, 0.2, 0.4, 0.8]
-    pairs = product(pvals, ldval)
-    for p, l in pairs:
-        index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
-        est = np.corrcoef(prs, pheno)[1, 0]
+def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
+    index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
+    clump = sumstats[sumstats.snp.isin(index)]
+    idx = clump.i.tolist()
+    prs = geno[:, idx].dot(clump.slope)
+    est = np.corrcoef(prs, pheno)[1, 0] ** 2
+    return est, (index, tag)
+
+
+def dirty_ppt(loci, sumstats, geno, pheno, threads):
+    index, tag = [], []
+    for locus in loci:
+        snps, D_r, D_t = locus
+        snp_list = snps.tolist()
+        D_r = dd.from_dask_array(D_r, columns=snps) ** 2
+        locus = sumstats[sumstats.snp.isin(snps)].reindex(
+            columns=['snp', 'slope',
+                     'pvalue'])
+        # filter pvalue
+        pvals = [1, 0.05, 1E-4, 1E-8]
+        ldval = [0.1, 0.2, 0.4, 0.8]
+        pairs = product(pvals, ldval)
+        delayed_results = [
+            dask.delayed(loop_pairs)(snp_list, D_r, l, p, sumstats, pheno, geno)
+            for p, l in pairs]
+        d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
+        best_key = max(d.keys())
+        i, t = d[best_key]
+        index += i
+        tag += t
+    pre = sumstats[sumstats.snp.isin(index)]
+    pos = sumstats[sumstats.snp.isin(tag)]
+    ppt = pre.append(pos).reset_index(drop=True)
+    ppt['index'] = ppt.index.tolist()
+    return ppt
 
 
 def main(args):
-
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     refl, tarl = args.labels
     # make simulations
@@ -105,11 +127,29 @@ def main(args):
                      flip=args.flip))
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
+    sumstats['beta_sq'] = sumstats.slope ** 2
+    # plot correlation between pval and beta^2
+    # ax = sumstats.plot.scatter(x='pvalue', y='beta_sq')
+    # ax.set_xscale('log')
+    # plt.savefig('%s_pval_b2.pdf' % args.prefix)
     sum_snps = sumstats.snp.tolist()
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
+    ppt = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
+    # compute ese only integral
+    delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
+                                               integral_only=True) for locus
+                       in loci]
+    integral = list(dask.compute(*delayed_results, num_workers=args.threads))
+    integral = pd.concat(integral)
+    integral = integral.merge(
+        sumstats.reindex(columns=['snp', 'pvalue', 'beta_sq']), on='snp')
+    # integral.plot.scatter(x='ese', y='pvalue')
+    # plt.savefig('%s_pval_ese.pdf' % args.prefix)
+    # integral.plot.scatter(x='ese', y='beta_sq')
+    # plt.savefig('%s_b2_ese.pdf' % args.prefix)
     # expecetd square effect
     eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
                            args.threads, tbim, args.prefix) for x in [0, 1, 2]]
@@ -130,7 +170,6 @@ def main(args):
     betafile = '%s_%s_res.tsv' % (args.prefix, 'slope')
     if not os.path.isfile(betafile):
         beta = sumstats.copy()
-        beta['beta_sq'] = beta.slope ** 2
         beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
                                  column='beta_sq', ascending=False)
         beta = prune_it(beta, tgeno, tpheno, 'beta^2', step=prunestep,
@@ -138,18 +177,34 @@ def main(args):
         beta.to_csv(betafile, index=False, sep='\t')
     else:
         beta = pd.read_csv(betafile, sep='\t')
-
+    # include causals
+    causals = sumstats.dropna('beta')
+    caus = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
+                          ascending=False)
+    caus = prune_it(caus, tgeno, tpheno, 'beta^2', step=prunestep,
+                    threads=args.threads)
+    # include ppt
+    pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
+    if not os.path.isfile(pptfile):
+        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt,
+                                 column='index', ascending=True)
+        ppt = prune_it(ppt, tgeno, tpheno, 'Dirty ppt', step=prunestep,
+                    threads=args.threads)
+        ppt.to_csv(pptfile, index=False, sep='\t')
+    else:
+        ppt = pd.read_csv(pptfile, sep='\t')
     # plot them
-    res = pd.concat(eses + [pval, beta])
+    res = pd.concat(eses + [pval, beta, caus, ppt])
     best_r2 = lr(
         tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
         tpheno.PHENO).rvalue ** 2
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
     f, ax = plt.subplots()
     for t, df in res.groupby('type'):
+        color = next(colors)
         df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True,
-                s=3, c=next(colors), ax=ax, label=t)
-    ax.axhline(best_r2, ls='--', c='0.5')
+                s=3, c=color, ax=ax, label=t)
+    #ax.axhline(best_r2, ls='--', c='0.5')
     plt.tight_layout()
     plt.savefig('%s_transferability.pdf' % args.prefix)
 
@@ -217,7 +272,8 @@ if __name__ == '__main__':
                         action=Store_as_array, type=float)
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
     parser.add_argument('--gflip', action='store_true', help='flip genotype')
-    parser.add_argument('--freq_thresh', type=float, help='filter by mafs')
+    parser.add_argument('--freq_thresh', type=float, help='filter by mafs',
+                        default=-1)
     parser.add_argument('--within', default=0, type=int,
                         help='0=cross; 1=reference; 2=target')
     parser.add_argument('--ld_operator', default='lt')
