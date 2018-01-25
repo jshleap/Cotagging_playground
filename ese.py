@@ -87,8 +87,8 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    exp = np.exp(np.power(vs, 2) / (4 * mu), dtype=np.longfloat)
-    lhs = ((2 * mu) + np.power(vs, 2)) / (4 * np.power(mu, 2))
+    exp = np.exp((vs * vs) / (4 * mu), dtype=np.longfloat)
+    lhs = ((2 * mu) + (vs * vs)) / (4 * (mu * mu))
     rhs = exp / exp.sum()
     vec = lhs * rhs
     return pd.Series(vec, index=snps, dtype=np.longfloat)
@@ -96,7 +96,7 @@ def integral_b(vs, mu, snps):
 
 # ----------------------------------------------------------------------
 @jit
-def per_locus(locus, sumstats, avh2, h2, n, within=False):
+def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
     """
     compute the per-locus expectation
     """
@@ -105,8 +105,11 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False):
     m = snps.shape[0]
     h2_l = avh2 * m
     mu = ((n / (2 * (1 - h2_l))) + (m / (2 * h2)))
+    assert np.all(mu >= 0)
     vjs = ((n * locus.slope.values) / (1 - h2_l)) #(2 * (1 - h2_l)))
     I = integral_b(vjs, mu, snps)
+    if integral_only:
+        return pd.DataFrame({'snp': snps, 'ese': I})
     assert np.all(I >= 0) # make sure integral is positive
     assert max(I) > 0 # check if at least one is different than 0
     if within == 1:
