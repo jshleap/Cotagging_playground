@@ -25,6 +25,7 @@ import dask.dataframe as dd
 from numba import jit
 from collections import ChainMap
 import msgpack
+import matplotlib.pyplot as plt
 
 lr = jit(linregress)
 # ----------------------------------------------------------------------
@@ -378,6 +379,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
+        gwascotag['size'] = norm(abs(gwascotag.slope), 5, 20)
         grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
             column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
@@ -391,6 +393,11 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
         #df['gen_index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
+    f, ax = plt.subplots()
+    df.plot.scatter(x='index', y='pos', ax=ax, label=column)
+    df.dropna.plot.scatter(x='index', y='pos', m='*', s=df.size, ax=ax,
+                           label='Causals')
+    plt.savefig('%s.pdf' % '_'.join(column.split()))
     return df, beforetail
 
 
@@ -656,7 +663,7 @@ def single_score(subdf, geno, pheno, label):
 
 
 # ----------------------------------------------------------------------
-def prune_it(df, geno, pheno, label, step=10, threads=1, track_causals=False):
+def prune_it(df, geno, pheno, label, step=10, threads=1):
     """
     Prune and score a dataframe of sorted snps
 
