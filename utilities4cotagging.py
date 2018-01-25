@@ -159,7 +159,7 @@ def blocked_R2(bim, geno, kbwindow=1000, threads=1):
 #         sub = geno[:, idx]
 #         assert sub.shape[1] == len(idx)
 #         r2_block[i] = dd.from_dask_array(sub, columns=bim.snp[boole].tolist()
-#                                          ).corr()**2
+#                                 betafile         ).corr()**2
 #     return bim, r2_block
 
 
@@ -351,7 +351,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
     if freq_thresh > 0:
         print('Filtering MAFs smaller than', freq_thresh)
         print('Genotype matrix shape before', G.shape)
-        good = (mafs < (1 - freq_thresh)) & (mafs > freq_thresh)
+        good = (mafs < (1 - float(freq_thresh))) & (mafs > float(freq_thresh))
         good = good.compute(num_workers=threads)
         G = G[:, good]
         bim = bim[good]
@@ -669,7 +669,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
     print('Prunning %s...' % label)
     print('First 200')
     gen = ((df.iloc[:i], geno, pheno, label) for i in
-           range(1, min(200, df.shape[0]), 2))
+           range(1, min(200, df.shape[0]), 1))
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     res = list(dask.compute(*delayed_results, num_workers=threads))
     # process the first two hundred every 2
