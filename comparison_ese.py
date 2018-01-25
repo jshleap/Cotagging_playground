@@ -38,16 +38,16 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
     return prod
 
 
-@jit
-def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats, geno):
+#@jit
+def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     index = []
     ippend = index.append
     tag = []
     text = tag.extend
     while snp_list != []:
         # get lowest pvalue snp in the locus
-        curr_high = locus.nsmallest(1, 'pvalue')#.snp.values[0]
-        if curr_high.pval < p_thresh:
+        curr_high = sumstats.nsmallest(1, 'pvalue')#.snp.values[0]
+        if curr_high.pvalue.values[0]  < p_thresh:
             curr_high = curr_high.snp.values[0]
             ippend(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
@@ -60,11 +60,10 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats, geno):
             snp_list = [snp for snp in snp_list if snp not in tagged]
             snp_list.pop(snp_list.index(curr_high))
         else:
-            low = locus.snp.tolist()
+            low = sumstats.snp.tolist()
             text(low)
             snp_list = [snp for snp in snp_list if snp not in low]
-        locus = sumstats[sumstats.snp.isin(snp_list)]
-
+        sumstats = sumstats[sumstats.snp.isin(snp_list)]
     return index, tag
 
 
@@ -73,25 +72,25 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     clump = sumstats[sumstats.snp.isin(index)]
     idx = clump.i.tolist()
     prs = geno[:, idx].dot(clump.slope)
-    est = np.corrcoef(prs, pheno)[1, 0] ** 2
+    est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
     return est, (index, tag)
 
 
 def dirty_ppt(loci, sumstats, geno, pheno, threads):
+    now = time.time()
     index, tag = [], []
     for locus in loci:
         snps, D_r, D_t = locus
         snp_list = snps.tolist()
         D_r = dd.from_dask_array(D_r, columns=snps) ** 2
-        locus = sumstats[sumstats.snp.isin(snps)].reindex(
-            columns=['snp', 'slope',
-                     'pvalue'])
+        sub = sumstats[sumstats.snp.isin(snps)].reindex(
+            columns=['snp', 'slope', 'pvalue', 'i'])
         # filter pvalue
         pvals = [1, 0.05, 1E-4, 1E-8]
         ldval = [0.1, 0.2, 0.4, 0.8]
         pairs = product(pvals, ldval)
         delayed_results = [
-            dask.delayed(loop_pairs)(snp_list, D_r, l, p, sumstats, pheno, geno)
+            dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, pheno, geno)
             for p, l in pairs]
         d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
         best_key = max(d.keys())
@@ -102,6 +101,7 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
     pos = sumstats[sumstats.snp.isin(tag)]
     ppt = pre.append(pos).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
+    print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
     return ppt
 
 
@@ -195,9 +195,9 @@ def main(args):
         ppt = pd.read_csv(pptfile, sep='\t')
     # plot them
     res = pd.concat(eses + [pval, beta, caus, ppt])
-    best_r2 = lr(
-        tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
-        tpheno.PHENO).rvalue ** 2
+    # best_r2 = lr(
+    #     tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
+    #     tpheno.PHENO).rvalue ** 2
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
     f, ax = plt.subplots()
     for t, df in res.groupby('type'):

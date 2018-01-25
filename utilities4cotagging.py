@@ -656,7 +656,7 @@ def single_score(subdf, geno, pheno, label):
 
 
 # ----------------------------------------------------------------------
-def prune_it(df, geno, pheno, label, step=10, threads=1):
+def prune_it(df, geno, pheno, label, step=10, threads=1, track_causals=False):
     """
     Prune and score a dataframe of sorted snps
 
