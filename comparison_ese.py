@@ -19,9 +19,9 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                                                    within=within) for i, locus
                            in enumerate(loci)]
         res = list(dask.compute(*delayed_results, num_workers=args.threads))
-        res = pd.concat(res)
-        result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
-                           on='snp')
+        res = pd.concat(res, ignore_index=True)
+        result = res.merge(
+            sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
         result = result.rename(columns={'ese':within_str})
         if 'i' not in result.columns:
             result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
@@ -38,7 +38,6 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
     return prod
 
 
-#@jit
 def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     index = []
     ippend = index.append
@@ -67,6 +66,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     return index, tag
 
 
+@jit
 def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
     clump = sumstats[sumstats.snp.isin(index)]
@@ -78,6 +78,7 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
 
 def dirty_ppt(loci, sumstats, geno, pheno, threads):
     now = time.time()
+    print('Starting dirty PPT...')
     index, tag = [], []
     for locus in loci:
         snps, D_r, D_t = locus
@@ -99,7 +100,7 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
         tag += t
     pre = sumstats[sumstats.snp.isin(index)]
     pos = sumstats[sumstats.snp.isin(tag)]
-    ppt = pre.append(pos).reset_index(drop=True)
+    ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
     return ppt
@@ -135,7 +136,19 @@ def main(args):
     sum_snps = sumstats.snp.tolist()
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
-    ppt = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
+    # include ppt
+    pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
+    if not os.path.isfile(pptfile):
+        ppt = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
+        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt,
+                                 column='index', ascending=True)
+        ppt = prune_it(ppt, tgeno, tpheno, 'Dirty ppt', step=prunestep,
+                    threads=args.threads)
+        ppt.to_csv(pptfile, index=False, sep='\t')
+    else:
+        ppt = pd.read_csv(pptfile, sep='\t')
+    ppt.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=3)
+    plt.savefig('ppt_afr.pdf')
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
     # compute ese only integral
@@ -143,13 +156,19 @@ def main(args):
                                                integral_only=True) for locus
                        in loci]
     integral = list(dask.compute(*delayed_results, num_workers=args.threads))
-    integral = pd.concat(integral)
-    integral = integral.merge(
-        sumstats.reindex(columns=['snp', 'pvalue', 'beta_sq']), on='snp')
-    # integral.plot.scatter(x='ese', y='pvalue')
-    # plt.savefig('%s_pval_ese.pdf' % args.prefix)
-    # integral.plot.scatter(x='ese', y='beta_sq')
-    # plt.savefig('%s_b2_ese.pdf' % args.prefix)
+    integral = pd.concat(integral, ignore_index=True)
+    integral = integral.merge(sumstats.reindex(
+        columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
+        on='snp')
+    intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
+    if not os.path.isfile(intfile):
+        integral, _ = smartcotagsort('%s_integral' % args.prefix, integral,
+                                 column='ese', ascending=False)
+        integral = prune_it(integral, tgeno, tpheno, 'Integral', step=prunestep,
+                    threads=args.threads)
+        integral.to_csv(pptfile, index=False, sep='\t')
+    else:
+        integral = pd.read_csv(intfile, sep='\t')
     # expecetd square effect
     eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
                            args.threads, tbim, args.prefix) for x in [0, 1, 2]]
@@ -178,27 +197,18 @@ def main(args):
     else:
         beta = pd.read_csv(betafile, sep='\t')
     # include causals
-    causals = sumstats.dropna('beta')
-    caus = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
+    causals = sumstats.dropna(subset=['beta'])
+    caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
                           ascending=False)
-    caus = prune_it(caus, tgeno, tpheno, 'beta^2', step=prunestep,
+    caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
                     threads=args.threads)
-    # include ppt
-    pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
-    if not os.path.isfile(pptfile):
-        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt,
-                                 column='index', ascending=True)
-        ppt = prune_it(ppt, tgeno, tpheno, 'Dirty ppt', step=prunestep,
-                    threads=args.threads)
-        ppt.to_csv(pptfile, index=False, sep='\t')
-    else:
-        ppt = pd.read_csv(pptfile, sep='\t')
+
     # plot them
-    res = pd.concat(eses + [pval, beta, caus, ppt])
+    res = pd.concat(eses + [pval, beta, caus, ppt, integral])
     # best_r2 = lr(
     #     tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
     #     tpheno.PHENO).rvalue ** 2
-    colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y'])
+    colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y', '0.6'])
     f, ax = plt.subplots()
     for t, df in res.groupby('type'):
         color = next(colors)

@@ -326,8 +326,6 @@ def helper_smartsort2(grouped, key):
 def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
 
     (bim, fam, G) = read_plink(bfile)
-    #chunks = estimate_chunks(G.shape, threads, memory=memory)
-    #G = da.rechunk(G, chunks=chunks)
     # remove constant variants
     G_std = G.std(axis=1).compute(num_workers=threads)
     m, n = G.shape
@@ -379,7 +377,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        gwascotag['size'] = norm(abs(gwascotag.slope), 5, 20)
+        gwascotag['m_size'] = norm(abs(gwascotag.slope), 5, 20)
         grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
             column, as_index=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
@@ -387,17 +385,18 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
         beforetail = sorteddf.shape[0]
         df = sorteddf.copy()
         if not tail.empty:
-            df = df.append(tail.sample(frac=1))
+            df = df.append(tail.sample(frac=1), ignore_index=True)
         df = df.reset_index(drop=True)
         df['index'] = df.index.tolist()
-        #df['gen_index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
     f, ax = plt.subplots()
-    df.plot.scatter(x='index', y='pos', ax=ax, label=column)
-    df.dropna.plot.scatter(x='index', y='pos', m='*', s=df.size, ax=ax,
-                           label='Causals')
-    plt.savefig('%s.pdf' % '_'.join(column.split()))
+    df.plot.scatter(x='pos', y='index', ax=ax, label=column)
+    df.dropna(subset=['beta']).plot.scatter(x='pos', y='index', marker='*',
+                                            s=df.m_size, ax=ax, label='Causals',
+                                            c='k')
+    plt.tight_layout()
+    plt.savefig('%s_%s.pdf' % (prefix, '_'.join(column.split())))
     return df, beforetail
 
 

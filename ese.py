@@ -1,15 +1,9 @@
 """
 Expected beta
 """
-import argparse
 import matplotlib
 matplotlib.use('Agg')
-import pandas as pd
-import numpy as np
 import gzip
-import matplotlib.pyplot as plt
-from utilities4cotagging import *
-from qtraitsimulation import *
 from prankcster import *
 from plinkGWAS import *
 from joblib import delayed, Parallel
@@ -87,7 +81,7 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    clipped = np.clip((vs * vs) / (4 * mu), a_max=709.7)
+    clipped = np.clip((vs * vs) / (4 * mu), 0, 709.7)
     exp = np.exp(clipped, dtype=np.longfloat)
     lhs = ((2 * mu) + (vs * vs)) / (4 * (mu * mu))
     rhs = exp / exp.sum()
@@ -96,7 +90,7 @@ def integral_b(vs, mu, snps):
 
 
 # ----------------------------------------------------------------------
-#@jit
+@jit
 def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
     """
     compute the per-locus expectation
@@ -111,7 +105,7 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
     I = integral_b(vjs, mu, snps)
     assert np.all(I >= 0)  # make sure integral is positive
     if integral_only:
-        return pd.DataFrame({'snp': snps, 'ese': I})
+        return pd.DataFrame({'snp': I.index, 'ese': I.values})
     assert max(I) > 0 # check if at least one is different than 0
     if within == 1:
         expcovs = (D_r * D_r).dot(I)
