@@ -400,7 +400,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
         func = st_mod if stmd else lr
         delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO) for
                            i in range(x_train.shape[1])]
-        r = list(dask.compute(*delayed_results, num_workers=threads))
+        with ProgressBar():
+            r = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.DataFrame.from_records(r, columns=r[0]._fields)
         assert res.shape[0] == bim.shape[0]
         res = pd.concat((res, bim), axis=1)
