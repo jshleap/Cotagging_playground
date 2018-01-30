@@ -91,7 +91,8 @@ def integral_b(vs, mu, snps):
 
 # ----------------------------------------------------------------------
 #@jit
-def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
+def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
+              integral_only=False):
     """
     compute the per-locus expectation
     """
@@ -106,7 +107,8 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
     I = integral_b(vjs, mu, snps)
     assert np.all(I >= 0)  # make sure integral is positive
     if integral_only:
-        return pd.DataFrame({'snp': I.index, 'ese': I.values})
+        return pd.DataFrame({'snp': I.index, 'ese': I.values, 'locus': l_number}
+                            )
     assert max(I) > 0 # check if at least one is different than 0
     if within == 1:
         expcovs = (D_r * D_r).dot(I)
@@ -114,7 +116,7 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
         expcovs = (D_t * D_t).dot(I)
     else:
         expcovs = (D_r * D_t).dot(I)
-    return pd.DataFrame({'snp': snps, 'ese': abs(expcovs)})
+    return pd.DataFrame({'snp': snps, 'ese': abs(expcovs), 'locus': l_number})
 
 # ----------------------------------------------------------------------
 def per_locus2(locus, sumstats, avh2, h2, N, ld1, ld2, M):

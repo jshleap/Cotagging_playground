@@ -8,6 +8,34 @@ within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
 prunestep=30
 
 
+def sortbylocus(prefix, df, column='ese', title=None):
+    picklefile = '%s.pickle' % prefix
+    if os.path.isfile(picklefile):
+        with open(picklefile, 'rb') as F:
+            df, beforetail = pickle.load(F)
+    else:
+        df['m_size'] = norm(abs(df.slope), 10, 40)
+        grouped = df.groupby('locus', as_index=False).first()
+        sorteddf = grouped.sort_values(by='ese', ascending=False)
+        tail = df[~df.snp.isin(sorteddf.snp)]
+        if not tail.empty:
+            sorteddf = sorteddf.append(tail.sample(frac=1), ignore_index=True)
+        sorteddf = sorteddf.reset_index(drop=True)
+        sorteddf['index'] = df.index.tolist()
+        with open(picklefile, 'wb') as F:
+            pickle.dump(df, F)
+        f, ax = plt.subplots()
+        df.plot.scatter(x='pos', y='index', ax=ax, label=column)
+        df.dropna(subset=['beta']).plot.scatter(x='pos', y='index', marker='*',
+                                                s=df.m_size, ax=ax,
+                                                label='Causals', c='k')
+        if title is not None:
+            plt.title(title)
+        plt.tight_layout()
+    plt.savefig('%s_%s.pdf' %  prefix)
+    return df
+
+
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix):
     within_str = within_dict[within]
@@ -15,9 +43,10 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
     print('Compute expected beta square per locus...')
     resfile = '%s_res.tsv' % prefix
     if not os.path.isfile(resfile):
-        delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
-                                                   within=within) for i, locus
-                           in enumerate(loci)]
+        delayed_results = [
+            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
+                                    within=within) for i, locus in
+            enumerate(loci)]
         with ProgressBar():
             res = list(dask.compute(*delayed_results, num_workers=args.threads))
         res = pd.concat(res, ignore_index=True)
@@ -32,7 +61,8 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         result.to_csv(resfile, index=False, sep='\t')
     else:
         result = pd.read_csv(resfile, sep='\t')
-    prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
+    # prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
+    prod = sortbylocus(prefix, result, column=within_str)
     prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
                     threads=threads)
     #prod['type'] = within
