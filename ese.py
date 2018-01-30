@@ -99,7 +99,7 @@ def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
     m = snps.shape[0]
     h2_l = avh2 * m
-    mu = ((n / (2 * (1 - h2_l))) + (m / (2 * h2)))
+    mu = ((n / (2 *np.clip((1 - h2_l),0.001, 1))) + (m / (2 * h2)))
     assert np.all(mu >= 0)
     vjs = ((n * locus.slope.values) / (1 - h2_l)) #(2 * (1 - h2_l)))
     I = integral_b(vjs, mu, snps)
