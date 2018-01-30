@@ -18,7 +18,8 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
                                                    within=within) for i, locus
                            in enumerate(loci)]
-        res = list(dask.compute(*delayed_results, num_workers=args.threads))
+        with ProgressBar():
+            res = list(dask.compute(*delayed_results, num_workers=args.threads))
         res = pd.concat(res, ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
@@ -80,20 +81,22 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
     now = time.time()
     print('Starting dirty PPT...')
     index, tag = [], []
-    for locus in loci:
+    for r, locus in enumerate(loci):
         snps, D_r, D_t = locus
         snp_list = snps.tolist()
         D_r = dd.from_dask_array(D_r, columns=snps) ** 2
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
             columns=['snp', 'slope', 'pvalue', 'i'])
         # filter pvalue
-        pvals = [1, 0.05, 1E-4, 1E-8]
-        ldval = [0.1, 0.2, 0.4, 0.8]
+        pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+        ldval = np.arange(0.1, 0.8, 0.1) # [0.1, 0.2, 0.4, 0.8]
         pairs = product(pvals, ldval)
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, pheno, geno)
             for p, l in pairs]
-        d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
+        with ProgressBar():
+            print('    Locus', r)
+            d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
         best_key = max(d.keys())
         i, t = d[best_key]
         index += i
@@ -155,7 +158,9 @@ def main(args):
     delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
                                                integral_only=True) for locus
                        in loci]
-    integral = list(dask.compute(*delayed_results, num_workers=args.threads))
+    with ProgressBar():
+        integral = list(dask.compute(*delayed_results, num_workers=args.threads)
+                        )
     integral = pd.concat(integral, ignore_index=True)
     integral = integral.merge(sumstats.reindex(
         columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
@@ -202,12 +207,13 @@ def main(args):
                           ascending=False)
     caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
                     threads=args.threads)
-
+    caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False, sep='\t')
     # plot them
     res = pd.concat(eses + [pval, beta, caus, ppt, integral])
     # best_r2 = lr(
     #     tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
     #     tpheno.PHENO).rvalue ** 2
+    res.to_csv('%s_finaldf.tsv' % args.prefix, sep='\t', index=False)
     colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y', '0.6'])
     f, ax = plt.subplots()
     for t, df in res.groupby('type'):

@@ -90,7 +90,7 @@ def integral_b(vs, mu, snps):
 
 
 # ----------------------------------------------------------------------
-@jit
+#@jit
 def per_locus(locus, sumstats, avh2, h2, n, within=False, integral_only=False):
     """
     compute the per-locus expectation

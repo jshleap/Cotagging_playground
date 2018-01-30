@@ -5,27 +5,27 @@
   Purpose: Utilities for cottagging
   Created: 09/30/17
 """
+import mmap
 import os
 import pickle
 import tarfile
+from collections import ChainMap
+from functools import reduce
 from glob import glob
 from subprocess import Popen, PIPE
-from functools import reduce
-import mmap
+
+import dask
+import dask.array as da
+import dask.dataframe as dd
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
-from scipy.stats import linregress
-from tqdm import tqdm
 import psutil
-import dask.array as da
-from pandas_plink import read_plink
-import dask
-import dask.dataframe as dd
+from dask.diagnostics import ProgressBar
+from joblib import Parallel, delayed
 from numba import jit
-from collections import ChainMap
-import msgpack
-import matplotlib.pyplot as plt
+from pandas_plink import read_plink
+from scipy.stats import linregress
 
 lr = jit(linregress)
 # ----------------------------------------------------------------------
@@ -327,10 +327,10 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
 
     (bim, fam, G) = read_plink(bfile)
     # remove constant variants
-    G_std = G.std(axis=1).compute(num_workers=threads)
+    G_std = G.std(axis=1)#
     m, n = G.shape
     # remove invariant sites
-    idx = (G_std != 0)
+    idx = (G_std != 0).compute(num_workers=threads)
     G = G[idx, :]
     bim = bim[idx].copy()
     mafs = G.sum(axis=1) / (2 * n)
@@ -361,8 +361,8 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
 
 
 # ---------------------------------------------------------------------------
-#@jit
-def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
+def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
+                   title=None):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in 
     the last part of the dataframe
@@ -395,6 +395,8 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False):
     df.dropna(subset=['beta']).plot.scatter(x='pos', y='index', marker='*',
                                             s=df.m_size, ax=ax, label='Causals',
                                             c='k')
+    if title is not None:
+        plt.title(title)
     plt.tight_layout()
     plt.savefig('%s_%s.pdf' % (prefix, '_'.join(column.split())))
     return df, beforetail
@@ -677,14 +679,16 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
     gen = ((df.iloc[:i], geno, pheno, label) for i in
            range(1, min(200, df.shape[0]), 1))
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
-    res = list(dask.compute(*delayed_results, num_workers=threads))
+    with ProgressBar():
+        res = list(dask.compute(*delayed_results, num_workers=threads))
     # process the first two hundred every 2
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
                 range(201, df.shape[0], int(step)))
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
-        res += list(dask.compute(*delayed_results, num_workers=threads))
+        with ProgressBar():
+            res += list(dask.compute(*delayed_results, num_workers=threads))
     return pd.DataFrame(res)
 
 
@@ -752,7 +756,8 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
         dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
                                     justd) for window, df in
         mbim.groupby('windows')]
-    r = list(dask.compute(*delayed_results, num_workers=threads))
+    with ProgressBar():
+        r = list(dask.compute(*delayed_results, num_workers=threads))
         # large_pickle(r, pickle_file)
     if justd:
         return r
