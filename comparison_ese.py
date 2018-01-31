@@ -14,13 +14,18 @@ def sortbylocus(prefix, df, column='ese', title=None):
         with open(picklefile, 'rb') as F:
             sorteddf = pickle.load(F)
     else:
-        df['m_size'] = norm(abs(df.slope), 10, 40)
-        grouped = df.groupby('locus', as_index=False).first()
-        sorteddf = grouped.sort_values(by=column, ascending=False)
-        tail = df[~df.snp.isin(sorteddf.snp)]
-        if not tail.empty:
+        df['m_size'] = norm(abs(df.slope), 5, 50)
+        sorteddf = pd.DataFrame(columns=df.columns.tolist())
+        grouped = df.groupby('locus', as_index=False)
+        while not grouped.any().empty:
+            gr = grouped.first()
             sorteddf = sorteddf.append(
-                tail.sort_values(by=column, ascending=False), ignore_index=True)
+                gr.sort_values(by=column, ascending=False), ignore_index=True)
+            tail = df[~df.snp.isin(sorteddf.snp)]
+            grouped = tail.groupby('locus', as_index=False)
+            # if not tail.empty:
+            #     sorteddf = sorteddf.append(
+            #         tail.sort_values(by=column, ascending=False), ignore_index=True)
         sorteddf = sorteddf.reset_index(drop=True)
         sorteddf['index'] = sorteddf.index.tolist()
         with open(picklefile, 'wb') as F:
