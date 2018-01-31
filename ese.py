@@ -360,8 +360,9 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         #     delayed(per_locus)(locus, sumstats, avh2, h2, n) for
         #     i, locus in tqdm(enumerate(loci), total=len(loci)))
         delayed_results = [
-            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, within=within)
-            for i, locus in enumerate(loci)]
+            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
+                                    within=within) for i, locus in
+            enumerate(loci)]
         res = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.concat(res)
         result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),

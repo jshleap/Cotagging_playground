@@ -12,28 +12,30 @@ def sortbylocus(prefix, df, column='ese', title=None):
     picklefile = '%s.pickle' % prefix
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
-            df, beforetail = pickle.load(F)
+            sorteddf = pickle.load(F)
     else:
         df['m_size'] = norm(abs(df.slope), 10, 40)
         grouped = df.groupby('locus', as_index=False).first()
-        sorteddf = grouped.sort_values(by='ese', ascending=False)
+        sorteddf = grouped.sort_values(by=column, ascending=False)
         tail = df[~df.snp.isin(sorteddf.snp)]
         if not tail.empty:
-            sorteddf = sorteddf.append(tail.sample(frac=1), ignore_index=True)
+            sorteddf = sorteddf.append(
+                tail.sort_values(by=column, ascending=False), ignore_index=True)
         sorteddf = sorteddf.reset_index(drop=True)
-        sorteddf['index'] = df.index.tolist()
+        sorteddf['index'] = sorteddf.index.tolist()
         with open(picklefile, 'wb') as F:
-            pickle.dump(df, F)
-        f, ax = plt.subplots()
-        df.plot.scatter(x='pos', y='index', ax=ax, label=column)
-        df.dropna(subset=['beta']).plot.scatter(x='pos', y='index', marker='*',
-                                                s=df.m_size, ax=ax,
-                                                label='Causals', c='k')
-        if title is not None:
-            plt.title(title)
-        plt.tight_layout()
-    plt.savefig('%s_%s.pdf' %  prefix)
-    return df
+            pickle.dump(sorteddf, F)
+    size = sorteddf.m_size.values
+    f, ax = plt.subplots()
+    sorteddf.plot.scatter(x='pos', y='index', ax=ax, label=column)
+    sorteddf.dropna(subset=['beta']).plot.scatter(x='pos', y='index', c='k',
+                                                  marker='*', label='Causals',
+                                                  s=size, ax=ax)
+    if title is not None:
+        plt.title(title)
+    plt.tight_layout()
+    plt.savefig('%s.pdf' %  prefix)
+    return sorteddf
 
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
@@ -61,7 +63,7 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         result.to_csv(resfile, index=False, sep='\t')
     else:
         result = pd.read_csv(resfile, sep='\t')
-    # prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
+    #prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
     prod = sortbylocus(prefix, result, column=within_str)
     prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
                     threads=threads)
@@ -155,10 +157,14 @@ def main(args):
     opts.update(dict(outprefix=tarl, bfile=args.targeno,
                      causaleff=rbim.dropna(), bfile2=args.refgeno,
                      validate=args.split))
-    tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
-    opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                     validate=args.split, threads=args.threads, bim=rbim,
-                     flip=args.flip))
+    if args.reference:
+        tpheno, tgeno = rpheno, rgeno
+    else:
+        tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
+        opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
+                         validate=args.split, threads=args.threads, bim=rbim,
+                         flip=args.flip))
+
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     sumstats['beta_sq'] = sumstats.slope ** 2
@@ -175,7 +181,7 @@ def main(args):
         ppt = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt,
                                  column='index', ascending=True)
-        ppt = prune_it(ppt, tgeno, tpheno, 'Dirty ppt', step=prunestep,
+        ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
                     threads=args.threads)
         ppt.to_csv(pptfile, index=False, sep='\t')
     else:
@@ -185,9 +191,9 @@ def main(args):
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
     # compute ese only integral
-    delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n,
-                                               integral_only=True) for locus
-                       in loci]
+    delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
+                                               integral_only=True) for i, locus
+                       in enumerate(loci)]
     with ProgressBar():
         integral = list(dask.compute(*delayed_results, num_workers=args.threads)
                         )
@@ -197,8 +203,11 @@ def main(args):
         on='snp')
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
-        integral, _ = smartcotagsort('%s_integral' % args.prefix, integral,
-                                 column='ese', ascending=False)
+        #integral.rename(columns={'ese':'integral'})
+        # integral, _ = smartcotagsort('%s_integral' % args.prefix, integral,
+        #                          column='integral', ascending=False)
+        integral = sortbylocus('%s_integral' % args.prefix, integral,
+                               column='ese')#'integral')
         integral = prune_it(integral, tgeno, tpheno, 'Integral', step=prunestep,
                     threads=args.threads)
         integral.to_csv(pptfile, index=False, sep='\t')
@@ -226,7 +235,7 @@ def main(args):
         beta = sumstats.copy()
         beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
                                  column='beta_sq', ascending=False)
-        beta = prune_it(beta, tgeno, tpheno, 'beta^2', step=prunestep,
+        beta = prune_it(beta, tgeno, tpheno, r'$\beta^2$', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
     else:
@@ -324,6 +333,8 @@ if __name__ == '__main__':
                         help='0=cross; 1=reference; 2=target')
     parser.add_argument('--ld_operator', default='lt')
     parser.add_argument('--graph', action='store_true')
+    parser.add_argument('--reference', action='store_true',
+                        help='use reference for computations')
 
     args = parser.parse_args()
     main(args)

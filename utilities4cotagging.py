@@ -26,6 +26,7 @@ from joblib import Parallel, delayed
 from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
+from multiprocessing.pool import ThreadPool
 
 lr = jit(linregress)
 # ----------------------------------------------------------------------
@@ -330,7 +331,17 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
     G_std = G.std(axis=1)#
     m, n = G.shape
     # remove invariant sites
-    idx = (G_std != 0).compute(num_workers=threads)
+    with ProgressBar():
+        print('Removing invariant sites')
+        # delay = [dask.delayed(np.std)(G[:, i ]) for i in range(G.shape[1])]
+        # idx = [x != 0 for x in list(
+        #     dask.compute(*delay, get=dask.multiprocessing.get,
+        #                  num_workers=threads))]
+        with dask.set_options(pool=ThreadPool(threads)):
+            idx = (G_std != 0).compute()
+            # get=dask.multiprocessing.get, num_workers=threads)
+            # resources={tuple(G_std.__dask_keys__()): {'GPU': 2}},
+            # num_workers=threads)
     G = G[idx, :]
     bim = bim[idx].copy()
     mafs = G.sum(axis=1) / (2 * n)
@@ -351,7 +362,10 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
         print('Filtering MAFs smaller than', freq_thresh)
         print('Genotype matrix shape before', G.shape)
         good = (mafs < (1 - float(freq_thresh))) & (mafs > float(freq_thresh))
-        good = good.compute(num_workers=threads)
+        with ProgressBar():
+            pool = ThreadPool()
+            with dask.set_options(pool=ThreadPool(threads)):
+                good = good.compute(num_workers=threads)
         G = G[:, good]
         bim = bim[good]
         print('Genotype matrix shape after', G.shape)
@@ -393,8 +407,8 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
     f, ax = plt.subplots()
     df.plot.scatter(x='pos', y='index', ax=ax, label=column)
     df.dropna(subset=['beta']).plot.scatter(x='pos', y='index', marker='*',
-                                            s=df.m_size, ax=ax, label='Causals',
-                                            c='k')
+                                            s=df.m_size.values, ax=ax,
+                                            label='Causals', c='k')
     if title is not None:
         plt.title(title)
     plt.tight_layout()
