@@ -90,7 +90,7 @@ def integral_b(vs, mu, snps):
 
 
 # ----------------------------------------------------------------------
-#@jit
+@jit
 def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
               integral_only=False):
     """
@@ -327,17 +327,18 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
-        opts.update(dict(outprefix=tarl, bfile=targeno, causaleff=rbim.dropna(),
-                         bfile2=refgeno, validate=kwargs['split']))
+        opts.update(
+            dict(outprefix=tarl, bfile=targeno, validate=kwargs['split'],
+                 causaleff=rbim.dropna(subset=['beta']), bfile2=refgeno))
         tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=kwargs['split'], threads=threads, bim=rbim,
                          flip=kwargs['flip']))
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
-                                        memory=max_memory)
+                                        check=kwargs['check'])
         (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
-                                        memory=max_memory)
+                                        check=kwargs['check'])
     if isinstance(sumstats, str):
         sumstats = pd.read_table(sumstats, delim_whitespace=True)
     else:
@@ -473,6 +474,8 @@ if __name__ == '__main__':
                         help='0=cross; 1=reference; 2=target')
     parser.add_argument('--ld_operator', default='lt')
     parser.add_argument('--graph', action='store_true')
+    parser.add_argument('--check', action='store_true',
+                        help='check and clean invariant sites')
 
     args = parser.parse_args()
     transferability(args.prefix, args.reference, args.refpheno, args.target,
@@ -483,4 +486,5 @@ if __name__ == '__main__':
                     r_range=args.r_range, p_tresh=args.p_tresh,
                     max_memory=args.maxmem, split=args.split, flip=args.flip,
                     gflip=args.gflip, within=args.within,
-                    ld_operator=args.ld_operator, graph=args.graph)
+                    ld_operator=args.ld_operator, graph=args.graph,
+                    check=args.check)

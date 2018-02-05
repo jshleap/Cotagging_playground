@@ -37,7 +37,7 @@ def get_SNP_dist(bfile, causals):
 # ----------------------------------------------------------------------
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.1, seed=None, causaleff=None, uniform=False, usepi=False,
-             snps=None, threads=1, flip=False, max_memory=None):
+             snps=None, threads=1, flip=False, max_memory=None, check=False):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -62,12 +62,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # get indices of second pop if needed
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
-        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, memory=max_memory)
+        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check)
         snps2 = bim2.snp
         del bim2, fam2, G2
     # read rhe genotype files
-    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip,
-                              memory=max_memory)
+    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip, check=check)
     if snps2 is not None:
         print('Filtering current population with second set')
         print('Genotype matrix shape before', G.shape)
@@ -134,14 +133,14 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i',
                                'mafs', 'flip'])
     bim.loc[bidx, 'beta'] = nc.beta.values.tolist()
-    print(bim.dropna().head())
-    idx = bim.dropna().i.values
+    print(bim.dropna(subset=['beta']).head())
+    idx = bim.dropna(subset=['beta']).i.values
     # Score
     assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
     g_eff = G[:, idx].dot(causals.beta).compute(num_workers=threads)
 
     if causaleff is not None:
-        assert sorted(bim.dropna().snp) == sorted(causaleff.snp)
+        assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', g_eff.var())
@@ -336,7 +335,8 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
                        noenv=False, plothist=False, freqthreshold=0.01,
                        bfile2=None, quality='png', seed=None, uniform=False,
-                       normalize=False, flip=False, max_memory=None, **kwargs):
+                       normalize=False, flip=False, max_memory=None, check=False,
+                       **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -373,7 +373,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         opts = dict(prefix=outprefix, bfile=bfile, h2=h2, ncausal=ncausal,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
                     causaleff=causaleff, uniform=uniform, f_thr=freqthreshold,
-                    flip=flip, max_memory=max_memory)
+                    flip=flip, max_memory=max_memory, check=check)
         G, bim, truebeta, vec = true_prs(**opts)
         with open(picklefile, 'wb') as F:
             pickle.dump((G, bim, truebeta, vec), F)
@@ -387,7 +387,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
     if plothist:
         plot_pheno(outprefix, pheno, quality=quality)
-    bim.dropna().to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
+    bim.dropna(subset=['beta']).to_csv('%s.causaleff' % outprefix, index=False,
+                                       sep='\t')
     print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
     return pheno, realized_h2, (G, bim, truebeta, vec)
 
@@ -421,6 +422,7 @@ if __name__ == '__main__':
     parser.add_argument('-M', '--maxmem', default=None, action='store')
     parser.add_argument('-s', '--seed', default=None, type=int)
     parser.add_argument('-F', '--flip', default=False, action='store_true')
+    parser.add_argument('-C', '--check', default=False, action='store_true')
 
 
     args = parser.parse_args()
@@ -430,4 +432,4 @@ if __name__ == '__main__':
                        freqthreshold=args.freqthreshold, bfile2=args.bfile2,
                        maxmem=args.maxmem, threads=args.threads,
                        seed=args.seed, uniform=args.uniform, flip=args.flip,
-                       max_memory=args.maxmem)
+                       max_memory=args.maxmem, check=args.check)

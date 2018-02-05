@@ -376,13 +376,16 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
         elif isinstance(pheno, str):
             pheno = pd.read_table(pheno, delim_whitespace=True, header=None,
                                   names=['fid', 'iid', 'PHENO'])
-        x = geno.rechunk((geno.shape[0], geno.chunks[1]))
+        if isinstance(geno, dask.array.core.Array):
+            x = geno.rechunk((geno.shape[0], geno.chunks[1]))
+        else:
+            x = geno
         try:
             y = pheno.compute(num_workers=threads)
         except AttributeError:
             y = pheno
         #y = dd.from_pandas(pheno, chunksize=geno.shape[0])  # .reshape(-1,1)
-        if validate:
+        if validate is not None:
             print('making the crossvalidation data')
             x_train, x_test, y_train, y_test = train_test_split(
                 x, y, test_size=1 / validate, random_state=seed)
@@ -394,10 +397,12 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
         y_train.to_csv('%s_trainIDs.txt' % prefix, **opts)
         chunks = tuple(np.ceil(np.array(x_train.shape) * np.array([0.6, 0.1])
                                ).astype(int))
-        x_train = x_train.rechunk(chunks)
+        if isinstance(x_train, dask.array.core.Array):
+            x_train = x_train.rechunk(chunks)
         #y_train = y_train.rechunk(chunks[0])
         print('using dask delayed')
         func = st_mod if stmd else lr
+
         delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO) for
                            i in range(x_train.shape[1])]
         with ProgressBar():

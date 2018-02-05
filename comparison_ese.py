@@ -4,8 +4,8 @@ Code to execute parts of ese and plot the different sorts
 
 from ese import *
 
-within_dict={0:'ese cotag', 1:'ese EUR', 2:'ese AFR'}
-prunestep=30
+within_dict = {0: 'ese cotag', 1: 'ese EUR', 2: 'ese AFR'}
+prunestep = 30
 
 
 def sortbylocus(prefix, df, column='ese', title=None):
@@ -14,32 +14,35 @@ def sortbylocus(prefix, df, column='ese', title=None):
         with open(picklefile, 'rb') as F:
             sorteddf = pickle.load(F)
     else:
-        df['m_size'] = norm(abs(df.slope), 5, 50)
-        sorteddf = pd.DataFrame(columns=df.columns.tolist())
+        df['m_size'] = norm(abs(df.slope), 20, 200)
+        # df.sort_values(by=column,  ascending=False, inplace=True)
         grouped = df.groupby('locus', as_index=False)
-        while not grouped.any().empty:
-            gr = grouped.first()
+        grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
+        sorteddf = grouped.sort_values(by=column, ascending=False)
+        tail = df[~df.snp.isin(sorteddf.snp)]
+        # grouped = tail.groupby('locus', as_index=False)
+        if not tail.empty:
             sorteddf = sorteddf.append(
-                gr.sort_values(by=column, ascending=False), ignore_index=True)
-            tail = df[~df.snp.isin(sorteddf.snp)]
-            grouped = tail.groupby('locus', as_index=False)
-            # if not tail.empty:
-            #     sorteddf = sorteddf.append(
-            #         tail.sort_values(by=column, ascending=False), ignore_index=True)
+                tail.sort_values(by=column, ascending=False))
         sorteddf = sorteddf.reset_index(drop=True)
         sorteddf['index'] = sorteddf.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump(sorteddf, F)
-    size = sorteddf.m_size.values
+    size = sorteddf.m_size
+    # make sure x and y are numeric
+    sorteddf['pos'] = pd.to_numeric(sorteddf.pos)
+    sorteddf['index'] = pd.to_numeric(sorteddf.index)
+    idx = sorteddf.dropna(subset=['beta']).index.tolist()
     f, ax = plt.subplots()
-    sorteddf.plot.scatter(x='pos', y='index', ax=ax, label=column)
-    sorteddf.dropna(subset=['beta']).plot.scatter(x='pos', y='index', c='k',
-                                                  marker='*', label='Causals',
-                                                  s=size, ax=ax)
+    sorteddf.plot.scatter(x='pos', y='index', ax=ax, label=column, s=size.values
+                          )
+    sorteddf.loc[idx, :].plot.scatter(x='pos', y='index', c='k', marker='*',
+                                      ax=ax, label='Causals',
+                                      s=size[idx].values)
     if title is not None:
         plt.title(title)
     plt.tight_layout()
-    plt.savefig('%s.pdf' %  prefix)
+    plt.savefig('%s.pdf' % prefix)
     return sorteddf
 
 
@@ -56,10 +59,10 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
             enumerate(loci)]
         with ProgressBar():
             res = list(dask.compute(*delayed_results, num_workers=args.threads))
-        res = pd.concat(res, ignore_index=True)
+        res = pd.concat(res)  # , ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
-        result = result.rename(columns={'ese':within_str})
+        result = result.rename(columns={'ese': within_str})
         if 'i' not in result.columns:
             result = result.merge(tbim.reindex(columns=['snp', 'i']), on='snp')
         if 'slope' not in result.columns:
@@ -68,11 +71,12 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         result.to_csv(resfile, index=False, sep='\t')
     else:
         result = pd.read_csv(resfile, sep='\t')
-    #prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
-    prod = sortbylocus(prefix, result, column=within_str)
+    # prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
+    prod = sortbylocus(prefix, result, column=within_str,
+                       title=r'Realized $h^2$: %f' % h2)
     prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
                     threads=threads)
-    #prod['type'] = within
+    # prod['type'] = within
     return prod
 
 
@@ -83,8 +87,8 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     text = tag.extend
     while snp_list != []:
         # get lowest pvalue snp in the locus
-        curr_high = sumstats.nsmallest(1, 'pvalue')#.snp.values[0]
-        if curr_high.pvalue.values[0]  < p_thresh:
+        curr_high = sumstats.nsmallest(1, 'pvalue')  # .snp.values[0]
+        if curr_high.pvalue.values[0] < p_thresh:
             curr_high = curr_high.snp.values[0]
             ippend(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
@@ -126,7 +130,7 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
             columns=['snp', 'slope', 'pvalue', 'i'])
         # filter pvalue
         pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
-        ldval = np.arange(0.1, 0.8, 0.1) # [0.1, 0.2, 0.4, 0.8]
+        ldval = np.arange(0.1, 0.8, 0.1)  # [0.1, 0.2, 0.4, 0.8]
         pairs = product(pvals, ldval)
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, pheno, geno)
@@ -143,10 +147,11 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
-    return ppt
+    return ppt, pre, pos
 
 
 def main(args):
+    now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     refl, tarl = args.labels
     # make simulations
@@ -155,13 +160,13 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.maxmem, 'freqthreshold':args.freq_thresh}
+            'max_memory': args.maxmem, 'freqthreshold': args.freq_thresh}
     rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
     # make simulation for target
     print('Simulating phenotype for target population %s \n' % tarl)
-    opts.update(dict(outprefix=tarl, bfile=args.targeno,
-                     causaleff=rbim.dropna(), bfile2=args.refgeno,
-                     validate=args.split))
+    opts.update(dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
+                     causaleff=rbim.dropna(subset=['beta']), validate=args.split
+                     ))
     if args.reference:
         tpheno, tgeno = rpheno, rgeno
     else:
@@ -181,13 +186,14 @@ def main(args):
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
     # include ppt
+    scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        ppt = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
-        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt,
-                                 column='index', ascending=True)
+        ppt, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
+        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt, column='index',
+                                ascending=True, title=scs_title)
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
-                    threads=args.threads)
+                       threads=args.threads)
         ppt.to_csv(pptfile, index=False, sep='\t')
     else:
         ppt = pd.read_csv(pptfile, sep='\t')
@@ -208,14 +214,11 @@ def main(args):
         on='snp')
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
-        #integral.rename(columns={'ese':'integral'})
-        # integral, _ = smartcotagsort('%s_integral' % args.prefix, integral,
-        #                          column='integral', ascending=False)
         integral = sortbylocus('%s_integral' % args.prefix, integral,
-                               column='ese')#'integral')
+                               column='ese', title='Integral; %s' % scs_title)
         integral = prune_it(integral, tgeno, tpheno, 'Integral', step=prunestep,
-                    threads=args.threads)
-        integral.to_csv(pptfile, index=False, sep='\t')
+                            threads=args.threads)
+        integral.to_csv(intfile, index=False, sep='\t')
     else:
         integral = pd.read_csv(intfile, sep='\t')
     # expecetd square effect
@@ -239,7 +242,8 @@ def main(args):
     if not os.path.isfile(betafile):
         beta = sumstats.copy()
         beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
-                                 column='beta_sq', ascending=False)
+                                 column='beta_sq', ascending=False,
+                                 title=scs_title)
         beta = prune_it(beta, tgeno, tpheno, r'$\beta^2$', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
@@ -248,26 +252,33 @@ def main(args):
     # include causals
     causals = sumstats.dropna(subset=['beta'])
     caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
-                          ascending=False)
+                             ascending=False, title='Causals; %s' % scs_title)
     caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
                     threads=args.threads)
-    caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False, sep='\t')
+    caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False,
+                sep='\t')
     # plot them
     res = pd.concat(eses + [pval, beta, caus, ppt, integral])
     # best_r2 = lr(
     #     tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
     #     tpheno.PHENO).rvalue ** 2
     res.to_csv('%s_finaldf.tsv' % args.prefix, sep='\t', index=False)
-    colors = iter(['r', 'b', 'm', 'g', 'c', 'k', 'y', '0.6'])
+    colors = iter([dict(s=10, c='r', marker='p'), dict(s=15, c='b', marker='*'),
+                   dict(s=7, c='m', marker=','), dict(s=6, c='g', marker='o'),
+                   dict(s=5, c='c', marker='v'), dict(s=4, c='k', marker='^'),
+                   dict(s=3, c='y', marker='>'), dict(s=2, c='0.6', marker='<')]
+                  )
     f, ax = plt.subplots()
     for t, df in res.groupby('type'):
         color = next(colors)
-        df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True,
-                s=3, c=color, ax=ax, label=t)
-    #ax.axhline(best_r2, ls='--', c='0.5')
+        df.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, ax=ax,
+                label=t, **color)
+                #s=3, c=color)
+    # ax.axhline(best_r2, ls='--ls', c='0.5')
     plt.tight_layout()
     plt.savefig('%s_transferability.pdf' % args.prefix)
-
+    print(
+        'ESE comparison done after %.2f minutes' % ((time.time() - now) / 60.))
 
 
 # ----------------------------------------------------------------------
@@ -282,6 +293,7 @@ if __name__ == '__main__':
         def __call__(self, parser, namespace, values, option_string=None):
             values = np.array(values)
             return super().__call__(parser, namespace, values, option_string)
+
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--prefix', help='prefix for outputs',

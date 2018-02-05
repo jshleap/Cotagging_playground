@@ -13,7 +13,6 @@ from collections import ChainMap
 from functools import reduce
 from glob import glob
 from subprocess import Popen, PIPE
-
 import dask
 import dask.array as da
 import dask.dataframe as dd
@@ -324,33 +323,26 @@ def helper_smartsort2(grouped, key):
 
 
 # ---------------------------------------------------------------------------
-def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
+def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
 
     (bim, fam, G) = read_plink(bfile)
-    # remove constant variants
-    G_std = G.std(axis=1)#
     m, n = G.shape
     # remove invariant sites
-    with ProgressBar():
-        print('Removing invariant sites')
-        # delay = [dask.delayed(np.std)(G[:, i ]) for i in range(G.shape[1])]
-        # idx = [x != 0 for x in list(
-        #     dask.compute(*delay, get=dask.multiprocessing.get,
-        #                  num_workers=threads))]
-        with dask.set_options(pool=ThreadPool(threads)):
-            idx = (G_std != 0).compute()
-            # get=dask.multiprocessing.get, num_workers=threads)
-            # resources={tuple(G_std.__dask_keys__()): {'GPU': 2}},
-            # num_workers=threads)
-    G = G[idx, :]
-    bim = bim[idx].copy()
+    if check:
+        # remove constant variants
+        G_std = G.std(axis=1)  #
+        with ProgressBar():
+            print('Removing invariant sites')
+            with dask.set_options(pool=ThreadPool(threads)):
+                idx = (G_std != 0).compute()
+        G = G[idx, :]
+        bim = bim[idx].copy()
     mafs = G.sum(axis=1) / (2 * n)
-    bim['mafs'] = mafs
-    # check possible flips
-    flips = np.zeros(bim.shape[0], dtype=bool)
-    flips[np.where(mafs > 0.5)[0]] = True
-    bim['flip'] = flips
     if flip:
+        # check possible flips
+        flips = np.zeros(bim.shape[0], dtype=bool)
+        flips[np.where(mafs > 0.5)[0]] = True
+        bim['flip'] = flips
         vec = np.zeros(flips.shape[0])
         vec[flips] = 2
         # perform the flipping
@@ -360,15 +352,16 @@ def read_geno(bfile, freq_thresh, threads, flip=False, memory=None):
     # Filter MAF
     if freq_thresh > 0:
         print('Filtering MAFs smaller than', freq_thresh)
-        print('Genotype matrix shape before', G.shape)
+        print('    Genotype matrix shape before', G.shape)
         good = (mafs < (1 - float(freq_thresh))) & (mafs > float(freq_thresh))
         with ProgressBar():
-            pool = ThreadPool()
             with dask.set_options(pool=ThreadPool(threads)):
-                good = good.compute(num_workers=threads)
+                good, mafs = dask.compute(good, mafs)
+                # good = good.compute(num_workers=threads)
         G = G[:, good]
         bim = bim[good]
-        print('Genotype matrix shape after', G.shape)
+        bim['mafs'] = mafs[good]
+        print('    Genotype matrix shape after', G.shape)
     bim = bim.reset_index(drop=True)
     bim['i'] = bim.index.tolist()
     return bim, fam, G
@@ -391,9 +384,9 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        gwascotag['m_size'] = norm(abs(gwascotag.slope), 5, 20)
+        gwascotag['m_size'] = norm(abs(gwascotag.slope),  20, 200)
         grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
-            column, as_index=False).first()
+            column, as_index=False, sort=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
         tail = gwascotag[~gwascotag.snp.isin(sorteddf.snp)]
         beforetail = sorteddf.shape[0]
@@ -404,11 +397,12 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
         df['index'] = df.index.tolist()
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
+    idx = df.dropna(subset=['beta']).index.tolist()
+    size = df.m_size
     f, ax = plt.subplots()
     df.plot.scatter(x='pos', y='index', ax=ax, label=column)
-    df.dropna(subset=['beta']).plot.scatter(x='pos', y='index', marker='*',
-                                            s=df.m_size.values, ax=ax,
-                                            label='Causals', c='k')
+    df.loc[idx, :].plot.scatter(x='pos', y='index', marker='*', c='k', ax=ax,
+                                s=size[idx].values, label='Causals')
     if title is not None:
         plt.title(title)
     plt.tight_layout()
@@ -672,8 +666,8 @@ def single_score_plink(prefix, qr, tup, plinkexe, gwasfn, qrange, frac_snps,
 def single_score(subdf, geno, pheno, label):
     indices = subdf.i.tolist()#gen_index.tolist()
     prs = geno[:, indices].dot(subdf.slope)
-    regress = lr(pheno.PHENO, prs)
-    return {'Number of SNPs': subdf.shape[0], 'R2': regress.rvalue **2,
+    regress = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2 #lr(pheno.PHENO, prs)
+    return {'Number of SNPs': subdf.shape[0], 'R2': regress**2,#.rvalue **2,
             'type': label}
 
 
@@ -691,7 +685,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
     print('Prunning %s...' % label)
     print('First 200')
     gen = ((df.iloc[:i], geno, pheno, label) for i in
-           range(1, min(200, df.shape[0]), 1))
+           range(1, min(201, df.shape[0] + 1), 1))
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     with ProgressBar():
         res = list(dask.compute(*delayed_results, num_workers=threads))
@@ -699,7 +693,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
-                range(201, df.shape[0], int(step)))
+                range(201, df.shape[0] + 1, int(step)))
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
         with ProgressBar():
             res += list(dask.compute(*delayed_results, num_workers=threads))

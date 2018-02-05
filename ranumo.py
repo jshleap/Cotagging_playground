@@ -449,8 +449,9 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
-        opts.update(dict(outprefix=tarl, bfile=targeno, causaleff=rbim.dropna(),
-                         bfile2=refgeno, validate=kwargs['split']))
+        opts.update(dict(outprefix=tarl, bfile=targeno, bfile2=refgeno,ß
+                         causaleff=rbim.dropna(subset=['beta']),
+                         validate=kwargs['split']))
         tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
                          validate=kwargs['split'], threads=threads, bim=rbim))
