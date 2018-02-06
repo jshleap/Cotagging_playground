@@ -1,6 +1,16 @@
 from comparison_ese import *
 
 
+def process_beta_sq(sumstats, geno, pheno, prunestep):
+    sumstats['beta_sq'] = sumstats.slope ** 2
+    beta, _ = smartcotagsort('%s_slope' % args.prefix, sumstats,
+                             column='beta_sq', ascending=False)
+    beta = prune_it(beta, geno, pheno, r'$\beta^2$', step=prunestep,
+                    threads=args.threads)
+    m = beta.nlargest(1, 'R2').loc[:,'Number of SNPs'].values[0]
+    return beta.iloc[: m]
+
+
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
@@ -13,7 +23,13 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads):
     idx = selected.i.values
     prs = tgeno[:, idx].dot(selected.slope)
     est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
-    return {r'$R^2$': est, 'EUR_n': i, 'run': run}
+    # get selection by beta^2
+    betas = process_beta_sq(sumstats, tgeno, tpheno, 10)
+    b_idx = betas.i.values
+    b_prs = tgeno[:, b_idx].dot(betas.slope)
+    b_est = np.corrcoef(b_prs, tpheno.PHENO)[1, 0] ** 2
+    return {r'$R^2_{ppt}$': est, r'$R^2_{\beta^2}$': b_est, 'EUR_n': i,
+            'run': run}
 
 
 def main(args):
