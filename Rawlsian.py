@@ -39,21 +39,16 @@ def main(args):
     # perform GWASes
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
-    result = []
+    result = pd.DataFrame()
     for run in range(50):
         results = [
             single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run,
                    args.threads) for i in
             np.linspace(200, rgeno.shape[0], 50, dtype=int)]
-        [os.remove(fn) for fn in glob('./*') if os.path.isfile(fn)]
-        result.append(pd.DataFrame(results))
-    # delayed_results = [
-    #     dask.delayed(single)(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno)
-    #     for i in np.linspace(200, rgeno.shape[0], 50, dtype=int)
-    # ]
-    # df = pd.DataFrame(
-    #     list(dask.compute(*delayed_results, num_workers=args.threads)))
-    result.to_csv('Rawlsian.tsv', sep='\t')
+        [os.remove(fn) for fn in glob('./*') if
+         (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
+        result = result.append(pd.DataFrame(results))
+        result.to_csv('Rawlsian.tsv', sep='\t')
     gp3 = result.groupby('EUR_n')
     means = gp3.mean()
     errors = gp3.std()
