@@ -5,9 +5,9 @@ def process_beta_sq(sumstats, geno, pheno, prunestep):
     sumstats['beta_sq'] = sumstats.slope ** 2
     beta, _ = smartcotagsort('%s_slope' % args.prefix, sumstats,
                              column='beta_sq', ascending=False)
-    beta = prune_it(beta, geno, pheno, r'$\beta^2$', step=prunestep,
+    pruned = prune_it(beta, geno, pheno, r'$\beta^2$', step=prunestep,
                     threads=args.threads)
-    m = beta.nlargest(1, 'R2').loc[:,'Number of SNPs'].values[0]
+    m = pruned.nlargest(1, 'R2').loc[:,'Number of SNPs'].values[0]
     return beta.iloc[: m]
 
 
