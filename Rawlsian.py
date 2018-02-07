@@ -56,11 +56,11 @@ def main(args):
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
     result = pd.DataFrame()
-    for run in range(50):
+    for run in range(25):
         results = [
             single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run,
                    args.threads) for i in
-            np.linspace(200, rgeno.shape[0], 50, dtype=int)]
+            np.linspace(200, rgeno.shape[0], 25, dtype=int)]
         [os.remove(fn) for fn in glob('./*') if
          (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
         result = result.append(pd.DataFrame(results))
