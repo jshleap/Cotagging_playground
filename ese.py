@@ -297,6 +297,7 @@ def transferability_plink(args):
     plt.legend()
     plt.tight_layout()
     plt.savefig('%s_transferability.pdf' % args.prefix)
+    plt.close()
     return res
 
 
@@ -403,6 +404,7 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                 s=3, c=next(colors), ax=ax, label=t)
     plt.tight_layout()
     plt.savefig('%s_transferability.pdf' % args.prefix)
+    plt.close()
     print('ESE done after %.2f minutes' % ((time.time() - now) / 60.))
     return res
 

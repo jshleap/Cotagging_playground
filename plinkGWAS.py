@@ -202,6 +202,7 @@ def manhattan_plot(outfn, p_values, causal_pos=None, alpha=0.05, title=''):
     plt.ylabel(r"-log10(p-value)")
     plt.title(title)
     plt.savefig(outfn)
+    plt.close()
 
 
 # ----------------------------------------------------------------------

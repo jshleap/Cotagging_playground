@@ -43,6 +43,7 @@ def sortbylocus(prefix, df, column='ese', title=None):
         plt.title(title)
     plt.tight_layout()
     plt.savefig('%s.pdf' % prefix)
+    plt.close()
     return sorteddf
 
 
@@ -199,6 +200,7 @@ def main(args):
         ppt = pd.read_csv(pptfile, sep='\t')
     ppt.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=3)
     plt.savefig('ppt_afr.pdf')
+    plt.close()
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
     # compute ese only integral
@@ -277,6 +279,7 @@ def main(args):
     # ax.axhline(best_r2, ls='--ls', c='0.5')
     plt.tight_layout()
     plt.savefig('%s_transferability.pdf' % args.prefix)
+    plt.close()
     print(
         'ESE comparison done after %.2f minutes' % ((time.time() - now) / 60.))
 

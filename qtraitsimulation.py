@@ -327,6 +327,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
     """
     prs_true.loc[:, ['PHENO', 'gen_eff', 'env_eff']].hist(alpha=0.5)
     plt.savefig('%s.%s' % (prefix, quality))
+    plt.close()
 
 
 # ----------------------------------------------------------------------
