@@ -73,6 +73,7 @@ def main(args):
     means.plot(yerr=errors, ax=ax)
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
+    plt.close()
 
 
 # ----------------------------------------------------------------------

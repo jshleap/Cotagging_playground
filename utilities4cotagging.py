@@ -407,6 +407,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
         plt.title(title)
     plt.tight_layout()
     plt.savefig('%s_%s.pdf' % (prefix, '_'.join(column.split())))
+    plt.close()
     return df, beforetail
 
 
