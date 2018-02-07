@@ -64,13 +64,13 @@ def main(args):
         [os.remove(fn) for fn in glob('./*') if
          (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
         result = result.append(pd.DataFrame(results))
-        result.to_csv('Rawlsian.tsv', sep='\t')
-    gp3 = result.groupby('EUR_n')
+        result.to_csv('Rawlsian.tsv', sep='\t', index=False)
+    cols = [c for c in result.columns if c != 'run']
+    gp3 = result.loc[:, cols].groupby('EUR_n')
     means = gp3.mean()
     errors = gp3.std()
     f, ax = plt.subplots()
     means.plot(yerr=errors, ax=ax)
-    #df.plot.scatter(x='EUR_n', y=r'$R^2$', ax=ax)
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
 
