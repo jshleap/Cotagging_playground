@@ -87,15 +87,15 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     text = tag.extend
     while snp_list != []:
         # get lowest pvalue snp in the locus
-        curr_high = sumstats.nsmallest(1, 'pvalue')  # .snp.values[0]
+        curr_high = sumstats.nsmallest(1, 'pvalue')  # TODO: change to min
         if curr_high.pvalue.values[0] < p_thresh:
             curr_high = curr_high.snp.values[0]
             ippend(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
             # get snps in LD
-            vec = D_r.loc[chidx, :]
+            vec = D_r.loc[:, chidx]
             tagged = vec[vec > ld_thr].columns.tolist()
-            if curr_high in tagged:
+            if curr_high in tagged: # TODO: check if necesary
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
             snp_list = [snp for snp in snp_list if snp not in tagged]
