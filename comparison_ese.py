@@ -121,11 +121,10 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     idx = clump.i.tolist()
     prs = geno[:, idx].dot(clump.slope)
     est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
-    return est, (index, tag)
+    return est, (index, tag, l, p)
 
 
-def dirty_ppt(loci, sumstats, geno, pheno, threads):
-    # TODO: include crossvalidation!!
+def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed):
     now = time.time()
     sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
     print('Starting dirty PPT...')
@@ -140,16 +139,20 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
         pvals = [1]#, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
         ldval = np.arange(0.1, 0.8, 0.1)  # [0.1, 0.2, 0.4, 0.8]
         pairs = product(pvals, ldval)
+        x_train, x_test, y_train, y_test = train_test_split(
+            geno, pheno, test_size=1 / split, random_state=seed)
         delayed_results = [
-            dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, pheno, geno)
+            dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, y_train, x_train)
             for p, l in pairs]
         with ProgressBar():
             print('    Locus', r)
             d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
         best_key = max(d.keys())
-        i, t = d[best_key]
-        index += i
-        tag += t
+        i, t, ld, pv = d[best_key]
+        est, (ind, ta, _, _) = loop_pairs(snp_list, D_r, ld, pv, sumstats,
+                                             pheno, geno)
+        index += ind
+        tag += ta
     pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
                                                          ascending=True)
     pos = sumstats[sumstats.snp.isin(tag)].sort_values('pvalue', ascending=True)
