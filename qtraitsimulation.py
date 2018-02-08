@@ -333,11 +333,11 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 # ----------------------------------------------------------------------
 # TODO: include test of correlation of variants (LD)??
 
-def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
-                       noenv=False, plothist=False, freqthreshold=0.01,
-                       bfile2=None, quality='png', seed=None, uniform=False,
-                       normalize=False, flip=False, max_memory=None, check=False,
-                       **kwargs):
+def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
+                       causaleff=None, noenv=False, plothist=False, bfile2=None,
+                       freqthreshold=0.01, quality='png', seed=None, flip=False,
+                       uniform=False, normalize=False, max_memory=None,
+                       check=False, remove_causals=False):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -388,8 +388,13 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, causaleff=None,
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
     if plothist:
         plot_pheno(outprefix, pheno, quality=quality)
-    bim.dropna(subset=['beta']).to_csv('%s.causaleff' % outprefix, index=False,
-                                       sep='\t')
+    causals = bim.dropna(subset=['beta'])
+    causals.to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
+    if remove_causals:
+        print('Removing causals from files!!')
+        bim = bim[~bim.snp.isin(causals.snp)]
+        G = G[:, bim.i.values]
+        bim['i'] = list(range(G.shape[1]))
     print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
     return pheno, realized_h2, (G, bim, truebeta, vec)
 
@@ -424,6 +429,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--seed', default=None, type=int)
     parser.add_argument('-F', '--flip', default=False, action='store_true')
     parser.add_argument('-C', '--check', default=False, action='store_true')
+    parser.add_argument('-a', '--avoid_causals', default=False,
+                        action='store_true', help='Remove causals from set')
 
 
     args = parser.parse_args()
