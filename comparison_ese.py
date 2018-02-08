@@ -86,18 +86,23 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     ippend = index.append
     tag = []
     text = tag.extend
+    # if 'beta_sq' not in sumstats.columns:
+    #     sumstats.loc[:, 'beta_sq'] = sumstats.slope**2
     while snp_list != []:
         # get lowest pvalue snp in the locus
-        curr_high = sumstats.nsmallest(1, 'pvalue')  # TODO: change to min
-        if curr_high.pvalue.values[0] < p_thresh:
-            curr_high = curr_high.snp.values[0]
+        #curr_high = sumstats.nsmallest(1, ['pvalue'])
+        curr_high = sumstats.sort_values(['pvalue', 'beta_sq'],
+                                         ascending=[True, False]).iloc[0]
+        if curr_high.pvalue < p_thresh:
+            curr_high = curr_high.snp
             ippend(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
             # get snps in LD
-            vec = D_r.loc[:, chidx]
+            vec = D_r.loc[chidx, :] # Is in the row since is square and rows are
+            #  index while columns aren't
             tagged = vec[vec > ld_thr].columns.tolist()
-            if curr_high in tagged: # TODO: check if necesary
-                tagged.pop(tagged.index(curr_high))
+            #if curr_high in tagged: # TODO: check if necesary
+            tagged.pop(tagged.index(curr_high))
             text(tagged)
             snp_list = [snp for snp in snp_list if snp not in tagged]
             snp_list.pop(snp_list.index(curr_high))
@@ -120,7 +125,9 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
 
 
 def dirty_ppt(loci, sumstats, geno, pheno, threads):
+    # TODO: include crossvalidation!!
     now = time.time()
+    sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
     print('Starting dirty PPT...')
     index, tag = [], []
     for r, locus in enumerate(loci):
@@ -128,9 +135,9 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
         snp_list = snps.tolist()
         D_r = dd.from_dask_array(D_r, columns=snps) ** 2
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
-            columns=['snp', 'slope', 'pvalue', 'i'])
+            columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i'])
         # filter pvalue
-        pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+        pvals = [1]#, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
         ldval = np.arange(0.1, 0.8, 0.1)  # [0.1, 0.2, 0.4, 0.8]
         pairs = product(pvals, ldval)
         delayed_results = [
@@ -143,8 +150,9 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads):
         i, t = d[best_key]
         index += i
         tag += t
-    pre = sumstats[sumstats.snp.isin(index)]
-    pos = sumstats[sumstats.snp.isin(tag)]
+    pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
+                                                         ascending=True)
+    pos = sumstats[sumstats.snp.isin(tag)].sort_values('pvalue', ascending=True)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
@@ -190,8 +198,8 @@ def main(args):
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        ppt, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
-        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt, column='index',
+        ppt_df, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
+        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
                        threads=args.threads)
@@ -229,7 +237,9 @@ def main(args):
     # prune by pval
     resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
     if not os.path.isfile(resfile):
-        pval = sumstats.sort_values('pvalue', ascending=True).reset_index(
+        pval = sumstats.sort_values(['pvalue', 'beta_sq'], ascending=[True,
+                                                                      False]
+                                    ).reset_index(
             drop=True)
         pval['index'] = pval.index
         pval, _ = smartcotagsort('%s_pval' % args.prefix, pval, column='index',

@@ -384,7 +384,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        gwascotag['m_size'] = norm(abs(gwascotag.slope),  20, 200)
+        gwascotag.loc[:, 'm_size'] = norm(abs(gwascotag.slope),  10, 150)
         grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
             column, as_index=False, sort=False).first()
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
