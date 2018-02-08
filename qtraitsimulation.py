@@ -337,7 +337,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
                        causaleff=None, noenv=False, plothist=False, bfile2=None,
                        freqthreshold=0.01, quality='png', seed=None, flip=False,
                        uniform=False, normalize=False, max_memory=None,
-                       check=False, remove_causals=False):
+                       check=False, remove_causals=False, **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
@@ -394,9 +394,10 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
         print('Removing causals from files!!')
         bim = bim[~bim.snp.isin(causals.snp)]
         G = G[:, bim.i.values]
-        bim['i'] = list(range(G.shape[1]))
+        bim.loc[:, 'i'] = list(range(G.shape[1]))
+        bim.reset_index(drop=True, inplace=True)
     print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
-    return pheno, realized_h2, (G, bim, truebeta, vec)
+    return pheno, realized_h2, (G, bim, truebeta, causals)
 
 
 if __name__ == '__main__':

@@ -398,11 +398,13 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
     idx = df.dropna(subset=['beta']).index.tolist()
+    causals = df.loc[idx, :]
     size = df.m_size
     f, ax = plt.subplots()
     df.plot.scatter(x='pos', y='index', ax=ax, label=column)
-    df.loc[idx, :].plot.scatter(x='pos', y='index', marker='*', c='k', ax=ax,
-                                s=size[idx].values, label='Causals')
+    if not causals.empty:
+        causals.plot.scatter(x='pos', y='index', marker='*', c='k', ax=ax,
+                             s=size[idx].values, label='Causals')
     if title is not None:
         plt.title(title)
     plt.tight_layout()

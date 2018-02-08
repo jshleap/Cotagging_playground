@@ -19,7 +19,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads):
              validate=None, threads=threads, bim=rbim))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     ppt, selected, tail = dirty_ppt(loci, sumstats, tgeno, tpheno,
-                                    args.threads)
+                                    args.threads, 2, np.random.randint(10000))
     idx = selected.i.values
     prs = tgeno[:, idx].dot(selected.slope)
     est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2

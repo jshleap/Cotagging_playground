@@ -33,12 +33,13 @@ def sortbylocus(prefix, df, column='ese', title=None):
     sorteddf['pos'] = pd.to_numeric(sorteddf.pos)
     sorteddf['index'] = pd.to_numeric(sorteddf.index)
     idx = sorteddf.dropna(subset=['beta']).index.tolist()
+    causals = sorteddf.loc[idx, :]
     f, ax = plt.subplots()
     sorteddf.plot.scatter(x='pos', y='index', ax=ax, label=column, s=size.values
                           )
-    sorteddf.loc[idx, :].plot.scatter(x='pos', y='index', c='k', marker='*',
-                                      ax=ax, label='Causals',
-                                      s=size[idx].values)
+    if not causals.empty:
+        causals.plot.scatter(x='pos', y='index', c='k', marker='*', ax=ax,
+                             label='Causals', s=size[idx].values)
     if title is not None:
         plt.title(title)
     plt.tight_layout()
@@ -118,7 +119,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
 def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
     clump = sumstats[sumstats.snp.isin(index)]
-    idx = clump.i.tolist()
+    idx = clump.i.values.astype(int)
     prs = geno[:, idx].dot(clump.slope)
     est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
     return est, (index, tag, l, p)
@@ -149,8 +150,10 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed):
             d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
         best_key = max(d.keys())
         i, t, ld, pv = d[best_key]
-        est, (ind, ta, _, _) = loop_pairs(snp_list, D_r, ld, pv, sumstats,
-                                             pheno, geno)
+        del_res = [
+            dask.delayed(loop_pairs)(snp_list, D_r, ld, pv, sumstats, pheno,
+                                     geno)]
+        est, (ind, ta, _ , _) = dask.compute(*del_res, num_workers=threads)[0]
         index += ind
         tag += ta
     pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
@@ -173,21 +176,19 @@ def main(args):
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
             'max_memory': args.maxmem, 'freqthreshold': args.freq_thresh,
-            'avoid_causals':args.avoid_causals}
-    rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+            'remove_causals':args.avoid_causals}
+    rpheno, h2, (rgeno, rbim, rtruebeta, rcausals) = qtraits_simulation(**opts)
     # make simulation for target
     print('Simulating phenotype for target population %s \n' % tarl)
     opts.update(dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
-                     causaleff=rbim.dropna(subset=['beta']), validate=args.split
-                     ))
+                     causaleff=rcausals, validate=args.split))
     if args.reference:
         tpheno, tgeno = rpheno, rgeno
     else:
-        tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
-        opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate=args.split, threads=args.threads, bim=rbim,
-                         flip=args.flip))
-
+        tpheno, h2, (tgeno, tbim, truebeta, tcausals) = qtraits_simulation(
+            **opts)
+    opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno, bim=rbim,
+                     validate=args.split, threads=args.threads, flip=args.flip))
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     sumstats['beta_sq'] = sumstats.slope ** 2
@@ -202,7 +203,8 @@ def main(args):
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        ppt_df, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads)
+        ppt_df, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads,
+                                 args.split, seed)
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
@@ -267,12 +269,15 @@ def main(args):
         beta = pd.read_csv(betafile, sep='\t')
     # include causals
     causals = sumstats.dropna(subset=['beta'])
-    caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
-                             ascending=False, title='Causals; %s' % scs_title)
-    caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
-                    threads=args.threads)
-    caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False,
-                sep='\t')
+    if not causals.empty:
+        caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
+                                 ascending=False, title='Causals; %s' % scs_title)
+        caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
+                        threads=args.threads)
+        caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False,
+                    sep='\t')
+    else:
+        caus = None
     # plot them
     res = pd.concat(eses + [pval, beta, caus, ppt, integral])
     # best_r2 = lr(
