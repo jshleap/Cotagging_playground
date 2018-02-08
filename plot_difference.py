@@ -4,13 +4,13 @@ from glob import glob
 import sys
 
 if len(sys.argv) > 1:
-    one = True
+    one = int(sys.argv[1])
 else:
     one = False
 fs = glob('run*/*_finaldf.tsv')
-if one:
+if isinstance(one, int):
     dfs = [pd.read_table(fn, sep='\t') for fn in fs]
-    dfs = [df[df.loc[:, 'Number of SNPs'] == 1] for df in dfs]
+    dfs = [df[df.loc[:, 'Number of SNPs'] == one] for df in dfs]
 else:
     dfs = [pd.read_table(fn, sep='\t').groupby('type', as_index=False).max()
            for fn in fs]
@@ -26,6 +26,6 @@ plt.ylabel(r'$R^2$ difference')
 plt.title(r'$R^2$ difference with P + T')
 plt.suptitle("")
 if one:
-    plt.savefig('difference_one_scored.pdf')
+    plt.savefig('difference_%d_scored.pdf' % one)
 else:
     plt.savefig('difference.pdf')
