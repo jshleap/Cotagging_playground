@@ -172,7 +172,8 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.maxmem, 'freqthreshold': args.freq_thresh}
+            'max_memory': args.maxmem, 'freqthreshold': args.freq_thresh,
+            'avoid_causals':args.avoid_causals}
     rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
     # make simulation for target
     print('Simulating phenotype for target population %s \n' % tarl)
@@ -368,6 +369,8 @@ if __name__ == '__main__':
     parser.add_argument('--graph', action='store_true')
     parser.add_argument('--reference', action='store_true',
                         help='use reference for computations')
+    parser.add_argument('-A', '--avoid_causals', default=False,
+                        action='store_true', help='Remove causals from set')
 
     args = parser.parse_args()
     main(args)

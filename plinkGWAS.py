@@ -385,7 +385,6 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
             y = pheno.compute(num_workers=threads)
         except AttributeError:
             y = pheno
-        #y = dd.from_pandas(pheno, chunksize=geno.shape[0])  # .reshape(-1,1)
         if validate is not None:
             print('making the crossvalidation data')
             x_train, x_test, y_train, y_test = train_test_split(

@@ -440,4 +440,5 @@ if __name__ == '__main__':
                        freqthreshold=args.freqthreshold, bfile2=args.bfile2,
                        maxmem=args.maxmem, threads=args.threads,
                        seed=args.seed, uniform=args.uniform, flip=args.flip,
-                       max_memory=args.maxmem, check=args.check)
+                       max_memory=args.maxmem, check=args.check,
+                       remove_causals=args.avoid_causals)
