@@ -124,7 +124,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # If causal effects are provided use them, otherwise get them
     if causaleff is None:
         # chunks = estimate_chunks((ncausal,), threads)
-        pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
+        pre_beta = np.repeat(std, ncausal)#np.random.normal(loc=0, scale=std, size=ncausal)
         # Store them
         causals['beta'] = pre_beta  # .compute()
         causals = causals.dropna()
