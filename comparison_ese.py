@@ -89,9 +89,10 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     tag = []
     text = tag.extend
     # sort just once
-    sumstats = sumstats.sort_values(['pvalue', 'beta_sq'], ascending=[True,
-                                                                      False])
-    while snp_list != []:
+    sumstats = sumstats[sumstats.snp.isin(snp_list)].sort_values(
+        ['pvalue', 'beta_sq'], ascending=[True, False])
+    total_snps = sumstats.shape[0]
+    while len(index + tag) != total_snps:
         # get lowest pvalue snp in the locus
         #curr_high = sumstats.nsmallest(1, ['pvalue'])
         curr_high = sumstats.iloc[0]
@@ -106,14 +107,14 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
             if curr_high in tagged: # TODO: it is necessary.. possible bug
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
-            snp_list = [snp for snp in snp_list if snp not in tagged]
-            if curr_high in snp_list:
-                snp_list.pop(snp_list.index(curr_high))
+            #snp_list = [snp for snp in snp_list if snp not in tagged]
+            # if curr_high in snp_list:
+            #     snp_list.pop(snp_list.index(curr_high))
         else:
             low = sumstats.snp.tolist()
             text(low)
-            snp_list = [snp for snp in snp_list if snp not in low]
-        sumstats = sumstats[sumstats.snp.isin(snp_list)]
+            #snp_list = [snp for snp in snp_list if snp not in low]
+        sumstats = sumstats[~sumstats.snp.isin(index + tag)]
     return index, tag
 
 
@@ -127,11 +128,23 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     return est, (index, tag, l, p)
 
 
+@jit
+def just_score(index_snp, sumstats,  pheno, geno):
+    clump = sumstats[sumstats.snp.isin(index_snp)]
+    idx = clump.i.values.astype(int)
+    prs = geno[:, idx].dot(clump.slope)
+    est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
+    return est
+
+
 def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
     now = time.time()
     sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
     print('Starting dirty PPT...')
     index, tag = [], []
+    x_train, x_test, y_train, y_test = train_test_split(geno, pheno,
+                                                        test_size=1 / split,
+                                                        random_state=seed)
     for r, locus in enumerate(loci):
         snps, D_r, D_t = locus
         snp_list = snps.tolist()
@@ -139,11 +152,9 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
             columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i'])
         # filter pvalue
-        pvals = [1]#, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
-        ldval = np.arange(0.1, 0.8, 0.1)  # [0.1, 0.2, 0.4, 0.8]
+        pvals = [1] # 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+        ldval = np.arange(0.1, 0.8, 0.1)
         pairs = product(pvals, ldval)
-        x_train, x_test, y_train, y_test = train_test_split(
-            geno, pheno, test_size=1 / split, random_state=seed)
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, y_train, x_train)
             for p, l in pairs]
@@ -151,22 +162,23 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
             print('    Locus', r)
             d = dict(list(dask.compute(*delayed_results, num_workers=threads,
                                        memory_limit=memory)))
-        best_key = max(d.keys())
-        i, t, ld, pv = d[best_key]
-        del_res = [
-            dask.delayed(loop_pairs)(snp_list, D_r, ld, pv, sumstats, pheno,
-                                     geno)]
-        est, (ind, ta, _ , _) = dask.compute(*del_res, num_workers=threads,
-                                             memory_limit=memory)[0]
-        index += ind
-        tag += ta
+            best_key = max(d.keys())
+            i, t, ld, pv = d[best_key]
+            # del_res = [
+            #    dask.delayed(loop_pairs)(snp_list, D_r, ld, pv, sumstats, y_test,
+            #                            x_test)]
+            # est, (ind, ta, _ , _) = dask.compute(*del_res, num_workers=threads,
+            #                                  memory_limit=memory)[0]
+            index += i
+            tag += t
+
     pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
                                                          ascending=True)
     pos = sumstats[sumstats.snp.isin(tag)].sort_values('pvalue', ascending=True)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
-    return ppt, pre, pos
+    return ppt, pre, pos, x_test, y_test
 
 
 def main(args):
@@ -208,11 +220,12 @@ def main(args):
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        ppt_df, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads,
-                                 args.split, seed, memory)
+        out = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads, args.split,
+                        seed, memory)
+        ppt_df, _, _, x_test, y_test = out
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
-        ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
+        ppt = prune_it(ppt, x_test, y_test, 'P + T', step=prunestep,
                        threads=args.threads)
         ppt.to_csv(pptfile, index=False, sep='\t')
     else:
