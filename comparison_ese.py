@@ -49,7 +49,7 @@ def sortbylocus(prefix, df, column='ese', title=None):
 
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
-                   tbim, prefix):
+                   tbim, prefix, memory):
     within_str = within_dict[within]
     prefix = '%s_%s' % (prefix, '_'.join(within_str.split()))
     print('Compute expected beta square per locus...')
@@ -60,7 +60,8 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                                     within=within) for i, locus in
             enumerate(loci)]
         with ProgressBar():
-            res = list(dask.compute(*delayed_results, num_workers=args.threads))
+            res = list(dask.compute(*delayed_results, num_workers=args.threads,
+                                    memory_limit=memory))
         res = pd.concat(res)  # , ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
@@ -87,13 +88,13 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     ippend = index.append
     tag = []
     text = tag.extend
-    # if 'beta_sq' not in sumstats.columns:
-    #     sumstats.loc[:, 'beta_sq'] = sumstats.slope**2
+    # sort just once
+    sumstats = sumstats.sort_values(['pvalue', 'beta_sq'], ascending=[True,
+                                                                      False])
     while snp_list != []:
         # get lowest pvalue snp in the locus
         #curr_high = sumstats.nsmallest(1, ['pvalue'])
-        curr_high = sumstats.sort_values(['pvalue', 'beta_sq'],
-                                         ascending=[True, False]).iloc[0]
+        curr_high = sumstats.iloc[0]
         if curr_high.pvalue < p_thresh:
             curr_high = curr_high.snp
             ippend(curr_high)
@@ -106,7 +107,8 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
             snp_list = [snp for snp in snp_list if snp not in tagged]
-            #snp_list.pop(snp_list.index(curr_high))
+            if curr_high in snp_list:
+                snp_list.pop(snp_list.index(curr_high))
         else:
             low = sumstats.snp.tolist()
             text(low)
@@ -125,7 +127,7 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     return est, (index, tag, l, p)
 
 
-def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed):
+def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
     now = time.time()
     sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
     print('Starting dirty PPT...')
@@ -147,13 +149,15 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed):
             for p, l in pairs]
         with ProgressBar():
             print('    Locus', r)
-            d = dict(list(dask.compute(*delayed_results, num_workers=threads)))
+            d = dict(list(dask.compute(*delayed_results, num_workers=threads,
+                                       memory_limit=memory)))
         best_key = max(d.keys())
         i, t, ld, pv = d[best_key]
         del_res = [
             dask.delayed(loop_pairs)(snp_list, D_r, ld, pv, sumstats, pheno,
                                      geno)]
-        est, (ind, ta, _ , _) = dask.compute(*del_res, num_workers=threads)[0]
+        est, (ind, ta, _ , _) = dask.compute(*del_res, num_workers=threads,
+                                             memory_limit=memory)[0]
         index += ind
         tag += ta
     pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
@@ -168,6 +172,7 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed):
 def main(args):
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
+    memory = 1E9 if args.maxmem is None else args.maxmem
     refl, tarl = args.labels
     # make simulations
     print('Simulating phenotype for reference population %s \n' % refl)
@@ -204,7 +209,7 @@ def main(args):
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
         ppt_df, _, _ = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads,
-                                 args.split, seed)
+                                 args.split, seed, memory)
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
@@ -222,8 +227,8 @@ def main(args):
                                                integral_only=True) for i, locus
                        in enumerate(loci)]
     with ProgressBar():
-        integral = list(dask.compute(*delayed_results, num_workers=args.threads)
-                        )
+        integral = list(dask.compute(*delayed_results, num_workers=args.threads,
+                                     memory_limit=memory))
     integral = pd.concat(integral, ignore_index=True)
     integral = integral.merge(sumstats.reindex(
         columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
@@ -239,7 +244,8 @@ def main(args):
         integral = pd.read_csv(intfile, sep='\t')
     # expecetd square effect
     eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
-                           args.threads, tbim, args.prefix) for x in [0, 1, 2]]
+                           args.threads, tbim, args.prefix, memory) for x in
+            [0, 1, 2]]
     # prune by pval
     resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
     if not os.path.isfile(resfile):
