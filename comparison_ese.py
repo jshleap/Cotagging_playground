@@ -102,12 +102,11 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
             vec = D_r.loc[chidx, :] # Is in the row since is square and rows are
             #  index while columns aren't
             tagged = vec[vec > ld_thr].columns.tolist()
-            #if curr_high in tagged: # TODO: it is necessary.. possible bug
-            tagged.pop(tagged.index(curr_high))
+            if curr_high in tagged: # TODO: it is necessary.. possible bug
+                tagged.pop(tagged.index(curr_high))
             text(tagged)
             snp_list = [snp for snp in snp_list if snp not in tagged]
-            if curr_high in snp_list:
-                snp_list.pop(snp_list.index(curr_high))
+            snp_list.pop(snp_list.index(curr_high))
         else:
             low = sumstats.snp.tolist()
             text(low)
