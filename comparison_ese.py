@@ -106,7 +106,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
             snp_list = [snp for snp in snp_list if snp not in tagged]
-            snp_list.pop(snp_list.index(curr_high))
+            #snp_list.pop(snp_list.index(curr_high))
         else:
             low = sumstats.snp.tolist()
             text(low)
