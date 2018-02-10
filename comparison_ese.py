@@ -220,12 +220,12 @@ def main(args):
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        out = dirty_ppt(loci, sumstats, tgeno, tpheno, args.threads, args.split,
+        out = dirty_ppt(loci, sumstats, rgeno, rpheno, args.threads, args.split,
                         seed, memory)
         ppt_df, _, _, x_test, y_test = out
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
-        ppt = prune_it(ppt, x_test, y_test, 'P + T', step=prunestep,
+        ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
                        threads=args.threads)
         ppt.to_csv(pptfile, index=False, sep='\t')
     else:
@@ -248,11 +248,19 @@ def main(args):
         on='snp')
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
-        integral = sortbylocus('%s_integral' % args.prefix, integral,
+        integral_df = sortbylocus('%s_integral' % args.prefix, integral,
                                column='ese', title='Integral; %s' % scs_title)
-        integral = prune_it(integral, tgeno, tpheno, 'Integral', step=prunestep,
+        integral = prune_it(integral_df, tgeno, tpheno, 'Integral', step=prunestep,
                             threads=args.threads)
         integral.to_csv(intfile, index=False, sep='\t')
+        # plot beta_sq vs integral
+        inte = integral_df.reindex(columns=['snp', 'ese', 'beta_sq']).rename(
+            columns={'ese': 'integral'})
+        f, ax = plt.subplots()
+        inte.plot.scatter(x='beta_sq', y='integral', ax=ax)
+        plt.tight_layout()
+        plt.savefig('%s_betasqvsintegral.pdf' % args.prefix)
+        plt.close()
     else:
         integral = pd.read_csv(intfile, sep='\t')
     # expecetd square effect
@@ -284,6 +292,13 @@ def main(args):
         beta = prune_it(beta, tgeno, tpheno, r'$\beta^2$', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
+        # plot beta_sq vs pval
+        f, ax = plt.subplots()
+        sumstats.plot.scatter(x='beta_sq', y='pvalue', ax=ax)
+        #ax.set_yscale('log')
+        plt.tight_layout()
+        plt.savefig('%s_betasqvspval.pdf' % args.prefix)
+        plt.close()
     else:
         beta = pd.read_csv(betafile, sep='\t')
     # include causals
