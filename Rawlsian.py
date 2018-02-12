@@ -11,15 +11,16 @@ def process_beta_sq(sumstats, geno, pheno, prunestep):
     return beta.iloc[: m]
 
 
-def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads):
+def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads,
+           memory):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
     opts.update(
         dict(prefix=prefix, pheno=rpheno.iloc[:i], geno=rgeno[r_idx, :],
              validate=None, threads=threads, bim=rbim))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-    ppt, selected, tail = dirty_ppt(loci, sumstats, tgeno, tpheno,
-                                    args.threads, 2, np.random.randint(10000))
+    ppt, selected, tail = dirty_ppt(loci, sumstats, X_train, y_train, tgeno, tpheno,
+                                    args.threads, memory)
     idx = selected.i.values
     prs = tgeno[:, idx].dot(selected.slope)
     est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
@@ -34,6 +35,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads):
 
 def main(args):
     seed = np.random.randint(1e4) if args.seed is None else args.seed
+    memory = 1E9 if args.maxmem is None else args.maxmem
     refl, tarl = args.labels
     # make simulations
     print('Simulating phenotype for reference population %s \n' % refl)
@@ -59,7 +61,7 @@ def main(args):
     for run in range(25):
         results = [
             single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run,
-                   args.threads) for i in
+                   args.threads, memory) for i in
             np.linspace(200, rgeno.shape[0], 25, dtype=int)]
         [os.remove(fn) for fn in glob('./*') if
          (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
@@ -102,6 +104,7 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--window', default=1000, type=int,
                         help='Size of the LD window. a.k.a locus')
     parser.add_argument('-T', '--threads', default=1, type=int)
+    parser.add_argument('-M', '--maxmem', default=None, type=int)
 
     args = parser.parse_args()
     main(args)
