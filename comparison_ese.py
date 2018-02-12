@@ -128,7 +128,26 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     return est, (index, tag, l, p)
 
 
-@jit
+#@jit
+def loop_over_locus(loci, sumstats, l, p, pheno, geno):
+    tagged, indices = [], []
+    for r, locus in enumerate(loci):
+        snps, D_r, D_t = locus
+        snp_list = snps.tolist()
+        try:
+            D_r = dd.from_dask_array(D_r, columns=snps) ** 2
+        except AttributeError:
+            D_r = pd.DataFrame(D_r, columns=snps)
+        sub = sumstats[sumstats.snp.isin(snps)].reindex(
+            columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i'])
+        index, tag = get_tagged(snp_list, D_r, l, p, sub)
+        tagged += tag
+        indices += index
+    r2 = just_score(indices, sumstats,pheno, geno)
+    return r2, (indices, tagged, l, p)
+
+
+#@jit
 def just_score(index_snp, sumstats,  pheno, geno):
     clump = sumstats[sumstats.snp.isin(index_snp)]
     idx = clump.i.values.astype(int)
@@ -137,7 +156,44 @@ def just_score(index_snp, sumstats,  pheno, geno):
     return est
 
 
-def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
+def dirty_ppt(loci, sumstats, rgeno, rpheno, tgeno, tpheno, threads, memory):
+    #split, seed):
+    now = time.time()
+    sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
+    print('Starting PPT...')
+    # x_train, x_test, y_train, y_test = train_test_split(rgeno, rpheno,
+    #                                                     test_size=1 / split,
+    #                                                     random_state=seed)
+    # filter pvalue
+    pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+    ldval = np.arange(0.1, 0.8, 0.1)
+    pairs = product(pvals, ldval)
+    delayed_results = [
+        dask.delayed(loop_over_locus)(loci, sumstats, l, p, rpheno, rgeno)
+        #y_train, x_train)
+        for p, l in pairs]
+    with ProgressBar():
+        d = dict(list(dask.compute(*delayed_results, num_workers=threads,
+                                   memory_limit=memory)))
+        best_key = max(d.keys())
+        i, t, ld, pv = d[best_key]
+        out = dask.compute(
+            dask.delayed(loop_over_locus)(loci, sumstats, ld, pv, tpheno,
+                                          tgeno), num_workers=threads,
+            memory_limit=memory)
+        r2, (indices, tagged, l, p) = out[0]
+
+    pre = sumstats[sumstats.snp.isin(indices)].sort_values('pvalue',
+                                                           ascending=True)
+    pos = sumstats[sumstats.snp.isin(tagged)].sort_values('pvalue',
+                                                          ascending=True)
+    ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
+    ppt['index'] = ppt.index.tolist()
+    print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
+    return ppt, pre, pos#, x_test, y_test
+
+
+def dirty_ppt_old(loci, sumstats, geno, pheno, threads, split, seed, memory):
     now = time.time()
     sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
     print('Starting dirty PPT...')
@@ -220,9 +276,9 @@ def main(args):
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        out = dirty_ppt(loci, sumstats, rgeno, rpheno, args.threads, args.split,
-                        seed, memory)
-        ppt_df, _, _, x_test, y_test = out
+        out = dirty_ppt(loci, sumstats, X_test, y_test, tgeno, tpheno,
+                        args.threads, memory)
+        ppt_df, _, _  = out
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
