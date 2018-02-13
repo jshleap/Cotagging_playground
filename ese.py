@@ -90,7 +90,7 @@ def integral_b(vs, mu, snps):
 
 
 # ----------------------------------------------------------------------
-@jit
+#@jit
 def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
               integral_only=False):
     """
@@ -100,7 +100,7 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
     m = snps.shape[0]
     h2_l = avh2 * m
-    den = np.clip((1 - h2_l),0.001, 1)
+    den = np.clip((1 - h2_l), 0.001, 1)
     mu = ((n / (2 * den)) + (m / (2 * h2)))
     assert np.all(mu >= 0)
     vjs = ((n * locus.slope.values) / den) #(2 * (1 - h2_l)))
@@ -111,11 +111,12 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
                             )
     assert max(I) > 0 # check if at least one is different than 0
     if within == 1:
-        expcovs = (D_r * D_r).dot(I)
+        p = (D_r * D_r)
     elif within == 2:
-        expcovs = (D_t * D_t).dot(I)
+        p = (D_t * D_t)
     else:
-        expcovs = (D_r * D_t).dot(I)
+        p = (D_r * D_t)
+    expcovs = np.array([(p[:,idx] * i).sum() for idx, i in enumerate(I)])#p.dot(I)
     return pd.DataFrame({'snp': snps, 'ese': abs(expcovs), 'locus': l_number})
 
 # ----------------------------------------------------------------------
