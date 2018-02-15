@@ -1,36 +1,37 @@
 from comparison_ese import *
+plt.style.use('ggplot')
 
-
-def process_beta_sq(sumstats, geno, pheno, prunestep):
-    sumstats['beta_sq'] = sumstats.slope ** 2
-    beta, _ = smartcotagsort('%s_slope' % args.prefix, sumstats,
-                             column='beta_sq', ascending=False)
-    pruned = prune_it(beta, geno, pheno, r'$\beta^2$', step=prunestep,
-                    threads=args.threads)
-    m = pruned.nlargest(1, 'R2').loc[:,'Number of SNPs'].values[0]
-    return beta.iloc[: m]
-
-
-def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads,
-           memory):
-    r_idx = np.arange(0, i)
+def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, diverse_geno,
+           diverse_pheno, run, threads, memory):
     prefix = '%d_gwas' % i
+    total_n = rgeno.shape[0] # ASSUMES THAT BOTH SOURCE POPS ARE THE SAME SIZE
+    frac_n = int(total_n * i)
+    if i == 0:
+        pheno = tpheno
+        geno = tgeno
+    elif i == 1:
+        pheno = rpheno
+        geno = rgeno
+    else:
+        ref_pheno = rpheno.iloc[: frac_n]
+        ref_geno = rgeno[:frac_n, :]
+        tar_pheno = tpheno.iloc[: (total_n - frac_n)]
+        tar_geno = tgeno[:(total_n - frac_n), :]
+        pheno = pd.concat([ref_pheno, tar_pheno]).reset_index(drop=True)
+        pheno['i'] = list(range(pheno.shape[0]))
+        geno = da.concatenate([ref_geno, tar_geno], axis=0)
     opts.update(
-        dict(prefix=prefix, pheno=rpheno.iloc[:i], geno=rgeno[r_idx, :],
-             validate=None, threads=threads, bim=rbim, seed=None))
+        dict(prefix=prefix, pheno=pheno, geno=geno, validate=None,
+             threads=threads, bim=rbim, seed=None))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-    ppt, selected, tail = dirty_ppt(loci, sumstats, X_train, y_train, tgeno, tpheno,
-                                    args.threads, memory)
-    idx = selected.i.values
-    prs = tgeno[:, idx].dot(selected.slope)
-    est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
-    # get selection by beta^2
-    betas = process_beta_sq(sumstats, tgeno, tpheno, 10)
-    b_idx = betas.i.values
-    b_prs = tgeno[:, b_idx].dot(betas.slope)
-    b_est = np.corrcoef(b_prs, tpheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': est, r'$R^2_{\beta^2}$': b_est, 'EUR_n': i,
-            'run': run}
+    # P+T scored in Target
+    ppt_tar, sel_tar, tail_tar = dirty_ppt(loci, sumstats, X_test, y_test,
+                                           diverse_geno, diverse_pheno,
+                                           args.threads, memory)
+    idx_tar = sel_tar.i.values
+    prs_tar = diverse_geno[:, idx_tar].dot(sel_tar.slope)
+    r2_tar = np.corrcoef(prs_tar, diverse_pheno.PHENO)[1, 0] ** 2
+    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'run': run}
 
 
 def main(args):
@@ -54,21 +55,37 @@ def main(args):
         tpheno, tgeno = rpheno, rgeno
     else:
         tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
-    # perform GWASes
-    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
-                  threads=args.threads, justd=True)
+
+    # Get the diverse sample to be test on
+    opts = dict(test_size=1 / args.split, random_state=seed)
+    r_out = train_test_split(rgeno, rpheno, **opts)
+    rgeno, rgeno_test, rpheno, rpheno_test = r_out
+    rpheno = rpheno.reset_index(drop=True)
+    rpheno_test = rpheno_test.reset_index(drop=True)
+    t_out = train_test_split(tgeno, tpheno, **opts)
+    tgeno, tgeno_test, tpheno, tpheno_test = t_out
+    tpheno = tpheno.reset_index(drop=True)
+    tpheno_test = tpheno_test.reset_index(drop=True)
+    diverse_geno = da.concatenate([rgeno_test, tgeno_test])
+    diverse_pheno = pd.concat([rpheno_test, tpheno_test]).reset_index().sample(
+        frac=1)
+    diverse_pheno['i'] = diverse_pheno.index.values
+    diverse_geno = diverse_geno[diverse_pheno.index.values, :]
+    # Get LD info
+    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
+                  threads=args.threads)
     result = pd.DataFrame()
     for run in range(25):
-        results = [
-            single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run,
-                   args.threads, memory) for i in
-            np.linspace(200, rgeno.shape[0], 25, dtype=int)]
+        results = [single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
+                          diverse_geno, diverse_pheno, run, args.threads,
+                          memory) for i in
+                   np.clip(np.arange(0, 1.15, 0.15), a_min=0, a_max=1)]
         [os.remove(fn) for fn in glob('./*') if
          (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
         result = result.append(pd.DataFrame(results))
         result.to_csv('Rawlsian.tsv', sep='\t', index=False)
     cols = [c for c in result.columns if c != 'run']
-    gp3 = result.loc[:, cols].groupby('EUR_n')
+    gp3 = result.loc[:, cols].groupby('EUR_frac')
     means = gp3.mean()
     errors = gp3.std()
     f, ax = plt.subplots()

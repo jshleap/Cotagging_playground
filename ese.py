@@ -2,12 +2,13 @@
 Expected beta
 """
 import matplotlib
-matplotlib.use('Agg')
 import gzip
 from prankcster import *
 from plinkGWAS import *
 from joblib import delayed, Parallel
+from tqdm import tqdm
 
+matplotlib.use('Agg')
 plt.style.use('ggplot')
 
 
@@ -72,6 +73,11 @@ def get_blocks(df, available_snps, label, sliding=False, cpus=1):
     return mats
 
 
+def log_aprox_exp(a):
+    k = a.max()
+    l = a - k
+    t = np.exp(l).sum()
+    return np.exp(k) * t
 # make the integral locus by locus and store them in list
 # ----------------------------------------------------------------------
 def integral_b(vs, mu, snps):
@@ -81,7 +87,7 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    clipped = np.clip((vs * vs) / (4 * mu), 0, 709.7)
+    clipped = np.clip((vs * vs) / (4 * mu), 0, 709.7) #TODO: get the log approx
     exp = np.exp(clipped, dtype=np.longfloat)
     lhs = ((2 * mu) + (vs * vs)) / (4 * (mu * mu))
     rhs = exp / exp.sum()
@@ -100,7 +106,7 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
     m = snps.shape[0]
     h2_l = avh2 * m
-    den = np.clip((1 - h2_l), 0.001, 1)
+    den = np.clip((1 - h2_l), 0.00001, 1)
     mu = ((n / (2 * den)) + (m / (2 * h2)))
     assert np.all(mu >= 0)
     vjs = ((n * locus.slope.values) / den) #(2 * (1 - h2_l)))
@@ -116,7 +122,8 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
         p = (D_t * D_t)
     else:
         p = (D_r * D_t)
-    expcovs = np.array([(p[:,idx] * i).sum() for idx, i in enumerate(I)])#p.dot(I)
+    #expcovs = np.array([(p[:, idx] * i).sum() for idx, i in enumerate(I)])#
+    expcovs = p.dot(I)
     return pd.DataFrame({'snp': snps, 'ese': abs(expcovs), 'locus': l_number})
 
 # ----------------------------------------------------------------------

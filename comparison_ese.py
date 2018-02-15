@@ -143,7 +143,7 @@ def loop_over_locus(loci, sumstats, l, p, pheno, geno):
         index, tag = get_tagged(snp_list, D_r, l, p, sub)
         tagged += tag
         indices += index
-    r2 = just_score(indices, sumstats,pheno, geno)
+    r2 = just_score(indices, sumstats, pheno, geno)
     return r2, (indices, tagged, l, p)
 
 
@@ -248,7 +248,7 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.maxmem, 'freqthreshold': args.freq_thresh,
+            'max_memory': memory, 'freqthreshold': args.freq_thresh,
             'remove_causals':args.avoid_causals}
     rpheno, h2, (rgeno, rbim, rtruebeta, rcausals) = qtraits_simulation(**opts)
     # make simulation for target
@@ -278,7 +278,7 @@ def main(args):
     if not os.path.isfile(pptfile):
         out = dirty_ppt(loci, sumstats, X_test, y_test, tgeno, tpheno,
                         args.threads, memory)
-        ppt_df, _, _  = out
+        ppt_df, _, _ = out
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
@@ -308,7 +308,7 @@ def main(args):
                                column='ese', title='Integral; %s' % scs_title)
         integral = prune_it(integral_df, tgeno, tpheno, 'Integral', step=prunestep,
                             threads=args.threads)
-        integral.to_csv(intfile, index=False, sep='\t')
+        integral_df.to_csv(intfile, index=False, sep='\t')
         # plot beta_sq vs integral
         inte = integral_df.reindex(columns=['snp', 'ese', 'beta_sq']).rename(
             columns={'ese': 'integral'})
