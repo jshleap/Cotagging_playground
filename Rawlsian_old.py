@@ -1,19 +1,36 @@
 from comparison_ese import *
 
 
-def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, memory):
+def process_beta_sq(sumstats, geno, pheno, prunestep):
+    sumstats['beta_sq'] = sumstats.slope ** 2
+    beta, _ = smartcotagsort('%s_slope' % args.prefix, sumstats,
+                             column='beta_sq', ascending=False)
+    pruned = prune_it(beta, geno, pheno, r'$\beta^2$', step=prunestep,
+                    threads=args.threads)
+    m = pruned.nlargest(1, 'R2').loc[:,'Number of SNPs'].values[0]
+    return beta.iloc[: m]
+
+
+def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run, threads,
+           memory):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
     opts.update(
         dict(prefix=prefix, pheno=rpheno.iloc[:i], geno=rgeno[r_idx, :],
              validate=None, threads=threads, bim=rbim, seed=None))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-    ppt, selected, tail = dirty_ppt(loci, sumstats, X_train, y_train, tgeno,
-                                    tpheno, threads, memory)
+    ppt, selected, tail = dirty_ppt(loci, sumstats, X_train, y_train, tgeno, tpheno,
+                                    args.threads, memory)
     idx = selected.i.values
     prs = tgeno[:, idx].dot(selected.slope)
     est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': est, 'EUR_n': i}
+    # get selection by beta^2
+    betas = process_beta_sq(sumstats, tgeno, tpheno, 10)
+    b_idx = betas.i.values
+    b_prs = tgeno[:, b_idx].dot(betas.slope)
+    b_est = np.corrcoef(b_prs, tpheno.PHENO)[1, 0] ** 2
+    return {r'$R^2_{ppt}$': est, r'$R^2_{\beta^2}$': b_est, 'EUR_n': i,
+            'run': run}
 
 
 def main(args):
@@ -40,16 +57,22 @@ def main(args):
     # perform GWASes
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
-    array = [10, 20, 40, 80, 160, 320, 640, 1280, 3000, 5000, 10000, 20000,
-             45000]
-    res = []
-    for i in array:
-        res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
-                          args.threads, memory))
-    res = pd.DataFrame(res)
+    result = pd.DataFrame()
+    for run in range(25):
+        results = [
+            single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, run,
+                   args.threads, memory) for i in
+            np.linspace(200, rgeno.shape[0], 25, dtype=int)]
+        [os.remove(fn) for fn in glob('./*') if
+         (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
+        result = result.append(pd.DataFrame(results))
+        result.to_csv('Rawlsian.tsv', sep='\t', index=False)
+    cols = [c for c in result.columns if c != 'run']
+    gp3 = result.loc[:, cols].groupby('EUR_n')
+    means = gp3.mean()
+    errors = gp3.std()
     f, ax = plt.subplots()
-    res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='o', ax=ax)
-    plt.ylabel(r'AFR $R^2_{ppt}$')
+    means.plot(yerr=errors, ax=ax)
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
     plt.close()
