@@ -87,16 +87,16 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    clipped = np.clip((vs * vs) / (4 * mu), 0, 709.7) #TODO: get the log approx
-    exp = np.exp(clipped, dtype=np.longfloat)
+    k = vs.max()
+    exp = np.exp(vs - k)
     lhs = ((2 * mu) + (vs * vs)) / (4 * (mu * mu))
     rhs = exp / exp.sum()
     vec = lhs * rhs
-    return pd.Series(vec, index=snps, dtype=np.longfloat)
+    return pd.Series(vec, index=snps)
 
 
 # ----------------------------------------------------------------------
-#@jit
+@jit
 def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
               integral_only=False):
     """

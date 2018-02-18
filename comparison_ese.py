@@ -281,6 +281,7 @@ def main(args):
         ppt_df, _, _ = out
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
+        assert ppt_df.shape[0] == sumstats.shape[0]
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
                        threads=args.threads)
         ppt.to_csv(pptfile, index=False, sep='\t')
@@ -306,9 +307,10 @@ def main(args):
     if not os.path.isfile(intfile):
         integral_df = sortbylocus('%s_integral' % args.prefix, integral,
                                column='ese', title='Integral; %s' % scs_title)
+        assert integral_df.shape[0] == sumstats.shape[0]
         integral = prune_it(integral_df, tgeno, tpheno, 'Integral', step=prunestep,
                             threads=args.threads)
-        integral_df.to_csv(intfile, index=False, sep='\t')
+        integral_df.to_csv('df_' + intfile, index=False, sep='\t')
         # plot beta_sq vs integral
         inte = integral_df.reindex(columns=['snp', 'ese', 'beta_sq']).rename(
             columns={'ese': 'integral'})
@@ -318,6 +320,7 @@ def main(args):
         plt.savefig('%s_betasqvsintegral.pdf' % args.prefix)
         plt.close()
     else:
+        integral_df = pd.read_csv('df_' + intfile, sep='\t')
         integral = pd.read_csv(intfile, sep='\t')
     # expecetd square effect
     eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
@@ -333,6 +336,7 @@ def main(args):
         pval['index'] = pval.index
         pval, _ = smartcotagsort('%s_pval' % args.prefix, pval, column='index',
                                  ascending=True)
+        assert pval.shape[0] == sumstats.shape[0]
         pval = prune_it(pval, tgeno, tpheno, 'pval', step=prunestep,
                         threads=args.threads)
         pval.to_csv(resfile, index=False, sep='\t')
@@ -341,11 +345,15 @@ def main(args):
     # prune by estimated beta
     betafile = '%s_%s_res.tsv' % (args.prefix, 'slope')
     if not os.path.isfile(betafile):
-        beta = sumstats.copy()
-        beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
-                                 column='beta_sq', ascending=False,
-                                 title=scs_title)
-        beta = prune_it(beta, tgeno, tpheno, r'$\beta^2$', step=prunestep,
+        m = integral_df.reindex(columns=['snp', 'locus'])
+        beta = sumstats.merge(m, on='snp')
+        # beta, _ = smartcotagsort('%s_slope' % args.prefix, beta,
+        #                          column='beta_sq', ascending=False,
+        #                          title=scs_title)
+        beta_df = sortbylocus('%s_betasq' % args.prefix, beta, column='beta_sq',
+                              title=r'$\beta^2$; %s' % scs_title)
+        assert beta_df.shape[0] == sumstats.shape[0]
+        beta = prune_it(beta_df, tgeno, tpheno, r'$\beta^2$', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
         # plot beta_sq vs pval
