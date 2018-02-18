@@ -263,6 +263,7 @@ def regression_iter(x, y, threads):
 # ----------------------------------------------------------------------
 @jit
 def st_mod(x, y):
+
     cols = ['slope', 'intercept', 'r_value', 'p_value', 'std_err', 'b_pval',
            'b_std_err']
     LinregressResult = namedtuple('LinregressResult', cols)
