@@ -28,6 +28,7 @@ from qtraitsimulation import qtraits_simulation
 from multiprocessing import Pool, cpu_count
 from collections import Counter
 plt.style.use('ggplot')
+from sklearn.decomposition import PCA
 from numba import jit, prange
 
 lr = jit(stats.linregress)
@@ -261,24 +262,39 @@ def regression_iter(x, y, threads):
             num_workers=threads)
 
 # ----------------------------------------------------------------------
-@jit
-def st_mod(x, y):
-
+@jit(parallel=True)
+def st_mod(x, y, covs=None):
+    df = pd.DataFrame({'geno':x, 'pheno':y})
     cols = ['slope', 'intercept', 'r_value', 'p_value', 'std_err', 'b_pval',
            'b_std_err']
     LinregressResult = namedtuple('LinregressResult', cols)
     if np.allclose(x.var(), 0.0):
-        slope = intercept = p_value = b_pval = r_value = std_err = b_std_err = np.nan
+        slope = intercept = p_value = b_pval = r_value = std_err = np.nan
+        b_std_err = np.nan
     else:
-        X = sm.add_constant(x)
-        model = sm.OLS(y, X)
+        if covs is not None:
+            c = []
+            for col in range(covs.shape[1]):
+                df['Cov%d' % col]
+                c.append('Cov%d' % col)
+        formula = 'pheno ~ geno + %s' % '+ '.join(c)
+        # X = sm.add_constant(x)
+        # model = sm.OLS(y, X)
+        model = sm.OLS(formula=formula, data=df)
         results = model.fit()
-        intercept, slope = results.params
-        b_pval, p_value = results.pvalues
+        intercept, slope = results.params[:2]
+        b_pval, p_value = results.pvalues[:2]
         r_value = results.rsquared
-        b_std_err, std_err,  = results.bse
+        b_std_err, std_err,  = results.bse[:2]
     return LinregressResult(slope, intercept, r_value, p_value, std_err, b_pval,
                             b_std_err)
+
+# ----------------------------------------------------------------------
+@jit(parallel=True)
+def do_pca(G, n_comp):
+    pca = PCA(n_components=n_comp)
+    pca = pca.fit_transform(G)
+    return pca
 
 
 # ----------------------------------------------------------------------
