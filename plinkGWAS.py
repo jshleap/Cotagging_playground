@@ -291,6 +291,7 @@ def st_mod(x, y, covs=None):
     return LinregressResult(slope, intercept, r_value, p_value, std_err, b_pval,
                             b_std_err)
 
+
 # ----------------------------------------------------------------------
 @jit(parallel=True)
 def do_pca(G, n_comp):
