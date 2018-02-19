@@ -277,7 +277,9 @@ def st_mod(x, y, covs=None):
             for col in range(covs.shape[1]):
                 df['Cov%d' % col]
                 c.append('Cov%d' % col)
-        formula = 'pheno ~ geno + %s' % '+ '.join(c)
+            formula = 'pheno ~ geno + %s' % '+ '.join(c)
+        else:
+            formula = 'pheno ~ geno'
         # X = sm.add_constant(x)
         # model = sm.OLS(y, X)
         model = sm.OLS(formula=formula, data=df)
@@ -346,7 +348,7 @@ def flip(G):
 
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
-                    causal_pos=None, plot=False, threads=cpu_count(),
+                    causal_pos=None, plot=False, threads=cpu_count(), pca=None,
                     stmd=False, **kwargs):
     """
     Compute the least square regression for a genotype in a phenotype. This
@@ -365,12 +367,6 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
     if os.path.isfile(pfn):
         res, x_train, x_test, y_train, y_test = load_previous_run(prefix,
                                                                   threads)
-        # f = h5py.File(filename, 'r')
-        # x_train = da.from_array(f.get('x_train'))
-        # x_test = da.from_array(f.get('x_test'))
-        # y_train = da.from_array(f.get('y_train'))
-        # y_test = da.from_array(f.get('y_test'))
-        # res = pd.read_csv('%s.gwas' % prefix, sep='\t')
     else:
         if 'bfile' in kwargs:
             bfile = kwargs['bfile']
@@ -416,12 +412,16 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
                                ).astype(int))
         if isinstance(x_train, dask.array.core.Array):
             x_train = x_train.rechunk(chunks)
-        #y_train = y_train.rechunk(chunks[0])
         print('using dask delayed')
         func = st_mod if stmd else lr
-
-        delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO) for
-                           i in range(x_train.shape[1])]
+        if pca is not None:
+            covs = do_pca(x_train, pca)
+            delayed_results = [
+                dask.delayed(func)(x_train[:, i], y_train.PHENO, covs=covs) for
+                i in range(x_train.shape[1])]
+        else:
+            delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO)
+                               for i in range(x_train.shape[1])]
         with ProgressBar():
             r = list(dask.compute(*delayed_results, num_workers=threads))
         res = pd.DataFrame.from_records(r, columns=r[0]._fields)
@@ -478,10 +478,11 @@ if __name__ == '__main__':
     parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('--use_statsmodels', action='store_true')
     parser.add_argument('--flip', action='store_true')
+    parser.add_argument('--pca', default=None, type=int)
     args = parser.parse_args()
     plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
                     plot=args.plot, threads=args.threads, seed=args.seed,
-                    stmd=args.use_statsmodels, flip=args.flip,
+                    stmd=args.use_statsmodels, flip=args.flip, pca=args.pca,
                     max_memory=args.maxmem)
     # plink_gwas(args.plinkexe, args.bfile, args.prefix, args.pheno,
     #            args.allele_file,  covs=args.covs, nosex=args.nosex,
