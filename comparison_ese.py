@@ -18,12 +18,13 @@ def sortbylocus(prefix, df, column='ese', title=None):
         # df.sort_values(by=column,  ascending=False, inplace=True)
         grouped = df.groupby('locus', as_index=False)
         grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
-        sorteddf = grouped.sort_values(by=column, ascending=False)
+        sorteddf = grouped.sort_values(by=[column, 'pvalue'], ascending=[False,
+                                                                         True])
         tail = df[~df.snp.isin(sorteddf.snp)]
         # grouped = tail.groupby('locus', as_index=False)
         if not tail.empty:
             sorteddf = sorteddf.append(
-                tail.sort_values(by=column, ascending=False))
+                tail.sort_values(by=[column, 'pvalue'], ascending=[False,True]))
         sorteddf = sorteddf.reset_index(drop=True)
         sorteddf['index'] = sorteddf.index.tolist()
         with open(picklefile, 'wb') as F:
