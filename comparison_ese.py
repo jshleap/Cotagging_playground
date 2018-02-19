@@ -71,15 +71,14 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
         if 'slope' not in result.columns:
             result = result.merge(sumstats.reindex(columns=['snp', 'slope']),
                                   on='snp')
-        result.to_csv(resfile, index=False, sep='\t')
+        prod = sortbylocus(prefix, result, column=within_str,
+                           title=r'Realized $h^2$: %f' % h2)
+        prod.to_csv('df' + resfile, index=False, sep='\t')
+        prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
+                        threads=threads)
+        prod.to_csv(resfile, index=False, sep='\t')
     else:
-        result = pd.read_csv(resfile, sep='\t')
-    # prod, _ = smartcotagsort(prefix, result, column=within_str, ascending=False)
-    prod = sortbylocus(prefix, result, column=within_str,
-                       title=r'Realized $h^2$: %f' % h2)
-    prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
-                    threads=threads)
-    # prod['type'] = within
+        prod = pd.read_csv(resfile, sep='\t')
     return prod
 
 
@@ -237,24 +236,28 @@ def main(args):
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
     # compute ese only integral
-    delayed_results = [dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
-                                               integral_only=True) for i, locus
-                       in enumerate(loci)]
-    with ProgressBar():
-        integral = list(dask.compute(*delayed_results, num_workers=args.threads,
-                                     memory_limit=memory))
-    integral = pd.concat(integral, ignore_index=True)
-    integral = integral.merge(sumstats.reindex(
-        columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
-        on='snp')
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
+        delayed_results = [
+            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
+                                    integral_only=True) for i, locus in
+            enumerate(loci)]
+        with ProgressBar():
+            integral = list(
+                dask.compute(*delayed_results, num_workers=args.threads,
+                             memory_limit=memory))
+        integral = pd.concat(integral, ignore_index=True)
+        integral = integral.merge(sumstats.reindex(
+            columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
+            on='snp')
         integral_df = sortbylocus('%s_integral' % args.prefix, integral,
-                               column='ese', title='Integral; %s' % scs_title)
+                                  column='ese', title='Integral; %s' % scs_title
+                                  )
         assert integral_df.shape[0] == sumstats.shape[0]
-        integral = prune_it(integral_df, tgeno, tpheno, 'Integral', step=prunestep,
-                            threads=args.threads)
+        integral = prune_it(integral_df, tgeno, tpheno, 'Integral',
+                            step=prunestep, threads=args.threads)
         integral_df.to_csv('df_' + intfile, index=False, sep='\t')
+        integral.to_csv(intfile, index=False, sep='\t')
         # plot beta_sq vs integral
         inte = integral_df.reindex(columns=['snp', 'ese', 'beta_sq']).rename(
             columns={'ese': 'integral'})
@@ -296,7 +299,9 @@ def main(args):
         #                          title=scs_title)
         beta_df = sortbylocus('%s_betasq' % args.prefix, beta, column='beta_sq',
                               title=r'$\beta^2$; %s' % scs_title)
+        beta_df.to_csv('df_' + betafile, index=False, sep='\t')
         assert beta_df.shape[0] == sumstats.shape[0]
+        assert beta_df.iloc[0].snp == integral_df.iloc[0].snp
         beta = prune_it(beta_df, tgeno, tpheno, r'$\beta^2$', step=prunestep,
                         threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')

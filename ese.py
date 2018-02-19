@@ -106,7 +106,7 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
     m = snps.shape[0]
     h2_l = avh2 * m
-    den = np.clip((1 - h2_l), 0.00001, 1)
+    den = np.clip((1 - h2_l), 1E-10, 1)
     mu = ((n / (2 * den)) + (m / (2 * h2)))
     assert np.all(mu >= 0)
     vjs = ((n * locus.slope.values) / den) #(2 * (1 - h2_l)))
