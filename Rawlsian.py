@@ -1,15 +1,17 @@
 from comparison_ese import *
 
 
-def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, memory):
+def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, split,
+           seed, memory):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
     opts.update(
         dict(prefix=prefix, pheno=rpheno.iloc[:i], geno=rgeno[r_idx, :],
              validate=None, threads=threads, bim=rbim, seed=None))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-    ppt, selected, tail = dirty_ppt(loci, sumstats, X_train, y_train, tgeno,
-                                    tpheno, threads, memory)
+    out = dirty_ppt(loci, sumstats, X_train, y_train, threads, split, seed,
+                    memory)
+    ppt, selected, tail, _, _ = out
     idx = selected.i.values
     prs = tgeno[:, idx].dot(selected.slope)
     est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
@@ -37,6 +39,7 @@ def main(args):
         tpheno, tgeno = rpheno, rgeno
     else:
         tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
+    max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
     # perform GWASes
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True)
@@ -45,11 +48,12 @@ def main(args):
     res = []
     for i in array:
         res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
-                          args.threads, memory))
+                          args.threads, args.split, seed, memory))
     res = pd.DataFrame(res)
     f, ax = plt.subplots()
     res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='o', ax=ax)
     plt.ylabel(r'AFR $R^2_{ppt}$')
+    ax.axhline(max_r2, ls='-.', color='0.5')
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
     plt.close()
