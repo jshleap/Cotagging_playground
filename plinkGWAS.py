@@ -20,6 +20,7 @@ from collections import namedtuple
 from scipy import stats
 import h5py
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from utilities4cotagging import *
@@ -275,19 +276,22 @@ def st_mod(x, y, covs=None):
         if covs is not None:
             c = []
             for col in range(covs.shape[1]):
-                df['Cov%d' % col]
+                df['Cov%d' % col] = covs[:, col]
                 c.append('Cov%d' % col)
-            formula = 'pheno ~ geno + %s' % '+ '.join(c)
+            formula = 'pheno ~ geno + %s' % ' + '.join(c)
         else:
             formula = 'pheno ~ geno'
         # X = sm.add_constant(x)
         # model = sm.OLS(y, X)
-        model = sm.OLS(formula=formula, data=df)
+        model = smf.ols(formula=formula, data=df)
         results = model.fit()
-        intercept, slope = results.params[:2]
-        b_pval, p_value = results.pvalues[:2]
+        intercept= results.params.Intercept
+        slope = results.params.geno
+        b_pval = results.pvalues.Intercept
+        p_value = results.pvalues.geno
         r_value = results.rsquared
-        b_std_err, std_err,  = results.bse[:2]
+        b_std_err = results.bse.Intercept
+        std_err = results.bse.geno
     return LinregressResult(slope, intercept, r_value, p_value, std_err, b_pval,
                             b_std_err)
 
@@ -416,6 +420,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
         print('using dask delayed')
         func = st_mod if stmd else lr
         if pca is not None:
+            func = st_mod
             covs = do_pca(x_train, pca)
             delayed_results = [
                 dask.delayed(func)(x_train[:, i], y_train.PHENO, covs=covs) for
