@@ -426,6 +426,7 @@ if __name__ == '__main__':
                         help='use reference for computations')
     parser.add_argument('-A', '--avoid_causals', default=False,
                         action='store_true', help='Remove causals from set')
+    parser.add_argument('--pca', default=None, type=int)
 
     args = parser.parse_args()
     main(args)
