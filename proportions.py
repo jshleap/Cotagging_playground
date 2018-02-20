@@ -1,8 +1,9 @@
 from comparison_ese import *
 plt.style.use('ggplot')
 
-def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, diverse_geno,
-           diverse_pheno, run, threads, memory):
+@jit(parallel=True)
+def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
+           test_pheno, threads, memory):
     prefix = '%d_gwas' % i
     total_n = rgeno.shape[0] # ASSUMES THAT BOTH SOURCE POPS ARE THE SAME SIZE
     frac_n = int(total_n * i)
@@ -18,20 +19,22 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, diverse_geno,
         tar_pheno = tpheno.iloc[: (total_n - frac_n)]
         tar_geno = tgeno[:(total_n - frac_n), :]
         pheno = pd.concat([ref_pheno, tar_pheno]).reset_index(drop=True)
-        pheno['i'] = list(range(pheno.shape[0]))
+        pheno['i'] = pheno.index.values
         geno = da.concatenate([ref_geno, tar_geno], axis=0)
+        pheno = pheno.sample(frac=1)
+        geno = geno[pheno.i.values, :]
+        pheno['i'] = list(range(pheno.shape[0]))
     opts.update(
         dict(prefix=prefix, pheno=pheno, geno=geno, validate=None,
-             threads=threads, bim=rbim, seed=None))
+             threads=threads, bim=rbim, seed=None, pca=20))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     # P+T scored in Target
     ppt_tar, sel_tar, tail_tar = dirty_ppt(loci, sumstats, X_test, y_test,
-                                           diverse_geno, diverse_pheno,
                                            args.threads, memory)
     idx_tar = sel_tar.i.values
-    prs_tar = diverse_geno[:, idx_tar].dot(sel_tar.slope)
-    r2_tar = np.corrcoef(prs_tar, diverse_pheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'run': run}
+    prs_tar = test_geno[:, idx_tar].dot(sel_tar.slope)
+    r2_tar = np.corrcoef(prs_tar, test_pheno.PHENO)[1, 0] ** 2
+    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac':1 - i}
 
 
 def main(args):
@@ -56,40 +59,35 @@ def main(args):
     else:
         tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
 
-    # Get the diverse sample to be test on
+    # # Get the diverse sample to be test on
     opts = dict(test_size=1 / args.split, random_state=seed)
     r_out = train_test_split(rgeno, rpheno, **opts)
     rgeno, rgeno_test, rpheno, rpheno_test = r_out
     rpheno = rpheno.reset_index(drop=True)
-    rpheno_test = rpheno_test.reset_index(drop=True)
+    #rpheno_test = rpheno_test.reset_index(drop=True)
     t_out = train_test_split(tgeno, tpheno, **opts)
     tgeno, tgeno_test, tpheno, tpheno_test = t_out
-    tpheno = tpheno.reset_index(drop=True)
-    tpheno_test = tpheno_test.reset_index(drop=True)
-    diverse_geno = da.concatenate([rgeno_test, tgeno_test])
-    diverse_pheno = pd.concat([rpheno_test, tpheno_test]).reset_index().sample(
-        frac=1)
-    diverse_pheno['i'] = diverse_pheno.index.values
-    diverse_geno = diverse_geno[diverse_pheno.index.values, :]
+    # tpheno = tpheno.reset_index(drop=True)
+    # tpheno_test = tpheno_test.reset_index(drop=True)
+    # diverse_geno = da.concatenate([rgeno_test, tgeno_test])
+    # diverse_pheno = pd.concat([rpheno_test, tpheno_test]).reset_index().sample(
+    #     frac=1)
+    # diverse_geno = diverse_geno[diverse_pheno.i.values, :]
+    # diverse_pheno['i'] = diverse_pheno.index.values
     # Get LD info
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
                   threads=args.threads)
-    result = pd.DataFrame()
-    for run in range(25):
-        results = [single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
-                          diverse_geno, diverse_pheno, run, args.threads,
-                          memory) for i in
-                   np.clip(np.arange(0, 1.15, 0.15), a_min=0, a_max=1)]
-        [os.remove(fn) for fn in glob('./*') if
-         (os.path.isfile(fn) and fn != 'Rawlsian.tsv')]
-        result = result.append(pd.DataFrame(results))
-        result.to_csv('Rawlsian.tsv', sep='\t', index=False)
-    cols = [c for c in result.columns if c != 'run']
-    gp3 = result.loc[:, cols].groupby('EUR_frac')
-    means = gp3.mean()
-    errors = gp3.std()
+
+    results = pd.DataFrame([
+        single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, tgeno_test,
+               tpheno_test, args.threads, memory) for i in
+        np.clip(np.arange(0, 1.15, 0.15), a_min=0, a_max=1)])
+    results.to_csv('proportions.tsv', sep='\t', index=False)
+    # gp3 = results.loc[:, cols].groupby('EUR_frac')
+    # means = gp3.mean()
+    # errors = gp3.std()
     f, ax = plt.subplots()
-    means.plot(yerr=errors, ax=ax)
+    results.plot(x='EUR_frac', y=r'$R^2_{ppt}$', ax=ax)
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
     plt.close()
