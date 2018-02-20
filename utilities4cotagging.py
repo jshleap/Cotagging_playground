@@ -704,7 +704,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
 
 
 # ----------------------------------------------------------------------
-#@jit
+@jit(parallel=True)
 def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False):
     ridx = df.i_ref.values
     tidx = df.i_tar.values
