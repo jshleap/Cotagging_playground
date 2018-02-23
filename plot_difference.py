@@ -12,6 +12,14 @@ if len(sys.argv) > 1:
 else:
     one = False
 fs = glob('run*/*_finaldf.tsv')
+integrals = glob('run*/df_*_integral_res.tsv')
+betas = glob('run*/df_*_slope_res.tsv')
+assert len(fs) == len(betas) == len(integrals)
+for j in range(len(betas)):
+    if pd.read_csv(betas[j], sep='\t').iloc[0].snp != \
+            pd.read_csv(integrals[j], sep='\t').iloc[0].snp:
+        print('Mismatch in', betas[j], 'and', integrals[j])
+
 print('Processing %d files' % len(fs))
 if one:
     dfs = [pd.read_table(fn, sep='\t') for fn in fs]
