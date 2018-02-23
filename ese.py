@@ -87,16 +87,23 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    k = vs.max()
-    exp = np.exp(vs - k)
+    # k = vs.max()
+    # exp = np.exp(vs - k)
+    # lhs = ((2 * mu) + (vs * vs)) / (4 * (mu * mu))
+    # rhs = exp / exp.sum()
+    # vec = lhs * rhs
+    # return pd.Series(vec, index=snps)
+    exp = (vs ** 2)/ (4 * mu)
+    k = exp.max()
+    e = np.exp(exp - k)
     lhs = ((2 * mu) + (vs * vs)) / (4 * (mu * mu))
-    rhs = exp / exp.sum()
+    rhs = e / e.sum()
     vec = lhs * rhs
     return pd.Series(vec, index=snps)
 
 
 # ----------------------------------------------------------------------
-@jit
+@jit(parallel=True)
 def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
               integral_only=False):
     """
