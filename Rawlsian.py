@@ -2,7 +2,7 @@ from comparison_ese import *
 
 
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, split,
-           seed, memory):
+           seed, memory, pvals, lds):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
     opts.update(
@@ -10,7 +10,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, split,
              validate=None, threads=threads, bim=rbim, seed=None))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     out = dirty_ppt(loci, sumstats, X_train, y_train, threads, split, seed,
-                    memory)
+                    memory, pvals=pvals, lds=lds)
     ppt, selected, tail, _, _ = out
     idx = selected.i.values
     prs = tgeno[:, idx].dot(selected.slope)
@@ -86,6 +86,8 @@ if __name__ == '__main__':
                         help='Size of the LD window. a.k.a locus')
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=None, type=int)
+    parser.add_argument('--pvals', default=None, nargs='+', type=float)
+    parser.add_argument('--lds', default=None, nargs='+', type=float)
 
     args = parser.parse_args()
     main(args)

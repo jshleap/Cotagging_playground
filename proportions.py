@@ -1,9 +1,10 @@
 from comparison_ese import *
 plt.style.use('ggplot')
 
-@jit(parallel=True)
+
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
            test_pheno, threads, memory):
+    seed = np.random.randint(54321)
     prefix = '%d_gwas' % i
     total_n = rgeno.shape[0] # ASSUMES THAT BOTH SOURCE POPS ARE THE SAME SIZE
     frac_n = int(total_n * i)
@@ -29,8 +30,9 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
              threads=threads, bim=rbim, seed=None, pca=20))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     # P+T scored in Target
-    ppt_tar, sel_tar, tail_tar = dirty_ppt(loci, sumstats, X_test, y_test,
-                                           args.threads, memory)
+    out = dirty_ppt(loci, sumstats, X_test, y_test, args.threads, 1, seed,
+                    memory)
+    ppt_tar, sel_tar, tail_tar, _, _ = out
     idx_tar = sel_tar.i.values
     prs_tar = test_geno[:, idx_tar].dot(sel_tar.slope)
     r2_tar = np.corrcoef(prs_tar, test_pheno.PHENO)[1, 0] ** 2
@@ -67,6 +69,7 @@ def main(args):
     #rpheno_test = rpheno_test.reset_index(drop=True)
     t_out = train_test_split(tgeno, tpheno, **opts)
     tgeno, tgeno_test, tpheno, tpheno_test = t_out
+    max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
     # tpheno = tpheno.reset_index(drop=True)
     # tpheno_test = tpheno_test.reset_index(drop=True)
     # diverse_geno = da.concatenate([rgeno_test, tgeno_test])
@@ -77,17 +80,18 @@ def main(args):
     # Get LD info
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
                   threads=args.threads)
-
     results = pd.DataFrame([
         single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, tgeno_test,
                tpheno_test, args.threads, memory) for i in
-        np.clip(np.arange(0, 1.15, 0.15), a_min=0, a_max=1)])
+        np.clip(np.arange(0, 1.1, 0.1), a_min=0, a_max=1)])
     results.to_csv('proportions.tsv', sep='\t', index=False)
     # gp3 = results.loc[:, cols].groupby('EUR_frac')
     # means = gp3.mean()
     # errors = gp3.std()
     f, ax = plt.subplots()
+    ax.axhline(max_r2, ls='-.', color='0.5')
     results.plot(x='EUR_frac', y=r'$R^2_{ppt}$', ax=ax)
+    plt.ylabel(r'AFR $R^2_{ppt}$')
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
     plt.close()

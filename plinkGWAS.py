@@ -266,7 +266,7 @@ def regression_iter(x, y, threads):
 @jit(parallel=True)
 def st_mod(x, y, covs=None):
     df = pd.DataFrame({'geno':x, 'pheno':y})
-    cols = ['slope', 'intercept', 'r_value', 'p_value', 'std_err', 'b_pval',
+    cols = ['slope', 'intercept', 'rvalue', 'pvalue', 'stderr', 'b_pval',
            'b_std_err']
     LinregressResult = namedtuple('LinregressResult', cols)
     if np.allclose(x.var(), 0.0):

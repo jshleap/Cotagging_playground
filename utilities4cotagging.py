@@ -705,13 +705,32 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
 
 # ----------------------------------------------------------------------
 @jit(parallel=True)
-def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False):
+def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
+                  extend=False):
     ridx = df.i_ref.values
     tidx = df.i_tar.values
     rg = rgeno[:, ridx]
     tg = tgeno[:, tidx]
-    D_r = da.dot(rg.T, rg) / rg.shape[0]
-    D_t = da.dot(tg.T, tg) / tg.shape[0]
+    if extend:
+        # extend the Genotpe at both end to avoid edge effects
+        ridx_a, ridx_b = np.array_split(ridx, 2)
+        tidx_a, tidx_b = np.array_split(tidx, 2)
+        rg = da.concatenate([rgeno[:, (ridx_a[::-1][:-1])], rg,
+                             rgeno[:, (ridx_b[::-1][1:])]], axis=1)
+        tg = da.concatenate([tgeno[:, (tidx_a[::-1][:-1])], tg,
+                             tgeno[:, (tidx_b[::-1][1:])]], axis=1)
+        D_r = da.dot(rg.T, rg) / rg.shape[0]
+        D_t = da.dot(tg.T, tg) / tg.shape[0]
+        # remove the extras
+        D_r = D_r[:, (ridx_a.shape[0] + 1):][:, :(ridx.shape[0])]
+        D_r = D_r[(ridx_a.shape[0] + 1):, :][:(ridx.shape[0]), :]
+        D_t = D_t[:, (tidx_a.shape[0] + 1):][:, :(tidx.shape[0])]
+        D_t = D_t[(tidx_a.shape[0] + 1):, :][:(tidx.shape[0]), :]
+        assert D_r.shape[1] == ridx.shape[0]
+        assert D_t.shape[1] == tidx.shape[0]
+    else:
+        D_r = da.dot(rg.T, rg) / rg.shape[0]
+        D_t = da.dot(tg.T, tg) / tg.shape[0]
     if justd:
         return df.snp, D_r, D_t
     cot = da.diag(da.dot(D_r, D_t))
@@ -751,7 +770,7 @@ def large_unpickle(file_path):
 
 # ----------------------------------------------------------------------
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
-           justd=False):
+           justd=False, extend=False):
     # pickle_file = 'ld_perwindow.pickle'
     # if os.path.isfile(pickle_file):
     #     r = large_unpickle(pickle_file)
@@ -765,7 +784,7 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
     delayed_results = [
         dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
-                                    justd) for window, df in
+                                    justd, extend) for window, df in
         mbim.groupby('windows')]
     with ProgressBar():
         r = list(dask.compute(*delayed_results, num_workers=threads))
