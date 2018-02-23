@@ -139,14 +139,18 @@ def just_score(index_snp, sumstats,  pheno, geno):
     return est
 
 
-def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
+def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
+              pvals=None, lds=None):
     now = time.time()
     sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
     print('Starting dirty PPT...')
     index, tag = [], []
-    x_train, x_test, y_train, y_test = train_test_split(geno, pheno,
-                                                        test_size=1 / split,
-                                                        random_state=seed)
+    if split > 1:
+        x_train, x_test, y_train, y_test = train_test_split(geno, pheno,
+                                                            test_size=1 / split,
+                                                            random_state=seed)
+    else:
+        x_train, x_test, y_train, y_test = geno, geno, pheno, pheno
     for r, locus in enumerate(loci):
         snps, D_r, D_t = locus
         snp_list = snps.tolist()
@@ -154,8 +158,12 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory):
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
             columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i'])
         # filter pvalue
-        pvals = [1] # 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
-        ldval = np.arange(0.1, 0.8, 0.1)
+        if pvals is None:
+            pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+        else:
+            pvals
+        if lds is None:
+            ldval = np.arange(0.1, 0.8, 0.1)
         pairs = product(pvals, ldval)
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, y_train, x_train)
@@ -217,13 +225,13 @@ def main(args):
     # plt.savefig('%s_pval_b2.pdf' % args.prefix)
     sum_snps = sumstats.snp.tolist()
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
-                  threads=args.threads, justd=True)
+                  threads=args.threads, justd=True, extend=args.extend)
     # include ppt
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
         out = dirty_ppt(loci, sumstats, rgeno, rpheno, args.threads, args.split,
-                        seed, memory)
+                        seed, memory, pvals=args.p_thresh, lds=args.r_range)
         ppt_df, _, _, x_test, y_test = out
         ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
                                 ascending=True, title=scs_title)
@@ -301,12 +309,12 @@ def main(args):
         #                          column='beta_sq', ascending=False,
         #                          title=scs_title)
         beta_df = sortbylocus('%s_betasq' % args.prefix, beta, column='beta_sq',
-                              title=r'$\beta^2$; %s' % scs_title)
+                              title=r'$\hat{\beta}^2$; %s' % scs_title)
         beta_df.to_csv('df_' + betafile, index=False, sep='\t')
         assert beta_df.shape[0] == sumstats.shape[0]
-        assert beta_df.iloc[0].snp == integral_df.iloc[0].snp
-        beta = prune_it(beta_df, tgeno, tpheno, r'$\beta^2$', step=prunestep,
-                        threads=args.threads)
+        #assert beta_df.iloc[0].snp == integral_df.iloc[0].snp
+        beta = prune_it(beta_df, tgeno, tpheno, r'$\hat{\beta^2}$',
+                        step=prunestep, threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
         # plot beta_sq vs pval
         f, ax = plt.subplots()
@@ -427,6 +435,7 @@ if __name__ == '__main__':
     parser.add_argument('-A', '--avoid_causals', default=False,
                         action='store_true', help='Remove causals from set')
     parser.add_argument('--pca', default=None, type=int)
+    parser.add_argument('-E', '--extend', default=False, action='store_true')
 
     args = parser.parse_args()
     main(args)
