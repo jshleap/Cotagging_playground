@@ -11,8 +11,8 @@ from utilities4cotagging import executeLine
 import pandas as pd
 
 
-def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
-                              nvars=3e3, debug=False):
+def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
+                              nvars=None, debug=False):
     """
 
     Simulate the OOA with 7 native population
@@ -20,6 +20,10 @@ def out_of_africa_with_native(n_natives=7, nhaps=[10] * 5, recomb=None,
     :param str recomb: recombination map. If none, will use the param values
     :param tuple nvars: number of variamts to simulate
     """
+    if nhaps is None:
+        nhaps = [45000] * (n_natives + 3)
+    if nvars is None:
+        nvars = int(1e6)
     assert n_natives > 0 # at least one native pop must be provided
     assert len(nhaps) == (n_natives + 3) # AFR, EUR, ASN
     # First we set out the maximum likelihood values of the various parameters
