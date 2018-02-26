@@ -31,8 +31,25 @@ from collections import Counter
 plt.style.use('ggplot')
 from sklearn.decomposition import PCA
 from numba import jit, prange
+import mpmath as mp
+# require gmpy
 
 lr = jit(stats.linregress)
+
+
+# ----------------------------------------------------------------------
+def t_sf(t, df):
+    a = df / 2
+    b = 1 / 2
+    x = df / ((t ** 2) + df)
+    I = mp.betainc(a, b, 0, x)
+    #mp.dps = 1
+    #f = lambda x: (1 + x ** 2 / df) ** (-df / 2 - 1 / 2)
+    #p = 1 / 2 + (t * mp.gamma((df+1)/2)/(mp.sqrt(df * mp.pi) * mp.gamma(df/2)))
+    #p *= mp.hyp2f1(1/2,(df+1)/2, 3/2, (-t**2 / df))
+    #mp.quad(f, [-mp.inf, t])
+    return I
+
 
 # ----------------------------------------------------------------------
 @jit
@@ -44,15 +61,19 @@ def nu_linregress(x, y):
     :param y:
     :return:
     """
-    TINY = 1.0e-20
+    cols = ['slope', 'intercept', 'rvalue', 'pvalue', 'stderr']
+    LinregressResult = namedtuple('LinregressResult', cols)
+    #TINY = 1.0e-20
     x = np.asarray(x)
     y = np.asarray(y)
     arr = np.array([x, y])
     n = len(x)
+    xmean = np.mean(x, None)
+    ymean = np.mean(y, None)
     # average sum of squares:
     ssxm, ssxym, ssyxm, ssym = (np.dot(arr, arr.T) / n).flat
-    r_num = ssxym
-    r_den = np.sqrt(ssxm * ssym)
+    r_num = ssxym * mp.mpf(1)
+    r_den = mp.sqrt(ssxm * ssym)
     if r_den == 0.0:
         r = 0.0
     else:
@@ -64,10 +85,11 @@ def nu_linregress(x, y):
             r = -1.0
     df = n - 2
     slope = r_num / ssxm
-    r_t = r + TINY
-    t = r * np.sqrt(df / ((1.0 - r_t) * (1.0 + r_t)))
-    prob = 2 * stats.distributions.t.sf(np.abs(t), df)
-    return slope, r ** 2, prob
+    intercept = ymean - slope * xmean
+    t = r * np.sqrt(df / ((1.0 - r) * (1.0 + r)))
+    prob = t_sf(np.abs(t), df)
+    sterrest = np.sqrt((1 - r ** 2) * ssym / ssxm / df)
+    return LinregressResult(slope, intercept, r, prob, sterrest)
 
 
 # ----------------------------------------------------------------------
@@ -354,7 +376,7 @@ def flip(G):
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
                     causal_pos=None, plot=False, threads=cpu_count(), pca=None,
-                    stmd=False, **kwargs):
+                    stmd=False, high_precision=False, **kwargs):
     """
     Compute the least square regression for a genotype in a phenotype. This
     assumes that the phenotype has been computed from a nearly independent set
@@ -418,7 +440,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
         if isinstance(x_train, dask.array.core.Array):
             x_train = x_train.rechunk(chunks)
         print('using dask delayed')
-        func = st_mod if stmd else lr
+        func = nu_linregress if high_precision else st_mod if stmd else lr
         if pca is not None:
             func = st_mod
             covs = do_pca(x_train, pca)

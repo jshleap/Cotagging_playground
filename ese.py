@@ -78,6 +78,8 @@ def log_aprox_exp(a):
     l = a - k
     t = np.exp(l).sum()
     return np.exp(k) * t
+
+
 # make the integral locus by locus and store them in list
 # ----------------------------------------------------------------------
 def integral_b(vs, mu, snps):

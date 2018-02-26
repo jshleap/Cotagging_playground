@@ -45,6 +45,7 @@ def main(args):
                   threads=args.threads, justd=True)
     array = [10, 20, 40, 80, 160, 320, 640, 1280, 3000, 5000, 10000, 20000,
              45000]
+    # randomize individuals to check if it changes the result
     res = []
     for i in array:
         res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,

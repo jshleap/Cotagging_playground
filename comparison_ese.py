@@ -215,7 +215,8 @@ def main(args):
         tpheno, h2, (tgeno, tbim, truebeta, tcausals) = qtraits_simulation(
             **opts)
     opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno, bim=rbim,
-                     validate=args.split, threads=args.threads, flip=args.flip))
+                     validate=args.split, threads=args.threads, flip=args.flip,
+                     high_precision=args.high_precision))
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     sumstats['beta_sq'] = sumstats.slope ** 2
@@ -420,7 +421,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=None, type=int)
     parser.add_argument('--r_range', default=None, nargs=3,
                         action=Store_as_arange, type=float)
-    parser.add_argument('--p_tresh', default=None, nargs='+',
+    parser.add_argument('--p_thresh', default=None, nargs='+',
                         action=Store_as_array, type=float)
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
     parser.add_argument('--gflip', action='store_true', help='flip genotype')
@@ -436,6 +437,6 @@ if __name__ == '__main__':
                         action='store_true', help='Remove causals from set')
     parser.add_argument('--pca', default=None, type=int)
     parser.add_argument('-E', '--extend', default=False, action='store_true')
-
+    parser.add_argument('--high_precision', default=False, action='store_true')
     args = parser.parse_args()
     main(args)
