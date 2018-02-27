@@ -30,10 +30,10 @@ from multiprocessing import Pool, cpu_count
 from collections import Counter
 plt.style.use('ggplot')
 from sklearn.decomposition import PCA
-from numba import jit, prange
+from numba import jit, prange, vectorize
 import mpmath as mp
 # require gmpy
-
+mp.dps = 25; mp.pretty = True
 lr = jit(stats.linregress)
 
 
@@ -43,11 +43,6 @@ def t_sf(t, df):
     b = 1 / 2
     x = df / ((t ** 2) + df)
     I = mp.betainc(a, b, 0, x)
-    #mp.dps = 1
-    #f = lambda x: (1 + x ** 2 / df) ** (-df / 2 - 1 / 2)
-    #p = 1 / 2 + (t * mp.gamma((df+1)/2)/(mp.sqrt(df * mp.pi) * mp.gamma(df/2)))
-    #p *= mp.hyp2f1(1/2,(df+1)/2, 3/2, (-t**2 / df))
-    #mp.quad(f, [-mp.inf, t])
     return I
 
 
@@ -62,7 +57,7 @@ def nu_linregress(x, y):
     :return:
     """
     cols = ['slope', 'intercept', 'rvalue', 'pvalue', 'stderr']
-    LinregressResult = namedtuple('LinregressResult', cols)
+    #LinregressResult = namedtuple('LinregressResult', cols)
     #TINY = 1.0e-20
     x = np.asarray(x)
     y = np.asarray(y)
@@ -72,24 +67,22 @@ def nu_linregress(x, y):
     ymean = np.mean(y, None)
     # average sum of squares:
     ssxm, ssxym, ssyxm, ssym = (np.dot(arr, arr.T) / n).flat
-    r_num = ssxym * mp.mpf(1)
+    r_num = mp.mpmathify(ssxym)
     r_den = mp.sqrt(ssxm * ssym)
-    if r_den == 0.0:
-        r = 0.0
-    else:
-        r = r_num / r_den
-        # test for numerical error propagation
-        if r > 1.0:
-            r = 1.0
-        elif r < -1.0:
-            r = -1.0
+    r = r_num / r_den
+    # test for numerical error propagation
+    if r > 1.0:
+        r = 1.0
+    elif r < -1.0:
+        r = -1.0
     df = n - 2
     slope = r_num / ssxm
     intercept = ymean - slope * xmean
     t = r * np.sqrt(df / ((1.0 - r) * (1.0 + r)))
     prob = t_sf(np.abs(t), df)
     sterrest = np.sqrt((1 - r ** 2) * ssym / ssxm / df)
-    return LinregressResult(slope, intercept, r, prob, sterrest)
+    return  dict(zip(cols, [slope, intercept, r, prob, sterrest]))
+    #LinregressResult(slope, intercept, r, prob, sterrest)
 
 
 # ----------------------------------------------------------------------
@@ -452,9 +445,21 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
                                for i in range(x_train.shape[1])]
         with ProgressBar():
             r = list(dask.compute(*delayed_results, num_workers=threads))
-        res = pd.DataFrame.from_records(r, columns=r[0]._fields)
+        try:
+            res = pd.DataFrame.from_records(r, columns=r[0]._fields)
+        except Exception as e:
+            res = pd.DataFrame(r)
         assert res.shape[0] == bim.shape[0]
         res = pd.concat((res, bim), axis=1)
+        # check precision issues and re-run the association
+        zeros = res[res.pvalue == 0.0]
+        if not zeros.empty and not stmd:
+            i_s = zeros.i.values
+            dr = [dask.delayed(nu_linregress)(x_train[:, i], y_train.PHENO)
+                               for i in i_s]
+            r = list(dask.compute(*delayed_results, num_workers=threads))
+            zero_res = pd.DataFrame(r)
+            res[res.pvalue == 0.0] = zero_res.pvalue.values
         # check if flips
         if flip:
             res.loc[res.flip, 'slope'] = res.loc[res.flip].slope * -1
