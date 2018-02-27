@@ -219,7 +219,10 @@ def main(args):
                      high_precision=args.high_precision))
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-    sumstats['beta_sq'] = sumstats.slope ** 2
+    try:
+        sumstats['beta_sq'] = sumstats.slope ** 2
+    except TypeError:
+        sumstats['beta_sq'] = [mpf[x] ** 2 for x in sumstats.slope]
     # plot correlation between pval and beta^2
     # ax = sumstats.plot.scatter(x='pvalue', y='beta_sq')
     # ax.set_xscale('log')
