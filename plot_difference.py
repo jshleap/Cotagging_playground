@@ -1,6 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 from glob import glob
 import sys
@@ -34,8 +35,15 @@ for i, df in enumerate(dfs):
     l.append(df)
 df = pd.concat(l)
 df.rename(columns={'type':'Method'}, inplace=True)
+#df['Method'] = df['Method'].map({r'$\beta^2$': r'$\hat{\beta}^2$'})
+df.replace(to_replace=r'$\beta^2$', value=r'$\hat{\beta}^2$', inplace=True)
 print(df.nsmallest(1, r'R^2 difference'))
-df.boxplot(column=r'R^2 difference', by='Method')
+columns_my_order = ['Causals', 'P + T',  'pval', r'$\hat{\beta}^2$', 'Integral',
+                    'ese AFR', 'ese EUR', 'ese cotag']
+fig, ax = plt.subplots()
+sns.boxplot(x='Method', y=r'R^2 difference', data=df, order=columns_my_order,
+            ax=ax)
+#df.boxplot(column=r'R^2 difference', by='Method')
 plt.ylabel(r'$R^2$ difference')
 plt.title(r'$R^2$ difference with P + T')
 plt.suptitle("")
