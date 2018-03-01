@@ -18,7 +18,7 @@ def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
     Simulate the OOA with 7 native population
 
     :param str recomb: recombination map. If none, will use the param values
-    :param tuple nvars: number of variamts to simulate
+    :param tuple nvars: number of variants to simulate
     """
     if nhaps is None:
         nhaps = [45000] * (n_natives + 3)
