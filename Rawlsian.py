@@ -1,23 +1,28 @@
 from comparison_ese import *
 
 #@jit(parallel=True)
-def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, split,
-           seed, memory, pvals, lds):
+def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
+           pvals, lds):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
     opts.update(
         dict(prefix=prefix, pheno=rpheno.iloc[r_idx], geno=rgeno[r_idx, :],
              validate=None, threads=threads, bim=rbim, seed=seed))
-    sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
-    out = dirty_ppt(loci, sumstats, X_train, y_train, threads, split, seed,
-                    memory, pvals=pvals, lds=lds)
-    ppt, selected, tail, _, _ = out
-    ppt.to_csv('%s_ppt.tsv' % prefix, sep='\t', index=False)
-    selected.to_csv('%s_selected.tsv' % prefix, sep='\t', index=False)
-    idx = selected.i.values
-    prs = tgeno[:, idx].dot(selected.slope)
-    est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': est, 'EUR_n': i}
+    sumstats, _, _, _, _ = plink_free_gwas(**opts)
+    index_snps = []
+    for snp_list, D_r, D_t in loci:
+        index, tag = get_tagged(snp_list, D_r, lds, pvals, sumstats)
+        index_snps.extend(index)
+    score = just_score(index_snps, sumstats, tpheno, tgeno)
+    # out = dirty_ppt(loci, sumstats, X_test, y_test, threads, split, seed,
+    #                 memory, pvals=pvals, lds=lds)
+    # ppt, selected, tail, _, _ = out
+    # ppt.to_csv('%s_ppt.tsv' % prefix, sep='\t', index=False)
+    # selected.to_csv('%s_selected.tsv' % prefix, sep='\t', index=False)
+    # idx = selected.i.values
+    # prs = tgeno[:, idx].dot(selected.slope)
+    # est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
+    return {r'$R^2_{ppt}$': score, 'EUR_n': i}
 
 
 def main(args):
