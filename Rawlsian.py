@@ -1,18 +1,32 @@
 from comparison_ese import *
 
 #@jit(parallel=True)
+def tagged(D_r, snp_list, lds, pvals, sumstats):
+    try:
+        D_r = dd.from_dask_array(D_r, columns=snp_list) ** 2
+    except AttributeError:
+        D_r = pd.DataFrame(D_r, columns=snp_list) ** 2
+    index, tag = get_tagged(snp_list, D_r, lds, pvals, sumstats)
+    return (index)
+
+
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
-           pvals, lds):
+           pvals, lds, memory):
     r_idx = np.arange(0, i)
     prefix = '%d_gwas' % i
     opts.update(
         dict(prefix=prefix, pheno=rpheno.iloc[r_idx], geno=rgeno[r_idx, :],
              validate=None, threads=threads, bim=rbim, seed=seed))
     sumstats, _, _, _, _ = plink_free_gwas(**opts)
+    sumstats['beta_sq'] = sumstats.slope * sumstats.slope
     index_snps = []
-    for snp_list, D_r, D_t in loci:
-        index, tag = get_tagged(snp_list, D_r, lds, pvals, sumstats)
-        index_snps.extend(index)
+    delayed_results = [dask.delayed(tagged)(D_r, snp_list, lds, pvals, sumstats)
+                       for snp_list, D_r, D_t in loci]
+    with ProgressBar():
+        print('Getting tag for', i, "EUR")
+        d = list(dask.compute(*delayed_results, num_workers=threads,
+                              memory_limit=memory))
+    index_snps = [item for sublist in d for item in sublist]
     score = just_score(index_snps, sumstats, tpheno, tgeno)
     # out = dirty_ppt(loci, sumstats, X_test, y_test, threads, split, seed,
     #                 memory, pvals=pvals, lds=lds)
@@ -67,12 +81,12 @@ def main(args):
         loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                       threads=args.threads, justd=True)
         # Pickle loci??
-        for i, l in enumerate(loci):
-            with open('%s_locus%d.pickle' % (args.prefix, i), 'wb') as F:
-                pickle.dump(l, F)
-    else:
-        print('Loading LD per locus')
-        loci = [pickle.load(open(l, 'rb')) for l in ldfiles]
+    #     for i, l in enumerate(loci):
+    #         with open('%s_locus%d.pickle' % (args.prefix, i), 'wb') as F:
+    #             pickle.dump(l, F)
+    # else:
+    #     print('Loading LD per locus')
+    #     loci = [pickle.load(open(l, 'rb')) for l in ldfiles]
     # do ppt in AFR
     o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
              threads=args.threads, bim=tbim, seed=None)
@@ -89,8 +103,7 @@ def main(args):
     res = []
     for i in array:
         res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
-                          args.threads, 1, seed, memory, args.pvals,
-                          args.lds))
+                          args.threads, seed, 1, 0.6, memory))
     res = pd.DataFrame(res)
     res.to_csv('%s_finaldf.tsv' % args.prefix, sep='\t', index=False)
     f, ax = plt.subplots()

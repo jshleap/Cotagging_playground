@@ -240,7 +240,7 @@ def norm(array, a=0, b=1):
     '''
     normalize an array between a and b
     '''
-    tiny = 1E20
+    tiny = 1E-20
     # make sure is an array
     array = np.array(array, dtype=float)
     ## normilize 0-1
