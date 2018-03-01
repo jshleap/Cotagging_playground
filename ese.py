@@ -105,6 +105,60 @@ def integral_b(vs, mu, snps):
 
 
 # ----------------------------------------------------------------------
+def integral_b2(v, mu, e, esum):
+    """
+    Compute the expected beta square
+    :param vs: vector of v
+    :param mu: mean
+    :param snps: names of snps in order
+    """
+    v = mp.mpf(v)
+    lhs = ((2 * mu) + (v * v)) / (4 * (mu * mu))
+    rhs = e / esum
+    integral = lhs * rhs
+    return integral
+
+
+# ----------------------------------------------------------------------
+#@jit(parallel=True)
+def per_locus2(locus, sumstats, avh2, h2, n, l_number, within=False,
+              integral_only=False):
+    """
+    compute the per-locus expectation
+    """
+    snps, D_r, D_t = locus
+    locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
+    m = snps.shape[0]
+    h2_l = avh2 * m
+    den = np.clip((1 - h2_l), 1E-10, 1)
+    mu = ((n / (2 * den)) + (m / (2 * h2)))
+    assert np.all(mu >= 0)
+    vjs = ((n * locus.slope.values) / den)
+    exp = [(v ** 2) / mp.mpf(4 * mu) for v in vjs]
+    es = np.array([mp.exp(x) for x in exp])
+    esum = es.sum()
+    I = np.array([integral_b2(v, mu, es[i], esum) for i, v in enumerate(vjs)])
+    assert np.all(I >= 0)  # make sure integral is positive
+    if integral_only:
+        return pd.DataFrame({'snp': snps, 'ese': I, 'locus': l_number})
+    assert max(I) > 0 # check if at least one is different than 0
+    if within == 1:
+        p = (D_r * D_r)
+    elif within == 2:
+        p = (D_t * D_t)
+    else:
+        p = (D_r * D_t)
+    Eejb = []
+    for i in range(p.shape[0]):
+        expcovs = 0
+        for j in range(p.shape[1]):
+            expcovs += p[i,j] * I[j]
+        Eejb.append(expcovs)
+    Eejb = np.array(Eejb)
+    return pd.DataFrame({'snp': snps, 'ese': abs(Eejb), 'locus': l_number})
+
+
+# ----------------------------------------------------------------------
 @jit(parallel=True)
 def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
               integral_only=False):
@@ -131,26 +185,9 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
         p = (D_t * D_t)
     else:
         p = (D_r * D_t)
-    #expcovs = np.array([(p[:, idx] * i).sum() for idx, i in enumerate(I)])#
+    # TODO: check if p or p'
     expcovs = p.dot(I)
     return pd.DataFrame({'snp': snps, 'ese': abs(expcovs), 'locus': l_number})
-
-# ----------------------------------------------------------------------
-def per_locus2(locus, sumstats, avh2, h2, N, ld1, ld2, M):
-    """
-    compute the per-locus expectation
-    """
-    locus = sumstats[sumstats.SNP.isin(locus)].loc[:, ['SNP', 'BETA']]
-    locus.index = locus.SNP.tolist()
-    snps = locus.SNP.tolist()
-    # M = locus.shape[0]
-    h2_l = avh2 * M
-    mu = ((N / (2 * (1 - h2_l))) + (M / (2 * h2)))
-    vjs = ((N * locus.BETA.values) / (2 * (1 - h2_l)))
-    I = integral_b(vjs, mu, snps)
-    expcovs = (ld1.loc[snps, snps].multiply(ld2.loc[snps, snps]).dot(I))
-    return pd.DataFrame({'SNP': expcovs.index.tolist(),
-                         'ese': expcovs.values.tolist()})
 
 
 # ----------------------------------------------------------------------
@@ -322,10 +359,12 @@ def transferability_plink(args):
 def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                     LDwindow, sumstats, refld=None, tarld=None, seed=None,
                     max_memory=None, threads=1, merged=None, within=False,
-                    **kwargs):
+                    pedestrian=False, **kwargs):
     """
     Execute trasnferability code
     """
+    if pedestrian:
+        per_locus = per_locus2
     seed = np.random.randint(1e4) if seed is None else seed
     now = time.time()
     print('Performing expected square effect (ESE)!')
@@ -495,6 +534,7 @@ if __name__ == '__main__':
     parser.add_argument('--graph', action='store_true')
     parser.add_argument('--check', action='store_true',
                         help='check and clean invariant sites')
+    parser.add_argument('--pedestrian', default=False, action='store_true')
 
     args = parser.parse_args()
     transferability(args.prefix, args.reference, args.refpheno, args.target,
@@ -506,4 +546,4 @@ if __name__ == '__main__':
                     max_memory=args.maxmem, split=args.split, flip=args.flip,
                     gflip=args.gflip, within=args.within,
                     ld_operator=args.ld_operator, graph=args.graph,
-                    check=args.check)
+                    check=args.check, pedestrian=args.pedestrian)

@@ -18,7 +18,11 @@ def sortbylocus(prefix, df, column='ese', title=None):
         if 'beta_sq' not in df.columns:
             df['beta_sq'] = df.slope**2
         grouped = df.groupby('locus', as_index=False)
-        grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
+        try:
+            grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
+        except TypeError:
+            grouped = grouped.apply(lambda grp: grp.sort_values(by=column).iloc[
+                0])
         sorteddf = grouped.sort_values(by=[column, 'beta_sq'],
                                        ascending=[False, False])
         tail = df[~df.snp.isin(sorteddf.snp)]
@@ -52,15 +56,19 @@ def sortbylocus(prefix, df, column='ese', title=None):
 
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
-                   tbim, prefix, memory):
+                   tbim, prefix, memory, pedestrian=False):
+    if pedestrian:
+        func_per_locus = per_locus2
+    else:
+        func_per_locus = per_locus
     within_str = within_dict[within]
     prefix = '%s_%s' % (prefix, '_'.join(within_str.split()))
     print('Compute expected beta square per locus...')
     resfile = '%s_res.tsv' % prefix
     if not os.path.isfile(resfile):
         delayed_results = [
-            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
-                                    within=within) for i, locus in
+            dask.delayed(func_per_locus)(locus, sumstats, avh2, h2, n, i,
+                                                within=within) for i, locus in
             enumerate(loci)]
         with ProgressBar():
             res = list(dask.compute(*delayed_results, num_workers=args.threads,
@@ -93,12 +101,12 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     # sort just once
     sumstats = sumstats[sumstats.snp.isin(snp_list)].sort_values(
         ['pvalue', 'beta_sq'], ascending=[True, False])
+    if any([isinstance(x,str) for x in sumstats.pvalue]):
+        sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in  sumstats.pvalue]
     total_snps = sumstats.shape[0]
     while len(index + tag) != total_snps:
-        # get lowest pvalue snp in the locus
-        #curr_high = sumstats.nsmallest(1, ['pvalue'])
         curr_high = sumstats.iloc[0]
-        if curr_high.pvalue < p_thresh:
+        if mp.mpf(curr_high.pvalue) < p_thresh:
             curr_high = curr_high.snp
             ippend(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
@@ -109,13 +117,9 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
             if curr_high in tagged: # TODO: it is necessary.. possible bug
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
-            #snp_list = [snp for snp in snp_list if snp not in tagged]
-            # if curr_high in snp_list:
-            #     snp_list.pop(snp_list.index(curr_high))
         else:
             low = sumstats.snp.tolist()
             text(low)
-            #snp_list = [snp for snp in snp_list if snp not in low]
         sumstats = sumstats[~sumstats.snp.isin(index + tag)]
     return index, tag
 
@@ -142,7 +146,12 @@ def just_score(index_snp, sumstats,  pheno, geno):
 def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
               pvals=None, lds=None):
     now = time.time()
-    sumstats.loc[: , 'beta_sq'] = sumstats.slope**2
+    if not 'beta_sq' in sumstats.columns:
+        try:
+            sumstats.loc[: , 'beta_sq'] = sumstats.slope ** 2
+        except TypeError:
+            sumstats['beta_sq'] = [mp.mpf(x) ** 2 for x in sumstats.slope]
+
     print('Starting dirty PPT...')
     index, tag = [], []
     if split > 1:
@@ -160,11 +169,9 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
         # filter pvalue
         if pvals is None:
             pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
-        else:
-            pvals
         if lds is None:
-            ldval = np.arange(0.1, 0.8, 0.1)
-        pairs = product(pvals, ldval)
+            lds = np.arange(0.1, 0.8, 0.1)
+        pairs = product(pvals, lds)
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, y_train, x_train)
             for p, l in pairs]
@@ -174,14 +181,8 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
                                        memory_limit=memory)))
             best_key = max(d.keys())
             i, t, ld, pv = d[best_key]
-            # del_res = [
-            #    dask.delayed(loop_pairs)(snp_list, D_r, ld, pv, sumstats, y_test,
-            #                            x_test)]
-            # est, (ind, ta, _ , _) = dask.compute(*del_res, num_workers=threads,
-            #                                  memory_limit=memory)[0]
             index += i
             tag += t
-
     pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
                                                          ascending=True)
     pos = sumstats[sumstats.snp.isin(tag)].sort_values('pvalue', ascending=True)
@@ -192,6 +193,10 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 
 
 def main(args):
+    if args.pedestrian:
+        func_per_locus = per_locus2
+    else:
+        func_per_locus = per_locus
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     memory = 1E9 if args.maxmem is None else args.maxmem
@@ -222,11 +227,8 @@ def main(args):
     try:
         sumstats['beta_sq'] = sumstats.slope ** 2
     except TypeError:
-        sumstats['beta_sq'] = [mpf[x] ** 2 for x in sumstats.slope]
-    # plot correlation between pval and beta^2
-    # ax = sumstats.plot.scatter(x='pvalue', y='beta_sq')
-    # ax.set_xscale('log')
-    # plt.savefig('%s_pval_b2.pdf' % args.prefix)
+        sumstats['beta_sq'] = [mp.mpf(x) ** 2 for x in sumstats.slope]
+        sumstats['pvalue'] = [mp.mpf(x) for x in sumstats.pvalue]
     sum_snps = sumstats.snp.tolist()
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                   threads=args.threads, justd=True, extend=args.extend)
@@ -254,8 +256,8 @@ def main(args):
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
         delayed_results = [
-            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
-                                    integral_only=True) for i, locus in
+            dask.delayed(func_per_locus)(locus, sumstats, avh2, h2, n, i,
+                                         integral_only=True) for i, locus in
             enumerate(loci)]
         with ProgressBar():
             integral = list(
@@ -277,7 +279,11 @@ def main(args):
         inte = integral_df.reindex(columns=['snp', 'ese', 'beta_sq']).rename(
             columns={'ese': 'integral'})
         f, ax = plt.subplots()
-        inte.plot.scatter(x='beta_sq', y='integral', ax=ax)
+        try:
+            inte.plot.scatter(x='beta_sq', y='integral', ax=ax)
+        except ValueError:
+            ax.scatter(x=inte.beta_sq.values, y=inte.integral.values.astype(
+                np.float64))
         plt.tight_layout()
         plt.savefig('%s_betasqvsintegral.pdf' % args.prefix)
         plt.close()
@@ -286,8 +292,8 @@ def main(args):
         integral = pd.read_csv(intfile, sep='\t')
     # expecetd square effect
     eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
-                           args.threads, tbim, args.prefix, memory) for x in
-            [0, 1, 2]]
+                           args.threads, tbim, args.prefix, memory,
+                           pedestrian=args.pedestrian) for x in [0, 1, 2]]
     # prune by pval
     resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
     if not os.path.isfile(resfile):
@@ -322,7 +328,10 @@ def main(args):
         beta.to_csv(betafile, index=False, sep='\t')
         # plot beta_sq vs pval
         f, ax = plt.subplots()
-        sumstats.plot.scatter(x='beta_sq', y='pvalue', ax=ax)
+        try:
+            sumstats.plot.scatter(x='beta_sq', y='pvalue', ax=ax)
+        except ValueError:
+            sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in sumstats.pvalue]
         #ax.set_yscale('log')
         plt.tight_layout()
         plt.savefig('%s_betasqvspval.pdf' % args.prefix)
@@ -441,5 +450,6 @@ if __name__ == '__main__':
     parser.add_argument('--pca', default=None, type=int)
     parser.add_argument('-E', '--extend', default=False, action='store_true')
     parser.add_argument('--high_precision', default=False, action='store_true')
+    parser.add_argument('--pedestrian', default=False, action='store_true')
     args = parser.parse_args()
     main(args)

@@ -3,9 +3,9 @@ plt.style.use('ggplot')
 
 
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
-           test_pheno, threads, memory):
+           test_pheno, threads, memory, full):
     seed = np.random.randint(54321)
-    prefix = '%d_gwas' % i
+    prefix = '%.2f_gwas' % i
     total_n = rgeno.shape[0] # ASSUMES THAT BOTH SOURCE POPS ARE THE SAME SIZE
     frac_n = int(total_n * i)
     if i == 0:
@@ -25,6 +25,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
         pheno = pheno.sample(frac=1)
         geno = geno[pheno.i.values, :]
         pheno['i'] = list(range(pheno.shape[0]))
+    assert geno.shape[0] == full == pheno.shape[0]
     opts.update(
         dict(prefix=prefix, pheno=pheno, geno=geno, validate=None,
              threads=threads, bim=rbim, seed=None, pca=20))
@@ -36,7 +37,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
     idx_tar = sel_tar.i.values
     prs_tar = test_geno[:, idx_tar].dot(sel_tar.slope)
     r2_tar = np.corrcoef(prs_tar, test_pheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac':1 - i}
+    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac': 1 - i}
 
 
 def main(args):
@@ -60,37 +61,38 @@ def main(args):
         tpheno, tgeno = rpheno, rgeno
     else:
         tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
-
     # # Get the diverse sample to be test on
     opts = dict(test_size=1 / args.split, random_state=seed)
     r_out = train_test_split(rgeno, rpheno, **opts)
     rgeno, rgeno_test, rpheno, rpheno_test = r_out
     rpheno = rpheno.reset_index(drop=True)
-    #rpheno_test = rpheno_test.reset_index(drop=True)
     t_out = train_test_split(tgeno, tpheno, **opts)
     tgeno, tgeno_test, tpheno, tpheno_test = t_out
     max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
-    # tpheno = tpheno.reset_index(drop=True)
-    # tpheno_test = tpheno_test.reset_index(drop=True)
-    # diverse_geno = da.concatenate([rgeno_test, tgeno_test])
-    # diverse_pheno = pd.concat([rpheno_test, tpheno_test]).reset_index().sample(
-    #     frac=1)
-    # diverse_geno = diverse_geno[diverse_pheno.i.values, :]
-    # diverse_pheno['i'] = diverse_pheno.index.values
     # Get LD info
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
                   threads=args.threads)
+    # do ppt in AFR
+    o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
+             threads=args.threads, bim=tbim, seed=None, pca=20)
+    out = plink_free_gwas(**o)
+    t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
+    out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2, None,
+                    memory)
+    t_ppt, t_pre, t_pos, t_x_test, t_y_test = out
+    idx_tar = t_pre.i.values
+    t_prs = t_x_test[:, idx_tar].dot(t_pre.slope)
+    t_r2 = np.corrcoef(t_prs, t_y_test.PHENO)[1, 0] ** 2
+    full = tgeno.shape[0]
     results = pd.DataFrame([
         single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, tgeno_test,
-               tpheno_test, args.threads, memory) for i in
+               tpheno_test, args.threads, memory, full=full) for i in
         np.clip(np.arange(0, 1.1, 0.1), a_min=0, a_max=1)])
     results.to_csv('proportions.tsv', sep='\t', index=False)
-    # gp3 = results.loc[:, cols].groupby('EUR_frac')
-    # means = gp3.mean()
-    # errors = gp3.std()
     f, ax = plt.subplots()
-    ax.axhline(max_r2, ls='-.', color='0.5')
-    results.plot(x='EUR_frac', y=r'$R^2_{ppt}$', ax=ax)
+    ax.axhline(max_r2, ls='-.', color='0.5', label='Causals in %s' % tarl)
+    ax.axhline(t_r2, ls='-.', color='r', label='%s P + T' % tarl)
+    results.plot(x='EUR_frac', y=r'$R^2_{ppt}$', ax=ax, marker='o')
     plt.ylabel(r'AFR $R^2_{ppt}$')
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)

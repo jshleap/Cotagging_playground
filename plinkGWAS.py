@@ -39,11 +39,13 @@ lr = jit(stats.linregress)
 
 # ----------------------------------------------------------------------
 def t_sf(t, df):
-    a = df / 2
-    b = 1 / 2
-    x = df / ((t ** 2) + df)
-    I = mp.betainc(a, b, 0, x)
-    return I
+    lhs = 1 / (mp.sqrt(df) * mp.beta(0.5, df / 2))
+    rhs = (1 + ((mp.mpf(t) ** 2) / df)) ** (-(df + 1) / 2)
+    # a = df / 2
+    # b = 1 / 2
+    # x = df / ((t ** 2) + df)
+    # I = mp.betainc(a, b, 0, x)
+    return lhs * rhs
 
 
 # ----------------------------------------------------------------------
@@ -83,6 +85,15 @@ def nu_linregress(x, y):
     sterrest = np.sqrt((1 - r ** 2) * ssym / ssxm / df)
     return  dict(zip(cols, [slope, intercept, r, prob, sterrest]))
     #LinregressResult(slope, intercept, r, prob, sterrest)
+
+
+# ----------------------------------------------------------------------
+#@jit
+def high_precision_pvalue(df, r):
+    r = r if np.abs(r) != 1.0 else mp.mpf(0.9999999999999999) * mp.sign(r)
+    den = ((1.0 - r) * (1.0 + r))
+    t = r * np.sqrt(df / den)
+    return t_sf(np.abs(t), df)
 
 
 # ----------------------------------------------------------------------
@@ -454,18 +465,24 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, flip=False,
         # check precision issues and re-run the association
         zeros = res[res.pvalue == 0.0]
         if not zeros.empty and not stmd:
-            i_s = zeros.i.values
-            dr = [dask.delayed(nu_linregress)(x_train[:, i], y_train.PHENO)
-                               for i in i_s]
-            r = list(dask.compute(*delayed_results, num_workers=threads))
-            zero_res = pd.DataFrame(r)
-            res[res.pvalue == 0.0] = zero_res.pvalue.values
+            print('    Processing zeros with arbitrary precision')
+            df = x_train.shape[0] - 2
+            # i_s = zeros.i.values
+            # dr = [dask.delayed(nu_linregress)(x_train[:, i], y_train.PHENO)
+            #       for i in i_s]
+            dr = [dask.delayed(high_precision_pvalue)(df, r) for r in
+                  zeros.rvalue.values]
+            with ProgressBar():
+                zero_res = np.array(dask.compute(*dr, num_workers=threads))
+            #zero_res = pd.DataFrame(r)
+            res.loc[res.pvalue == 0.0, 'pvalue'] = zero_res#.pvalue.values
         # check if flips
         if flip:
             res.loc[res.flip, 'slope'] = res.loc[res.flip].slope * -1
         # if 'flip' in res.columns:
         #     res['slope_old'] = res.slope
         #     res.loc[res.flip, 'slope'] = res[res.flip].slope * -1
+        res['pvalue'] = [mp.mpf(x) for x in res.pvalue]
         # # Make a manhatan plot
         if plot:
             manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,

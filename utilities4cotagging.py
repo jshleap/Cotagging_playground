@@ -240,11 +240,12 @@ def norm(array, a=0, b=1):
     '''
     normalize an array between a and b
     '''
+    tiny = 1E20
     # make sure is an array
     array = np.array(array, dtype=float)
     ## normilize 0-1
     rang = max(array) - min(array)
-    A = (array - min(array)) / rang
+    A = (array - min(array)) / (rang + tiny)
     ## scale
     range2 = b - a
     return (A * range2) + a

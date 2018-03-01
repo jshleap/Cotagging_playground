@@ -449,7 +449,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
-        opts.update(dict(outprefix=tarl, bfile=targeno, bfile2=refgeno,ß
+        opts.update(dict(outprefix=tarl, bfile=targeno, bfile2=refgeno,
                          causaleff=rbim.dropna(subset=['beta']),
                          validate=kwargs['split']))
         tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
