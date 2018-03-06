@@ -323,16 +323,18 @@ def main(args):
         beta_df.to_csv('df_' + betafile, index=False, sep='\t')
         assert beta_df.shape[0] == sumstats.shape[0]
         #assert beta_df.iloc[0].snp == integral_df.iloc[0].snp
-        beta = prune_it(beta_df, tgeno, tpheno, r'$\hat{\beta^2}$',
+        beta = prune_it(beta_df, tgeno, tpheno, r'$\hat{\beta}^2$',
                         step=prunestep, threads=args.threads)
         beta.to_csv(betafile, index=False, sep='\t')
         # plot beta_sq vs pval
-        f, ax = plt.subplots()
         try:
-            sumstats.plot.scatter(x='beta_sq', y='pvalue', ax=ax)
-        except ValueError:
-            sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in sumstats.pvalue]
-        #ax.set_yscale('log')
+            sumstats['-log(pval)'] = -np.log10(sumstats.pvalue.values)
+        except AttributeError:
+            sumstats['-log(pval)'] = [
+                float(i.split('-')[1]) if '-' in i else np.log10(float(i)) for i
+                in sumstats.pvalue]
+        f, ax = plt.subplots()
+        sumstats.plot.scatter(x='beta_sq', y='pvalue', ax=ax)
         plt.tight_layout()
         plt.savefig('%s_betasqvspval.pdf' % args.prefix)
         plt.close()

@@ -37,6 +37,7 @@ df = pd.concat(l)
 df.rename(columns={'type':'Method'}, inplace=True)
 #df['Method'] = df['Method'].map({r'$\beta^2$': r'$\hat{\beta}^2$'})
 df.replace(to_replace=r'$\beta^2$', value=r'$\hat{\beta}^2$', inplace=True)
+df.replace(to_replace=r'$\hat{\beta^2}$', value=r'$\hat{\beta}^2$', inplace=True)
 print(df.nsmallest(1, r'R^2 difference'))
 columns_my_order = ['Causals', 'P + T',  'pval', r'$\hat{\beta}^2$', 'Integral',
                     'ese AFR', 'ese EUR', 'ese cotag']

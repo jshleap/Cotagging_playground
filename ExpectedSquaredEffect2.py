@@ -13,7 +13,7 @@ from tqdm import tqdm
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from utilities4cotagging import *
+from utilities4cotagging_old import *
 from itertools import permutations
 from joblib import delayed, Parallel
 import multiprocessing as mp

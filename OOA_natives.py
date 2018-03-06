@@ -7,7 +7,7 @@ import math
 import argparse
 import matplotlib.pylab as plt, matplotlib
 import numpy as np
-from utilities4cotagging import executeLine
+from utilities4cotagging_old import executeLine
 import pandas as pd
 
 

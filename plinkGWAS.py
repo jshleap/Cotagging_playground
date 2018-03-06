@@ -23,7 +23,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from utilities4cotagging import *
+from utilities4cotagging_old import *
 from sklearn.model_selection import train_test_split
 from qtraitsimulation import qtraits_simulation
 from multiprocessing import Pool, cpu_count

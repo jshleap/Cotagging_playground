@@ -28,7 +28,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
     assert geno.shape[0] == full == pheno.shape[0]
     opts.update(
         dict(prefix=prefix, pheno=pheno, geno=geno, validate=None,
-             threads=threads, bim=rbim, seed=None, pca=20))
+             threads=threads, bim=rbim, seed=None, pca=args.pca))
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     # P+T scored in Target
     out = dirty_ppt(loci, sumstats, X_test, y_test, args.threads, 1, seed,
@@ -74,7 +74,7 @@ def main(args):
                   threads=args.threads)
     # do ppt in AFR
     o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
-             threads=args.threads, bim=tbim, seed=None, pca=20)
+             threads=args.threads, bim=tbim, seed=None, pca=args.pca)
     out = plink_free_gwas(**o)
     t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
     out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2, None,
@@ -126,6 +126,6 @@ if __name__ == '__main__':
                         help='Size of the LD window. a.k.a locus')
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=None, type=int)
-
+    parser.add_argument('--pca', default=20, type=int)
     args = parser.parse_args()
     main(args)

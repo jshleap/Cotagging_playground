@@ -7,7 +7,7 @@ def tagged(D_r, snp_list, lds, pvals, sumstats):
     except AttributeError:
         D_r = pd.DataFrame(D_r, columns=snp_list) ** 2
     index, tag = get_tagged(snp_list, D_r, lds, pvals, sumstats)
-    return (index)
+    return index
 
 
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
@@ -40,74 +40,78 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
 
 
 def main(args):
-    seed = np.random.randint(1e4) if args.seed is None else args.seed
-    memory = 1E9 if args.maxmem is None else args.maxmem
-    refl, tarl = args.labels
-    # make simulations
-    print('Simulating phenotype for reference population %s \n' % refl)
-    opts = {'outprefix': refl, 'bfile': args.refgeno, 'h2': args.h2,
-            'ncausal': args.ncausal, 'normalize': args.normalize,
-            'uniform': args.uniform, 'snps': None, 'seed': seed,
-            'bfile2': args.targeno, 'flip': args.gflip,
-            'freqthreshold': args.freq_thresh}
-    rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
-    # shuffle rerefence individuals
-    idx = np.arange(rgeno.shape[0])
-    np.random.shuffle(idx)
-    assert not np.array_equal(idx , rpheno.i.values)
-    rgeno = rgeno[idx, :]
-    rpheno = rpheno.iloc[idx].reset_index()
-    rpheno['i'] = rpheno.index
-    # make simulation for target
-    print('Simulating phenotype for target population %s \n' % tarl)
-    opts.update(dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
-                     causaleff=rbim.dropna(subset=['beta']),
-                     validate=args.split))
-    if args.reference:
-        tpheno, tgeno = rpheno, rgeno
-    else:
-        tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
-        idx = np.arange(tgeno.shape[0])
+    rawls_final = '%s_finaldf.tsv' % args.prefix
+    if not os.path.isfile(rawls_final):
+        seed = np.random.randint(1e4) if args.seed is None else args.seed
+        memory = 1E9 if args.maxmem is None else args.maxmem
+        refl, tarl = args.labels
+        # make simulations
+        print('Simulating phenotype for reference population %s \n' % refl)
+        opts = {'outprefix': refl, 'bfile': args.refgeno, 'h2': args.h2,
+                'ncausal': args.ncausal, 'normalize': args.normalize,
+                'uniform': args.uniform, 'snps': None, 'seed': seed,
+                'bfile2': args.targeno, 'flip': args.gflip,
+                'freqthreshold': args.freq_thresh}
+        rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+        # randomize individuals to check if it changes the result
+        # shuffle rerefence individuals
+        idx = np.arange(rgeno.shape[0])
         np.random.shuffle(idx)
-        assert not np.array_equal(idx, tpheno.i.values)
-        tgeno = tgeno[idx, :]
-        tpheno = tpheno.iloc[idx].reset_index()
-        tpheno = tpheno.iloc[idx].reset_index()
-        tpheno['i'] = tpheno.index
-    max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
-    # perform GWASes
-    ldfiles = glob('%s_locus*.pickle' % args.prefix)
-    if not ldfiles:
+        assert not np.array_equal(idx , rpheno.i.values)
+        rgeno = rgeno[idx, :]
+        rpheno = rpheno.iloc[idx].reset_index()
+        rpheno['i'] = rpheno.index
+        # make simulation for target
+        print('Simulating phenotype for target population %s \n' % tarl)
+        opts.update(dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
+                         causaleff=rbim.dropna(subset=['beta']),
+                         validate=args.split))
+        if args.reference:
+            tpheno, tgeno = rpheno, rgeno
+        else:
+            tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(
+                **opts)
+            # randomize individuals to check if it changes the result
+            idx = np.arange(tgeno.shape[0])
+            np.random.shuffle(idx)
+            assert not np.array_equal(idx, tpheno.i.values)
+            tgeno = tgeno[idx, :]
+            tpheno = tpheno.iloc[idx].reset_index()
+            tpheno['i'] = tpheno.index
+        max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
+        # perform GWASes
         loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
                       threads=args.threads, justd=True)
-        # Pickle loci??
-    #     for i, l in enumerate(loci):
-    #         with open('%s_locus%d.pickle' % (args.prefix, i), 'wb') as F:
-    #             pickle.dump(l, F)
-    # else:
-    #     print('Loading LD per locus')
-    #     loci = [pickle.load(open(l, 'rb')) for l in ldfiles]
-    # do ppt in AFR
-    o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
-             threads=args.threads, bim=tbim, seed=None)
-    out = plink_free_gwas(**o)
-    t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
-    out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2,
-                    None, memory, pvals=args.pvals, lds=args.lds)
-    t_ppt, t_pre, t_pos, t_x_test, t_y_test = out
-    idx_tar = t_pre.i.values
-    t_prs = t_x_test[:, idx_tar].dot(t_pre.slope)
-    t_r2 = np.corrcoef(t_prs, t_y_test.PHENO)[1, 0] ** 2
-    array = [10, 40, 160, 640, 2560, 10240, 40.960, 45000]
-    # randomize individuals to check if it changes the result
-    res = []
-    for i in array:
-        res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
-                          args.threads, seed, 1, 0.6, memory))
-    res = pd.DataFrame(res)
-    res.to_csv('%s_finaldf.tsv' % args.prefix, sep='\t', index=False)
+        # do ppt in AFR
+        o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
+                 threads=args.threads, bim=tbim, seed=None)
+        out = plink_free_gwas(**o)
+        t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
+        out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2,
+                        None, memory, pvals=args.pvals, lds=args.lds)
+        t_ppt, t_pre, t_pos, t_x_test, t_y_test = out
+        idx_tar = t_pre.i.values
+        t_prs = t_x_test[:, idx_tar].dot(t_pre.slope)
+        t_r2 = np.corrcoef(t_prs, t_y_test.PHENO)[1, 0] ** 2
+        with open('t_r2.pickle', 'wb') as F:
+            pickle.dump(t_r2, F)
+        array = [10, 40, 160, 640, 2560, 10240, 40960, 45000]
+        #array = [40000]
+
+        res = []
+        for i in array:
+            res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
+                              args.threads, seed, 1, 0.6, memory))
+        res = pd.DataFrame(res)
+        res.to_csv(rawls_final, sep='\t', index=False)
+    else:
+        res = pd.read_table(rawls_final, sep='\t')
+        tpheno = pd.read_table('%s.prs_pheno.gz' % args.prefix, sep='\t')
+        max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
+        with open('t_r2.pickle', 'rb') as F:
+            pickle.dump(F)
     f, ax = plt.subplots()
-    res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', s=5, ax=ax)
+    res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', ms=5, ax=ax)
     plt.ylabel(r'AFR $R^2_{ppt}$')
     ax.axhline(max_r2, ls='-.', color='0.5', label='Causals')
     ax.axhline(t_r2, ls='-.', color='r', label=r'$%s_{P + T}$' % tarl)

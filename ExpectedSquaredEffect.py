@@ -8,7 +8,7 @@ import numexpr
 import numpy as np
 #from collections import defaultdict
 import matplotlib.pyplot as plt
-from utilities4cotagging import *
+from utilities4cotagging_old import *
 plt.style.use('ggplot')
 
 def vs(x, N, h2_l):

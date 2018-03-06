@@ -286,7 +286,7 @@ def transferability_plink(args):
     avh2 = args.h2 / len(sum_snps)
     with open('%s_loci.pickle' % args.prefix, 'wb') as L:
         pickle.dump(loci, L)
-    N = mapcount('%s.fam' % args.target)
+    N = map_count('%s.fam' % args.target)
     resfile = '%s_res.tsv' % args.prefix
     print('Compute expected beta square per locus...')
     if not os.path.isfile(resfile):
