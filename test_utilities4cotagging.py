@@ -87,18 +87,18 @@ def test_smartcotagsort(ascending, column):
                          beta='BETA', position='BP')
     result, before_tail = out
     if ascending:
-        np.testing.assert_equal(result.index.values, df.Index.values)
+        np.testing.assert_array_equal(result.index.values, df.Index.values)
     else:
-        np.testing.assert_equal(result.index.values,
-                                sorted(df.Index.values, reverse=True))
+        np.testing.assert_array_equal(np.flip(result.Index.values,0),
+                                      df.Index.values)
     execute_line('rm prefix_*')
 
 
 @pytest.mark.parametrize("shape,expected", [
-    ((10, 10), 0.0008), ((10, 1000), 80000), ((45000,3000),1080000000)])
+    ((10, 10), 0.0008), ((10, 1000), 0.08), ((45000,3000), 1080.0)])
 def test_estimate_size(shape, expected):
     actual = estimate_size(shape)
-    np.testing.equal(actual, expected)
+    np.testing.assert_array_equal(actual, expected)
 
 
 @pytest.mark.parametrize("shape,threads,memory,expected", [
