@@ -767,7 +767,6 @@ def large_pickle(obj, file_path):
             f_out.write(bytes_out[idx:idx + max_bytes])
 
 
-
 # ----------------------------------------------------------------------
 def large_unpickle(file_path):
     n_bytes = 2 ** 31

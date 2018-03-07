@@ -20,16 +20,23 @@ corr = pd.DataFrame(np.corrcoef(geno.T)**2, columns=bim.snp.tolist(),
                     index=bim.snp.tolist())
 bed = os.path.join(test_folder, 'toy_bed')
 with open(os.path.join(test_folder, 'toy_bed_maf.pickle'), 'rb') as F:
-    (bim, fam, g) = pickle.load(F)
+    (b, f, g) = pickle.load(F)
 with open(os.path.join(test_folder, 'toy_Cotagging.pickle'), 'rb') as F:
     sumstats, tail = pickle.load(F)
-shared_snps = sumstats[sumstats.SNP.isin(bim.snp)].SNP.tolist()
+shared_snps = sumstats[sumstats.SNP.isin(b.snp)].SNP.tolist()
 sumstats_subset = sumstats[sumstats.SNP.isin(shared_snps)]
-idx = bim[bim.snp.isin(shared_snps)].i.tolist()
+idx = b[b.snp.isin(shared_snps)].i.tolist()
 sumstats_subset.loc[:, 'i'] = idx
-pheno = fam.copy()
+pheno = f.copy()
 pheno['PHENO'] = g[:,idx].dot(sumstats_subset.BETA).compute().astype(float)
-
+(EUR_bim, EUR_fam, EUR_g) = read_geno(bed, 0.01, 1, False, False)
+(AFR_bim, AFR_fam, AFR_g) = read_geno(bed+'2', 0.01, 1, False, False)
+EUR_g = (EUR_g - EUR_g.mean(axis=0)) / EUR_g.std(axis=0)
+AFR_g = (AFR_g - AFR_g.mean(axis=0)) / AFR_g.std(axis=0)
+toy_sumstats = pd.read_table(os.path.join(test_folder, 'toy_test.gwas'),
+                             sep='\t')
+mbim = EUR_bim.merge(AFR_bim, on=['chrom', 'snp', 'pos'], suffixes=['_ref',
+                                                                    '_tar'])
 
 # Tests
 @pytest.mark.parametrize("test_input,expected",
@@ -93,15 +100,15 @@ def test_smartcotagsort(ascending, dataf, column):
                          beta='BETA', position='BP')
     result, before_tail = out
     if ascending:
-        np.testing.assert_equal(result.index.values, dataf.Index.values)
+        np.testing.assert_array_equal(result.index.values, dataf.Index.values)
     else:
-        np.testing.assert_equal(np.flip(result.index.values, axis=0),
-                                sorted(dataf.Index.values, reverse=True))
+        np.testing.assert_array_equal(np.flip(result.Index.values,0),
+                                      dataf.Index.values)
     execute_line('rm prefix_*')
 
 
 @pytest.mark.parametrize("shape,expected", [
-    ((10, 10), 0.0008), ((10, 1000), 80000), ((45000,3000),1080000000)])
+    ((10, 10), 0.0008), ((10, 1000), 0.08), ((45000,3000), 1080.0)])
 def test_estimate_size(shape, expected):
     actual = estimate_size(shape)
     np.testing.assert_array_equal(actual, expected)
@@ -132,6 +139,7 @@ expected = {'Number of SNPs': {0: 1, 1: 2, 2: 3, 3: 4}, 'R2': {
     3: 0.9999999999999998}, 'type': {0: 'label', 1: 'label', 2: 'label',
                                      3: 'label'}}
 
+
 @pytest.mark.parametrize("df,geno,pheno,step,threads,expected", [
     (sumstats_subset, g, pheno, 1, 1, expected),
     (sumstats_subset, g, pheno, 1, 4, expected)
@@ -140,3 +148,29 @@ def test_prune_it(df, geno, pheno, step, threads, expected):
     # TODO: test different steps
     a = prune_it(df, geno, pheno, 'label', step, threads, beta='BETA')
     assert a.to_dict() == expected
+
+
+@pytest.mark.parametrize("df,rgeno,tgeno,threads,max_memory,justd,extend,exp",[
+    (mbim, EUR_g, AFR_g, 1, None, True, False, 'toy_test_ds.pickle'),
+    (mbim, EUR_g, AFR_g, 1, None, False, False, 'toy_test_cotd.pickle'),
+    (mbim, EUR_g, AFR_g, 4, None, True, False, 'toy_test_ds.pickle'),
+    (mbim, EUR_g, AFR_g, 4, None, False, False, 'toy_test_cotd.pickle'),
+    (mbim, EUR_g, AFR_g, 4, None, False, True, 'toy_test_cotd_ext.pickle'),
+    (mbim, EUR_g, AFR_g, 4, None, True, True, 'toy_test_d_ext.pickle')
+])
+def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
+                       exp):
+    cwd=os.getcwd()
+    os.chdir(test_folder)
+    with open(exp, 'rb') as F:
+        expected = pickle.load(F)
+    out = single_window(df, rgeno, tgeno, threads, max_memory, justd, extend)
+    if isinstance(out, tuple):
+        assert (out[0] == expected[0]).all()
+        np.testing.assert_allclose(out[1].compute(), expected[1].compute())
+        np.testing.assert_allclose(out[2].compute(), expected[2].compute())
+    else:
+        pd.testing.assert_frame_equal(out, expected)
+    os.chdir(cwd)
+
+

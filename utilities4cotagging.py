@@ -306,13 +306,17 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope'):
     :return: scored dataframe
     """
     print('Prunning %s...' % label)
+    # Process the first 200 snps at one step regardless of the step passed.
+    # This is done to have a finer grain in the first part of the prunning
+    # where most of the causals should be captured
     print('First 200')
+    # Create a generator with the subset and the arguments for the single func
     gen = ((df.iloc[:i], geno, pheno, label, beta) for i in
            range(1, min(201, df.shape[0] + 1), 1))
+    # Run the scoring in parallel threads
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     with ProgressBar():
         res = list(dask.compute(*delayed_results, num_workers=threads))
-    # process the first two hundred every 2
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
@@ -327,32 +331,52 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope'):
 @jit(parallel=True)
 def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
                   extend=False):
-    ridx = df.i_ref.values
-    tidx = df.i_tar.values
-    rg = rgeno[:, ridx]
-    tg = tgeno[:, tidx]
+    """
+    Helper function to compute the correlation between variants from a genotype
+    array
+
+    :param df: Merged dataframe with the mapping of the positions in the genotypes
+    :param rgeno: Genotype array of the reference population
+    :param tgeno: Genotype array of the target population
+    :param threads: Number of threads to estimate memory use
+    :param max_memory: Memory limit
+    :param justd: Return the raw LD matrices insted of its dot product
+    :param extend: 'Circularize' the genome by extending both ends
+    :return:
+    """
+    # Get the mapping indices
+    ridx, tidx = df.i_ref.values, df.i_tar.values
+    # Subset the genotype arrays
+    rg, tg = rgeno[:, ridx], tgeno[:, tidx]
+    # extend the Genotpe at both end to avoid edge effects
     if extend:
-        # extend the Genotpe at both end to avoid edge effects
-        ridx_a, ridx_b = np.array_split(ridx, 2)
-        tidx_a, tidx_b = np.array_split(tidx, 2)
-        rg = da.concatenate([rgeno[:, (ridx_a[::-1][:-1])], rg,
-                             rgeno[:, (ridx_b[::-1][1:])]], axis=1)
-        tg = da.concatenate([tgeno[:, (tidx_a[::-1][:-1])], tg,
-                             tgeno[:, (tidx_b[::-1][1:])]], axis=1)
+        # get the indices of the subsetted genotype array
+        nidx = np.arange(rg.shape[1])
+        # Split the array in half (approximately)
+        idx_a, idx_b = np.array_split(nidx, 2)
+        # Get the extednded indices
+        i = np.concatenate([idx_a[::-1][:-1], nidx, idx_b[::-1][1:]])
+        # Re-subset the genotype arrays with the extensions
+        rg, tg = rg[:, i], tg[:, i]
+        # Compute the correltion as X'X/N
         rho_r = da.dot(rg.T, rg) / rg.shape[0]
         rho_t = da.dot(tg.T, tg) / tg.shape[0]
         # remove the extras
-        rho_r = rho_r[:, (ridx_a.shape[0] + 1):][:, :(ridx.shape[0])]
-        rho_r = rho_r[(ridx_a.shape[0] + 1):, :][:(ridx.shape[0]), :]
-        rho_t = rho_t[:, (tidx_a.shape[0] + 1):][:, :(tidx.shape[0])]
-        rho_t = rho_t[(tidx_a.shape[0] + 1):, :][:(tidx.shape[0]), :]
-        assert rho_r.shape[1] == ridx.shape[0]
-        assert rho_t.shape[1] == tidx.shape[0]
+        idx =  np.arange(i.shape[0])[idx_a.shape[0]-1: (nidx.shape[0] +
+                                                        idx_b.shape[0])]
+        rho_r, rho_t = rho_r[idx,:], rho_t[idx,:]
+        rho_r, rho_t = rho_r[:, idx], rho_t[:, idx]
+        # Make sure the shape match
+        assert rho_r.shape[1] == ridx.shape[0] == rho_r.shape[0]
+        assert rho_t.shape[1] == tidx.shape[0] == rho_t.shape[0]
     else:
+        # Just compute the correlations
         rho_r = da.dot(rg.T, rg) / rg.shape[0]
         rho_t = da.dot(tg.T, tg) / tg.shape[0]
     if justd:
+        # return the raw LD matrices
         return df.snp, rho_r, rho_t
+    # compute the cotagging/tagging scores
     cot = da.diag(da.dot(rho_r, rho_t))
     ref = da.diag(da.dot(rho_r, rho_r))
     tar = da.diag(da.dot(rho_t, rho_t))
@@ -361,6 +385,28 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
     stacked = da.rechunk(stacked, chunks=c_h_u_n_k_s)
     columns = ['snp', 'ref', 'tar', 'cotag']
     return dd.from_dask_array(stacked, columns=columns).compute()
+
+
+# ----------------------------------------------------------------------
+def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
+           justd=False, extend=False):
+    print('Computing LD score per window')
+    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
+                      suffixes=['_ref', '_tar'])
+    nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+    bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
+                       )
+    mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
+    delayed_results = [
+        dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
+                                    justd, extend) for window, df in
+        mbim.groupby('windows')]
+    with ProgressBar():
+        r = list(dask.compute(*delayed_results, num_workers=threads))
+    if justd:
+        return r
+    r = pd.concat(r)
+    return r
 
 
 # ----------------------------------------------------------------------
