@@ -246,31 +246,58 @@ def estimate_size(shape):
 
 # ----------------------------------------------------------------------
 def estimate_chunks(shape, threads, memory=None):
+    """
+    Estimate the appropriate chunks to split arrays in the dask format to made
+    them fit in memory. If Memory is None, it will be set to a tenth of the
+    total memory. It also takes into account the number of threads
+
+    :param tuple shape: Shape of the array to be chunkenized
+    :param threads: Number of threads intended to be used
+    :param memory: Memory limit
+    :return: The appropriate chunk in tuple form
+    """
     total = psutil.virtual_memory().available / 1E7  # a tenth of the memory
-    avail_mem = total if memory is None else memory
-    usage = estimate_size(shape) * threads
+    avail_mem = total if memory is None else memory  # Set available memory
+    usage = estimate_size(shape) * threads     # Compute threaded estimated size
+    # Determine number of chunks given usage and available memory
     n_chunks = np.ceil(usage / avail_mem).astype(int)
+    # Mute divided by zero error only for this block of code
     with np.errstate(divide='ignore',invalid='ignore'):
-        estimated = tuple(np.array(shape) / n_chunks)
-    chunks = min(shape, tuple(estimated))
-    return tuple(int(i) for i in chunks)
+        estimated = tuple(np.array(shape) / n_chunks)  # Get chunk estimation
+    chunks = min(shape, tuple(estimated))            # Fix if n_chunks is 0
+    return tuple(int(i) for i in chunks)  # Assure chunks is a tuple of integers
 
 
 # ----------------------------------------------------------------------
 @jit
-def single_score(subdf, geno, pheno, label):
+def single_score(subdf, geno, pheno, label, beta='slope'):
+    """
+    Execute single score per subset of snps prunned. This is a
+    helper to parallelized part of prune_it function.
+
+    :param beta: Column with the effect size
+    :param subdf: Subset of summary statistics dataframe
+    :param geno: genotype array
+    :param pheno: True phenotype
+    :param label: Name of the strategy being prunned
+    :return:
+    """
+    # Get the indices of the genotype array corresponding to the subset
     indices = subdf.i.tolist()
-    prs = geno[:, indices].dot(subdf.slope)
+    # Generate the PRS
+    prs = geno[:, indices].dot(subdf.loc[:, beta]).astype(float)
+    # Rapid estimation of R2 with the true phenotype
     regress = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
-    return {'Number of SNPs': subdf.shape[0], 'R2': regress ** 2, 'type': label}
+    return {'Number of SNPs': subdf.shape[0], 'R2': regress, 'type': label}
 
 
 # ----------------------------------------------------------------------
-def prune_it(df, geno, pheno, label, step=10, threads=1):
+def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope'):
     """
     Prune and score a dataframe of sorted snps
 
-    :param threads: Number of threads to use
+    :param str beta: Column with the effect size
+    :param int threads: Number of threads to use
     :param int step: Step of the pruning
     :param str label: Name of the current prunning
     :param pheno: Phenotype array
@@ -280,7 +307,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1):
     """
     print('Prunning %s...' % label)
     print('First 200')
-    gen = ((df.iloc[:i], geno, pheno, label) for i in
+    gen = ((df.iloc[:i], geno, pheno, label, beta) for i in
            range(1, min(201, df.shape[0] + 1), 1))
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     with ProgressBar():
