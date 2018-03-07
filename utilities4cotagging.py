@@ -169,43 +169,61 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
 
 # ---------------------------------------------------------------------------
 def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
-                   title=None):
+                   title=None, beta='slope', position='pos'):
     """
     perform a 'clumping' based on Cotagging score, but retain all the rest in
     the last part of the dataframe
 
+    :param str position: Label of column with the bp position
+    :param srt beta: Name of the column with the effect size
     :param str title: Title of the figure
     :param bool ascending: Order of the sort, by default reversed.
     :param str prefix: prefix for outputs
     :param pd.core.frame.DataFrame gwascotag: merged dataframe of cotag and gwas
     :param str column: name of the column to be sorted by in the cotag file
     """
+    # if done before, load it
     picklefile = '%s_%s.pickle' % (prefix, ''.join(column.split()))
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
             df, beforetail = pickle.load(F)
     else:
         print('Sorting File based on %s "clumping"...' % column)
-        gwascotag.loc[:, 'm_size'] = norm(abs(gwascotag.slope), 10, 150)
+        # Add the slope as normed size for plotting
+        gwascotag.loc[:, 'm_size'] = norm(abs(gwascotag.loc[:, beta]), 10, 150)
+        # Get groups in column (pseudo clump) from a sorted dataframe and retain
+        # the first occurence per group
         grouped = gwascotag.sort_values(by=column, ascending=ascending).groupby(
             column, as_index=False, sort=False).first()
+        # re-sort the resulting dataframe
         sorteddf = grouped.sort_values(by=column, ascending=ascending)
-        tail = gwascotag[~gwascotag.snp.isin(sorteddf.snp)]
+        # Add the rest of lines at the end
+        try:
+            tail = gwascotag[~gwascotag.snp.isin(sorteddf.snp)]
+        except AttributeError:
+            tail = gwascotag[~gwascotag.SNP.isin(sorteddf.SNP)]
         beforetail = sorteddf.shape[0]
-        df = sorteddf.copy()
+        df = sorteddf.copy()  # Work on a copy of the sorted dataframe
         if not tail.empty:
+            # Include the tail lines in a random order
             df = df.append(tail.sample(frac=1), ignore_index=True)
-        df = df.reset_index(drop=True)
-        df['index'] = df.index.tolist()
+        df = df.reset_index()
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
-    idx = df.dropna(subset=['beta']).index.tolist()
-    causals = df.loc[idx, :]
+    try:
+        # If causals in the dataframe
+        idx = df.dropna(subset=['beta']).index.tolist()
+        causals = df.loc[idx, :]
+
+    except KeyError:
+        causals = pd.DataFrame([])
     size = df.m_size
+    # Plot the scheme with position in x and rank (a.k.a Index) in y
+    gwascotag.loc[:,position] = gwascotag.loc[:,position].astype(int)
     f, ax = plt.subplots()
-    df.plot.scatter(x='pos', y='index', ax=ax, label=column)
+    df.plot.scatter(x=position, y='index', ax=ax, label=column)
     if not causals.empty:
-        causals.plot.scatter(x='pos', y='index', marker='*', c='k', ax=ax,
+        causals.plot.scatter(x=position, y='index', marker='*', c='k', ax=ax,
                              s=size[idx].values, label='Causals')
     if title is not None:
         plt.title(title)
@@ -231,11 +249,11 @@ def estimate_chunks(shape, threads, memory=None):
     total = psutil.virtual_memory().available / 1E7  # a tenth of the memory
     avail_mem = total if memory is None else memory
     usage = estimate_size(shape) * threads
-    if usage < avail_mem:
-        return shape
-    else:
-        n_chunks = np.floor(usage / avail_mem).astype(int)
-        return tuple([int(max([1, i])) for i in np.array(shape) / n_chunks])
+    n_chunks = np.ceil(usage / avail_mem).astype(int)
+    with np.errstate(divide='ignore',invalid='ignore'):
+        estimated = tuple(np.array(shape) / n_chunks)
+    chunks = min(shape, tuple(estimated))
+    return tuple(int(i) for i in chunks)
 
 
 # ----------------------------------------------------------------------

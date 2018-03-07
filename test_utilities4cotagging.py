@@ -58,6 +58,8 @@ def test_norm_array(test_input, a, b, expected):
 
 
 bed = os.path.join(test_folder, 'toy_bed')
+
+
 @pytest.mark.parametrize("bfile,freq_thresh,threads,flip,check,pickled", [
     (bed, 0, 1, False, False, os.path.join(test_folder, 'toy_bed_plain.pickle')
      ), (bed, 0, 2, False, False, os.path.join(test_folder,
@@ -73,3 +75,35 @@ def test_read_geno(bfile, freq_thresh, threads, flip, check, pickled):
     pd.testing.assert_frame_equal(bim, expected[0])
     pd.testing.assert_frame_equal(fam, expected[1])
     np.testing.assert_allclose(g.compute(), expected[2].compute())
+
+
+@pytest.mark.parametrize("ascending,column", [(True, 'Index'), (False, 'Index')]
+                         )
+# TODO: Inlcude a test case for other columns
+def test_smartcotagsort(ascending, column):
+    with open(os.path.join(test_folder, 'toy_Cotagging.pickle'), 'rb') as F:
+        df, tail = pickle.load(F)
+    out = smartcotagsort('prefix', df, column=column, ascending=ascending,
+                         beta='BETA', position='BP')
+    result, before_tail = out
+    if ascending:
+        np.testing.assert_equal(result.index.values, df.Index.values)
+    else:
+        np.testing.assert_equal(result.index.values,
+                                sorted(df.Index.values, reverse=True))
+    execute_line('rm prefix_*')
+
+
+@pytest.mark.parametrize("shape,expected", [
+    ((10, 10), 0.0008), ((10, 1000), 80000), ((45000,3000),1080000000)])
+def test_estimate_size(shape, expected):
+    actual = estimate_size(shape)
+    np.testing.equal(actual, expected)
+
+
+@pytest.mark.parametrize("shape,threads,memory,expected", [
+    ((10, 10), 1, None, (10,10)), ((10, 10), 1, 0.0007, (5,5)),
+    ((10, 1000), 1, None, (10, 1000)), ((10, 1000), 8, 0.1, (1, 142))])
+def test_estimate_chunks(shape, threads, memory, expected):
+    result = estimate_chunks(shape, threads, memory)
+    assert result == expected
