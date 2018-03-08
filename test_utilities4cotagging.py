@@ -176,11 +176,45 @@ def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
 
 
 @pytest.mark.parametrize(
-    "rgeno,rbim,tgeno,tbim,kbwindow,threads,max_memory,justd,extend,exp",[
-    (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, True, False, 'toy_test_ds.pickle'),
-
+    "rgeno,rbim,tgeno,tbim,kbwindow,threads,max_memory,justd,extend,exp", [
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, True, False,
+         'toy_test_ds.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, False, False,
+         'toy_test_cotd.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, False,
+         'toy_test_ds.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, False,
+         'toy_test_cotd.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, True,
+         'toy_test_d_ext.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, True,
+         'toy_test_cotd_ext.pickle')
 ])
 def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
                 extend, exp):
-    r = get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
-               extend)
+    cwd=os.getcwd()
+    os.chdir(test_folder)
+    with open(exp, 'rb') as F:
+        expected = pickle.load(F)
+    out = get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
+                 extend)
+    if isinstance(out, tuple) or isinstance(out, list):
+        assert (out[0][0] == expected[0]).all()
+        np.testing.assert_allclose(out[0][1].compute(), expected[1].compute()
+                                   )
+        np.testing.assert_allclose(out[0][2].compute(), expected[2].compute()
+                                   )
+    else:
+        pd.testing.assert_frame_equal(out, expected)
+    os.chdir(cwd)
+
+
+result = [0.2, 0.2, 0.5, 0.25, 0.5, 0.5, 0.5]
+
+
+@pytest.mark.parametrize("geno,keep_allele_order,result", [
+    (EUR_g, False, result)
+                         ])
+def test_compute_maf(geno, keep_allele_order, result):
+    assert [compute_maf(geno[:,i].compute(), keep_allele_order) for i in
+            range(EUR_g.shape[1])] == result

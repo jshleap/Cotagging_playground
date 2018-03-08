@@ -64,7 +64,8 @@ def single_block(geno, df, block):
 # ----------------------------------------------------------------------
 def blocked_r2(bim, geno, kb_window=1000, threads=1):
     """
-    Compute the ld (R2) statistic per window
+    Compute the ld (R2) statistic per window in single population
+
     :param bim: bim file from a plink bed fileset
     :param geno: genotypic array (dask) as read from pandas_plink
     :param kb_window: size of the window in kb
@@ -390,19 +391,41 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
 # ----------------------------------------------------------------------
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
            justd=False, extend=False):
+    """
+    Get the LD blocks from snp overlap between two populations
+
+    :param rgeno: Genotype array of the reference populartion
+    :param rbim: Mapping variant info and the genotype array position for ref
+    :param tgeno: Genotype array of the target populartion
+    :param tbim: Mapping variant info and the genotype array position for tar
+    :param kbwindow: Size of the window in KB
+    :param threads: Number of threads to use for computation
+    :param max_memory: Memory limit
+    :param justd: Return only the raw LD matrices or the tagging/cotagging
+    :param extend: 'Circularize' the genome by extending both ends
+    :return: A list of tuples (or dataframe if not justd) with the ld per blocks
+    """
     print('Computing LD score per window')
-    mbim = rbim.merge(tbim, on=['chrom', 'snp', 'pos'],
-                      suffixes=['_ref', '_tar'])
+    # Get the overlapping snps and their info
+    shared = ['chrom', 'snp', 'pos']
+    mbim = rbim.merge(tbim, on=shared, suffixes=['_ref', '_tar'])
+    # Get the number of bins or loci to be computed
     nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+    # Get the limits of the loci
     bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
                        )
+    if bins.shape[0] == 1:
+        # Fix the special case in which the window is much bigger than the range
+        bins = np.append(bins, kbwindow * 1000)
+    # Get the proper intervals into the dataframe
     mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
+    # Compute each locus in parallel
     delayed_results = [
         dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
                                     justd, extend) for window, df in
         mbim.groupby('windows')]
     with ProgressBar():
-        r = list(dask.compute(*delayed_results, num_workers=threads))
+        r = tuple(dask.compute(*delayed_results, num_workers=threads))
     if justd:
         return r
     r = pd.concat(r)
@@ -410,8 +433,8 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
 
 
 # ----------------------------------------------------------------------
-def compute_maf(dask_column, keep_allele_order=False):
-    c = Counter(dask_column)
+def compute_maf(column, keep_allele_order=False):
+    c = Counter(column)
     if keep_allele_order:
         k = sorted(c.keys(), reverse=False)[:2]
         maf = sum(c[i] for i in k) / (sum(c.values()) * 2)
