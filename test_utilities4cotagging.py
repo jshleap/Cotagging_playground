@@ -180,7 +180,7 @@ def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
     (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, True, False, 'toy_test_ds.pickle'),
 
 ])
-def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
-           justd=False, extend=False):
+def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
+                extend, exp):
     r = get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
                extend)
