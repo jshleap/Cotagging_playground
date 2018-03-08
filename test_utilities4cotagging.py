@@ -28,7 +28,8 @@ sumstats_subset = sumstats[sumstats.SNP.isin(shared_snps)]
 idx = b[b.snp.isin(shared_snps)].i.tolist()
 sumstats_subset.loc[:, 'i'] = idx
 pheno = f.copy()
-pheno['PHENO'] = g[:,idx].dot(sumstats_subset.BETA).compute().astype(float)
+pheno['PHENO'] = g[:,idx].dot(sumstats_subset.BETA.values.astype(float)
+                              ).compute()
 (EUR_bim, EUR_fam, EUR_g) = read_geno(bed, 0.01, 1, False, False)
 (AFR_bim, AFR_fam, AFR_g) = read_geno(bed+'2', 0.01, 1, False, False)
 EUR_g = (EUR_g - EUR_g.mean(axis=0)) / EUR_g.std(axis=0)
@@ -174,3 +175,12 @@ def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
     os.chdir(cwd)
 
 
+@pytest.mark.parametrize(
+    "rgeno,rbim,tgeno,tbim,kbwindow,threads,max_memory,justd,extend,exp",[
+    (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, True, False, 'toy_test_ds.pickle'),
+
+])
+def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
+           justd=False, extend=False):
+    r = get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
+               extend)
