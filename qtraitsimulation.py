@@ -10,7 +10,7 @@ import time
 
 import matplotlib
 
-from utilities4cotagging_old import *
+from utilities4cotagging import *
 
 matplotlib.use('Agg')
 plt.style.use('ggplot')
@@ -45,37 +45,35 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     seed = np.random.randint(10000) if seed is None else seed
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
-    snps2 = None
+    # read the genotype files of the reference population
+    (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check)
     # get indices of second pop if needed
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
         (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check)
         snps2 = bim2.snp
+        # Save some memory
         del bim2, fam2, G2
-    # read rhe genotype files
-    (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check)
-    if snps2 is not None:
-        print('Filtering current population with second set')
-        print('Genotype matrix shape before', g.shape)
+        print('Filtering current population with second set:')
+        print('    Genotype matrix shape before', g.shape)
         # subset the genotype file
         indices = bim[bim.snp.isin(snps2)].i
         g = g[:, indices.tolist()]
         bim = bim[bim.i.isin(indices)].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
-        print('Genotype matrix shape after', g.shape)
+        print('    Genotype matrix shape after', g.shape)
+    # Define pi as 1 or as the mean variance to weight on the ncausals for the
+    # computation of the h2 per locus
     pi = g.var(axis=0).mean() if usepi else 1
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
-        # G = (G.T - G.mean(axis=1)) / G.std(axis=1)
         g = (g - g.mean(axis=0)) / g.std(axis=0)
-    # else:
-    #     # Transpose G so is n x m
-    #     G = G.transpose()
     # Set some local variables
     allele = '%s.alleles' % prefix
     totalsnps = '%s.totalsnps' % prefix
     allsnps = g.shape[1]
+    # Compute heritability per snp
     h2_snp = h2 / (ncausal*pi)
     std = np.sqrt(h2_snp)
     # write the possible snps and the allele file
@@ -92,7 +90,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals = bim[bim.snp.isin(causaleff.snp)].copy()
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
-        print(causals.head())
+        # print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.iloc[idx].copy()
@@ -114,9 +112,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         # Store them
         causals['beta'] = pre_beta  # .compute()
         causals = causals.dropna()
+        # make sure we have the right causals
         assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
-    else:
-        pre_beta = causaleff.beta
     nc = causals.reindex(columns=['snp', 'beta'])
     bidx = bim[bim.snp.isin(nc.snp)].index.tolist()
     bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i',
@@ -126,7 +123,6 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     idx = bim.dropna(subset=['beta']).i.values
     # Score
     g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads)
-
     if causaleff is not None:
         assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
     fam['gen_eff'] = g_eff
