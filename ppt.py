@@ -12,7 +12,7 @@ import igraph
 import dask.dataframe as dd
 import matplotlib
 matplotlib.use('Agg')
-from qtraitsimulation import *
+from qtraitsimulation_old import *
 from plinkGWAS import *
 import gc
 from chest import Chest

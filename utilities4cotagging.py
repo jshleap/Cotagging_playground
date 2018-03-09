@@ -122,7 +122,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
     :param freq_thresh: If greater than 0, limit MAF to at least freq_thresh
     :param threads: Number of threads to use in computation
     :param flip: Whether to check for flips and to fix the genotype file
-    :param check: Wheather to check for constant sites
+    :param check: Whether to check for constant sites
     :return: Dataframes (bim, fam) and array corresponding to the bed fileset
     """
     (bim, fam, g) = read_plink(bfile)   # read the files using pandas_plink

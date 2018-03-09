@@ -13,7 +13,7 @@ from ppt import pplust
 from ranumo import ranumo
 from plinkGWAS import plink_gwas
 from prankcster import prankcster
-from qtraitsimulation import qtraits_simulation
+from qtraitsimulation_old import qtraits_simulation
 
 def execute(args):
     """

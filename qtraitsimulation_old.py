@@ -1,34 +1,46 @@
 #!/usr/bin/env python
 # coding:utf-8
 """
-  Author:  Jose Sergio Hleap --<2017>
-  Purpose: Simulate quantitative phenotypes given a genotype
+  Author:  Jose Sergio Hleap --<>
+  Purpose: Simulate quantitative phenotypes given 
   Created: 09/30/17
 """
 import argparse
-import time
-
+import dask.array as da
 import matplotlib
-
-from utilities4cotagging_old import *
+from pandas_plink import read_plink
 
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import time
+
 plt.style.use('ggplot')
+from utilities4cotagging_old import *
+from numba import double
+from numba.decorators import jit
+
+
+# ----------------------------------------------------------------------
+def get_SNP_dist(bfile, causals):
+    """
+    compute the distance between snps (for now only for uniformly distributed)
+    :param str bfile: prefix of the plink bedfileset
+    :param list causals: Causal variants to simulate
+    """
+    bim = pd.read_table('%s.bim' % bfile, delim_whitespace=True, header=None,
+                        names=['CHR', 'SNP', 'cm', 'BP', 'A1', 'A2'])
+    bim = bim[bim.SNP.isin(causals)]
+    return int(np.around(bim.BP.diff().mean() / 1000))
 
 
 # ----------------------------------------------------------------------
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
-             f_thr=0.01, seed=None, causaleff=None, uniform=False, usepi=False,
-             snps=None, threads=1, flip=False, check=False):
+             f_thr=0.1, seed=None, causaleff=None, uniform=False, usepi=False,
+             snps=None, threads=1, flip=False, max_memory=None, check=False):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
 
-    :param check: Whether to check for constant sites or not
-    :param flip: Whether to flip the genotype where MAF > 0.5 or not
-    :param threads: Number of thread to use in the parallelizing
-    :param usepi: Use the genotype variance to weight on the h2_snp
-    :param f_thr: MAF threshold
     :param prefix: Prefix of outputs
     :param bfile: Plink 1.9 binary fileset prefix for the first (or only) pop
     :param h2: Desired heritability
@@ -42,7 +54,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     :return: genetic matrix, bim and fam dataframes and the causal vector
     """
     # set random seed
-    seed = np.random.randint(10000) if seed is None else seed
+    seed = np.random.randint(1e4) if seed is None else seed
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
     snps2 = None
@@ -53,29 +65,32 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         snps2 = bim2.snp
         del bim2, fam2, G2
     # read rhe genotype files
-    (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check)
+    (bim, fam, G) = read_geno(bfile, f_thr, threads, flip=flip, check=check)
     if snps2 is not None:
         print('Filtering current population with second set')
-        print('Genotype matrix shape before', g.shape)
+        print('Genotype matrix shape before', G.shape)
         # subset the genotype file
         indices = bim[bim.snp.isin(snps2)].i
-        g = g[:, indices.tolist()]
+        G = G[:, indices.tolist()]
         bim = bim[bim.i.isin(indices)].reset_index(drop=True)
         bim['i'] = bim.index.tolist()
-        print('Genotype matrix shape after', g.shape)
-    pi = g.var(axis=0).mean() if usepi else 1
+        print('Genotype matrix shape after', G.shape)
+    # get MAFs
+    m, n = G.shape
+
+    pi = G.var(axis=0).mean() if usepi else 1
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
         # G = (G.T - G.mean(axis=1)) / G.std(axis=1)
-        g = (g - g.mean(axis=0)) / g.std(axis=0)
+        G = (G - G.mean(axis=0)) / G.std(axis=0)
     # else:
     #     # Transpose G so is n x m
     #     G = G.transpose()
     # Set some local variables
     allele = '%s.alleles' % prefix
     totalsnps = '%s.totalsnps' % prefix
-    allsnps = g.shape[1]
+    allsnps = G.shape[1]
     h2_snp = h2 / (ncausal*pi)
     std = np.sqrt(h2_snp)
     # write the possible snps and the allele file
@@ -90,6 +105,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         print('using causal effect')
         cols = ['snp', 'beta']
         causals = bim[bim.snp.isin(causaleff.snp)].copy()
+        pre_beta = causaleff.beta
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
         print(causals.head())
@@ -114,9 +130,6 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         # Store them
         causals['beta'] = pre_beta  # .compute()
         causals = causals.dropna()
-        assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
-    else:
-        pre_beta = causaleff.beta
     nc = causals.reindex(columns=['snp', 'beta'])
     bidx = bim[bim.snp.isin(nc.snp)].index.tolist()
     bim = bim.reindex(columns=['chrom', 'snp', 'cm', 'pos', 'a0', 'a1', 'i',
@@ -125,7 +138,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print(bim.dropna(subset=['beta']).head())
     idx = bim.dropna(subset=['beta']).i.values
     # Score
-    g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads)
+    assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
+    g_eff = G[:, idx].dot(causals.beta).compute(num_workers=threads)
 
     if causaleff is not None:
         assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
@@ -135,7 +149,117 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
-    return g, bim, fam, causals.beta
+    return G, bim, fam, causals.beta
+
+
+# ----------------------------------------------------------------------
+def TruePRS(outprefix, bfile, h2, ncausal, plinkexe, snps=None, frq=None,
+            causaleff=None, bfile2=None, freqthreshold=0.1, maxmem=1700,
+            threads=1, seed=None, uniform=False):
+    """
+    Generate TRUE causal effects and PRS. Also, subset the SNPs based on
+    frequency
+
+
+    ??
+
+    :param seed: Random seed for the random functions
+    :param threads: Number of threads to use in plink
+    :param outprefix: Prefix for outputs
+    :param bfile: prefix of the plink bedfileset
+    :param h2: Desired heritability
+    :param ncausal: Number of causal variants to simulate
+    :param plinkexe: path to plink executable
+    :param snps: Series with the names of causal snps
+    :param frq: DataFrame with the MAF frequencies
+    :param causaleff: DataFrame with the true causal effects
+    :param bfile2: prefix of the plink bedfileset on a second population
+    :param float freqthreshold: Lower threshold to filter MAF by
+    :param uniform: pick uniformingly distributed causal variants
+    """
+    # set the seed
+    seed = np.random.randint(1e4) if seed is None else seed
+    print('using seed %d' % seed)
+    np.random.seed(seed=seed)
+    # Get the per snp heritability
+    h2_snp = h2 / ncausal
+    # Set some local variables
+    maf = 'MAF'
+    a1 = 'A1'
+    allele = '%s.alleles' % outprefix
+    totalsnps = '%s.totalsnps' % outprefix
+    if not os.path.isfile('%s.full' % outprefix):
+        # Read freq file
+        if frq is None:
+            frq = read_freq(bfile, plinkexe, freq_threshold=freqthreshold)
+            if bfile2 is not None:
+                frq = frq.merge(read_freq(bfile2, plinkexe,
+                                          freq_threshold=freqthreshold),
+                                on=['CHR', 'SNP'])
+                maf = 'MAF_x'
+                a1 = 'A1_x'
+        allsnps = frq.shape[0]
+        print('Total Number of variants available: %d' % allsnps)
+        frq.SNP.to_csv(totalsnps, sep=' ', header=False, index=False)
+        frq.to_csv(allele, sep=' ', header=False, index=False)
+        # Get causal mutation indices randomly distributed
+        if ncausal > allsnps:
+            print('More causals than available snps. Setting it to %d' %
+                  allsnps)
+            ncausal = allsnps
+        if causaleff is not None:
+            cols = ['SNP', 'eff', 'norm', 'beta']
+            causals = frq[frq.SNP.isin(causaleff.SNP)]
+            causals = causals.merge(causaleff.loc[:, cols], on='SNP')
+        elif uniform:
+            causals = frq.SNP.values[np.linspace(0, frq.shape[0] - 1,
+                                                 num=ncausal, dtype=int)]
+            av_dist = get_SNP_dist(bfile, causals)
+            causals = frq[frq.SNP.isin(causals)]
+            print('Causal SNPs are %d kbp apart on average' % av_dist)
+        elif snps is None:
+            causals = frq.sample(ncausal, replace=False, random_state=seed)
+        else:
+            causals = frq[frq.SNP.isin(snps)]
+        # If causal effects are provided use them, otherwise get them
+        if causaleff is None:
+            std = np.sqrt(h2_snp)
+            g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
+            # make sure is the correct variance when samples are small
+            # while not np.allclose(g_eff.var(), h2_snp, rtol=0.05):
+            #    g_eff = np.random.normal(loc=0, scale=std, size=ncausal)
+            causals.loc[:, 'eff'] = g_eff
+        # write snps and effect to score file
+        mafs = causals.maf
+        causals.loc[:, 'norm'] = np.sqrt(2 * mafs * (1 - mafs))
+        causals.loc[:, 'beta'] = causals.loc[:, 'eff'] / causals.norm
+        scfile = causals.sort_index()
+        # Write score to file
+        keep = ['SNP', a1, 'beta', 'eff']
+        scfile.loc[:, keep].to_csv('%s.score' % outprefix, sep=' ',
+                                   header=False, index=False)
+        scfile.to_csv('%s.full' % outprefix, sep=' ', index=False)
+    else:
+        scfile = pd.read_table('%s.full' % outprefix, delim_whitespace=True,
+                               header=None, names=['SNP', 'Allele', 'beta'])
+    # Score using plink
+    score = ('%s --bfile %s --score %s.full 2 3 9 sum header --allow-no-sex '
+             '--extract %s --a1-allele %s 3 2 --out %s --memory %d --threads '
+             '%d')
+    if not os.path.isfile('%s.profile' % outprefix):
+        executeLine(score % (plinkexe, bfile, outprefix, totalsnps, allele,
+                             outprefix, maxmem, threads))
+    if not os.path.isfile('%s_unnorm.profile' % outprefix):
+        score = (
+            '%s --bfile %s --score %s.full 2 3 7 header sum --allow-no-sex '
+            '--extract %s --a1-allele %s 3 2 --out %s --memory %d --threads %d')
+        executeLine(score % (plinkexe, bfile, outprefix, totalsnps, allele,
+                             '%s_unnorm' % outprefix, maxmem, threads))
+    # Read scored and rename SCORE column,
+    score = pd.read_table('%s.profile' % outprefix, delim_whitespace=True)
+    score = score.rename(columns={'SCORESUM': 'gen_eff'})
+
+    return score, scfile, totalsnps
 
 
 # ----------------------------------------------------------------------
@@ -196,10 +320,11 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
 def plot_pheno(prefix, prs_true, quality='pdf'):
     """
     Plot phenotype histogram
-
-    :param prs_true: Output of the create_pheno function with true PRSs
-    :param prefix: prefix for outputs
-    :param quality: quality of the plot (e.g. pdf, png, jpg)
+    
+    :param :class pd.DataFrame prs_true: Output of the create_pheno function 
+    with true PRSs
+    :param str prefix: prefix for outputs
+    :param str quality: quality of the plot (e.g. pdf, png, jpg)
     """
     prs_true.loc[:, ['PHENO', 'gen_eff', 'env_eff']].hist(alpha=0.5)
     plt.savefig('%s.%s' % (prefix, quality))
@@ -212,29 +337,29 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
                        causaleff=None, noenv=False, plothist=False, bfile2=None,
                        freqthreshold=0.01, quality='png', seed=None, flip=False,
                        uniform=False, normalize=False, max_memory=None,
-                       check=False, remove_causals=False):
+                       check=False, remove_causals=False, **kwargs):
     """
-    Execute the code. This code should output a score file, a pheno file, and
+    Execute the code. This code should output a score file, a pheno file, and 
     intermediate files with the dataframes produced
-
-    :param remove_causals: Remove the causal variants from the genotype file
-    :param check: Whether to check for constant sites or not
-    :param max_memory: Memory limit
-    :param flip: Whether to flip the genotype where MAF > 0.5 or not
-    :param plothist: Whether to plot the phenotype histogram or not
-    :param snps: List or array of causal snps
+    
     :param normalize: Normalize the genotype
-    :param outprefix: Prefix for outputs
-    :param bfile: prefix of the plink bedfileset
-    :param h2: Desired heritability
-    :param ncausal: Number of causal variants to simulate
+    :param validate: prepare train/test sets for crossvalidation
+    :param str outprefix: Prefix for outputs
+    :param str bfile: prefix of the plink bedfileset
+    :param float h2: Desired heritability
+    :param int ncausal: Number of causal variants to simulate
+    :param str plinkexe: path to plink executable
+    :param :class pd.Series snps: Series with the names of causal snps
+    :param :class pd.DataFrame frq: DataFrame with the MAF frequencies
     :param causaleff: File with DataFrame with the true causal effects
-    :param noenv: whether or not environmental effect should be added
-    :param freqthreshold: Lower threshold to filter MAF by
-    :param bfile2: prefix of the plink bedfileset on a second population
-    :param quality: quality of the plot (e.g. pdf, png, jpg)
-    :param seed: random seed to use in sampling
-    :param uniform: pick uniformingly distributed causal variants
+    :param bool noenv: whether or not environmental effect should be added
+    :param float freqthreshold: Lower threshold to filter MAF by
+    :param str bfile2: prefix of the plink bedfileset on a second population
+    :param str quality: quality of the plot (e.g. pdf, png, jpg)
+    :param int maxmem: Maximum allowed memory
+    :param int trheads: Maximum number of threads to use
+    :param int seed: random seed to use in sampling
+    :param bool uniform: pick uniformingly distributed causal variants
     """
     now = time.time()
     line = "Performing simulation with h2=%.2f, and %d causal variants"
@@ -250,12 +375,12 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
                     causaleff=causaleff, uniform=uniform, f_thr=freqthreshold,
                     flip=flip, max_memory=max_memory, check=check)
-        g, bim, truebeta, vec = true_prs(**opts)
+        G, bim, truebeta, vec = true_prs(**opts)
         with open(picklefile, 'wb') as F:
-            pickle.dump((g, bim, truebeta, vec), F)
+            pickle.dump((G, bim, truebeta, vec), F)
     else:
         with open(picklefile, 'rb') as F:
-            g, bim, truebeta, vec = pickle.load(F)
+            G, bim, truebeta, vec = pickle.load(F)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
         pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv)
     else:
@@ -268,11 +393,11 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
     if remove_causals:
         print('Removing causals from files!!')
         bim = bim[~bim.snp.isin(causals.snp)]
-        g = g[:, bim.i.values]
-        bim.loc[:, 'i'] = list(range(g.shape[1]))
+        G = G[:, bim.i.values]
+        bim.loc[:, 'i'] = list(range(G.shape[1]))
         bim.reset_index(drop=True, inplace=True)
     print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
-    return pheno, realized_h2, (g, bim, truebeta, causals)
+    return pheno, realized_h2, (G, bim, truebeta, causals)
 
 
 if __name__ == '__main__':
@@ -285,9 +410,9 @@ if __name__ == '__main__':
     parser.add_argument('-P', '--plinkexe', default='~/Programs/plink_mac/plink'
                         )
     parser.add_argument('-e', '--noenv', default=False, action='store_true')
-    parser.add_argument('-q', '--quality', help='type of plots (png, pdf)',
+    parser.add_argument('-q', '--quality', help=('type of plots (png, pdf)'),
                         default='png')
-    parser.add_argument('--plothist', help='Plot histogram of phenotype',
+    parser.add_argument('--plothist', help=('Plot histogram of phenotype'),
                         default=False, action='store_true')
     parser.add_argument('--causal_eff', help=('Provide causal effects file as'
                                               'produced by a previous run of '
@@ -308,10 +433,13 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--avoid_causals', default=False,
                         action='store_true', help='Remove causals from set')
 
+
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal,
-                       plothist=args.plothist, causaleff=args.causal_eff,
-                       quality=args.quality, freqthreshold=args.freqthreshold,
-                       bfile2=args.bfile2, seed=args.seed, uniform=args.uniform,
-                       flip=args.flip, max_memory=args.maxmem, check=args.check,
+                       args.plinkexe, plothist=args.plothist,
+                       causaleff=args.causal_eff, quality=args.quality,
+                       freqthreshold=args.freqthreshold, bfile2=args.bfile2,
+                       maxmem=args.maxmem, threads=args.threads,
+                       seed=args.seed, uniform=args.uniform, flip=args.flip,
+                       max_memory=args.maxmem, check=args.check,
                        remove_causals=args.avoid_causals)

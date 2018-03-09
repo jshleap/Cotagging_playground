@@ -209,8 +209,7 @@ def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
     os.chdir(cwd)
 
 
-result = [0.2, 0.2, 0.5, 0.25, 0.5, 0.5, 0.5]
-
+result = [0.25, 0.25, 0.5, 0.5, 0.2, 0.5, 0.5]
 
 @pytest.mark.parametrize("geno,keep_allele_order,result", [
     (EUR_g, False, result)
