@@ -53,10 +53,11 @@ def test_create_pheno(prefix, h2, noenv):
     expected = os.path.join(test_folder, prefix)
     with open(expected, 'rb') as F:
         _, _, fam, _ = pickle.load(F)
-    pheno, realized_h2 = create_pheno(prefix, h2, fam, noenv)
+    pheno, realized_h2 = create_pheno("prefix", h2, fam, noenv)
     den = pheno.gen_eff.var() + pheno.env_eff.var()
     est_h2 = pheno.gen_eff.var() / den
     #np.testing.assert_allclose(h2, est_h2, rtol=0.05, atol=0.05)
     np.testing.assert_allclose(pheno.PHENO.var(), 1, rtol=1E-2, atol=1E-2)
     np.testing.assert_allclose(realized_h2, est_h2, rtol=1E-3, atol=1E-3)
+    [os.remove(x) for x in glob('prefix.*')]
     

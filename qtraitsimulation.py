@@ -155,13 +155,11 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
     if noenv:
         env_effect = np.zeros(nind)
     else:
+        # Compute the enviromental effect as with a variance of 1 - Va, thereby
+        # guaranting that Vp = 1
         va = prs_true.gen_eff.var()
-        # std = np.sqrt((va / h2) - va)
         std = np.sqrt(max(1 - va, 0))
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
-        # for small sample sizes force to be close to the expected heritability
-        # while not np.allclose(env_effect.var(), 1 - h2, rtol=0.05):
-        # env_effect = np.random.normal(loc=0, scale=std, size=nind)
     # Include environmental effects into the dataframe
     prs_true['env_eff'] = env_effect
     # Generate the phenotype from the model Phenotype = genetics + environment
