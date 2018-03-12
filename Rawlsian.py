@@ -45,10 +45,10 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
 
 def main(args):
     rawls_final = '%s_finaldf.tsv' % args.prefix
+    refl, tarl = args.labels
     if not os.path.isfile(rawls_final):
         seed = np.random.randint(1e4) if args.seed is None else args.seed
         memory = 1E9 if args.maxmem is None else args.maxmem
-        refl, tarl = args.labels
         # make simulations
         print('Simulating phenotype for reference population %s \n' % refl)
         opts = {'outprefix': refl, 'bfile': args.refgeno, 'h2': args.h2,
@@ -110,7 +110,7 @@ def main(args):
         res.to_csv(rawls_final, sep='\t', index=False)
     else:
         res = pd.read_table(rawls_final, sep='\t')
-        tpheno = pd.read_table('%s.prs_pheno.gz' % args.prefix, sep='\t')
+        tpheno = pd.read_table('%s.prs_pheno.gz' % tarl, sep='\t')
         max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
         with open('t_r2.pickle', 'rb') as F:
             pickle.dump(F)
