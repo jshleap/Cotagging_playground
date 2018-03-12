@@ -30,6 +30,9 @@ matplotlib.use('Agg')
 plt.style.use('ggplot')
 
 
+# TODO: Include cache in all dask.compute with the available memory:
+# TODO: cache = Chest(path='/path/to/dir', available_memory=8e9)  # Use 8GB
+
 # ----------------------------------------------------------------------
 def t_sf(t, df):
     """

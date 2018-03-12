@@ -26,6 +26,9 @@ from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
 
+# TODO: Include cache in all dask.compute with the available memory:
+# TODO: cache = Chest(path='/path/to/dir', available_memory=8e9)  # Use 8GB
+
 # Numbafy linregress (makes it a bit faster)
 lr = jit(linregress)
 
