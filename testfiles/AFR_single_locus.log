@@ -1,0 +1,38 @@
+PLINK v1.90b3.45 64-bit (13 Jan 2017)
+Options in effect:
+  --allow-no-sex
+  --bfile ../AFR
+  --extract range myrange.txt
+  --geno 0.1
+  --hwe 1e-6
+  --keep-allele-order
+  --maf 0.01
+  --make-bed
+  --mind 0.1
+  --out AFR_single_locus
+
+Hostname: scabiosa.local
+Working directory: /Volumes/project/gravel/hleap_projects/Cotagging/new2018/single_locus
+Start time: Thu Feb  1 17:26:42 2018
+
+Random number seed: 1517524002
+32768 MB RAM detected; reserving 16384 MB for main workspace.
+8661 variants loaded from .bim file.
+45000 people (0 males, 0 females, 45000 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to AFR_single_locus.nosex .
+--extract range: 7960 variants excluded.
+--extract range: 701 variants remaining.
+0 people removed due to missing genotype data (--mind).
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 45000 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+0 variants removed due to missing genotype data (--geno).
+--hwe: 0 variants removed due to Hardy-Weinberg exact test.
+115 variants removed due to minor allele threshold(s)
+(--maf/--max-maf/--mac/--max-mac).
+586 variants and 45000 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to AFR_single_locus.bed + AFR_single_locus.bim +
+AFR_single_locus.fam ... done.
+
+End time: Thu Feb  1 17:26:45 2018
