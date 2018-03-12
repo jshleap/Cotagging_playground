@@ -165,6 +165,8 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
     bim = bim.reset_index(drop=True)    # Get the indices in order
     # Fix the i such that it matches the genotype indices
     bim['i'] = bim.index.tolist()
+    # Get chunks apropriate with the number of threads
+    g = g.rechunk(estimate_chunks(g.shape, threads))
     return bim, fam, g
 
 

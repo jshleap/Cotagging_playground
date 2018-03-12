@@ -52,7 +52,7 @@ def main(args):
                 'ncausal': args.ncausal, 'normalize': args.normalize,
                 'uniform': args.uniform, 'snps': None, 'seed': seed,
                 'bfile2': args.targeno, 'flip': args.gflip,
-                'freq_thresh': args.freq_thresh}
+                'freq_thresh': args.freq_thresh, 'threads': args.threads}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # randomize individuals to check if it changes the result
         # shuffle rerefence individuals

@@ -280,11 +280,6 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         if pheno is None:
             # If pheno is not provided, simulate it using qtraits_simulation
             options.update(kwargs)
-            # options2 = dict(
-            #     prefix=prefix, h2=kwargs['h2'], ncausal=kwargs['ncausal'],
-            #     normalize=kwargs['normalize'], f_thr=0, seed=seed,
-            #     uniform=kwargs['uniform'], usepi=False, snps=kwargs['snps'],
-            #     threads=1, flip=False, check=False)
             pheno, h2, gen = qtraits_simulation(prefix, **options)
             (geno, bim, truebeta, vec) = gen
             print('plink_free_gwas', bim.shape)
