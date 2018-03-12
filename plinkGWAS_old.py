@@ -93,7 +93,7 @@ def high_precision_pvalue(df, r):
     r = r if np.abs(r) != 1.0 else mp.mpf(0.9999999999999999) * mp.sign(r)
     den = ((1.0 - r) * (1.0 + r))
     t = r * np.sqrt(df / den)
-    return t_sf(np.abs(t), df)
+    return t_sf(np.abs(t), df) * 2
 
 
 # ----------------------------------------------------------------------
@@ -332,7 +332,7 @@ def do_pca(G, n_comp):
 
 # ----------------------------------------------------------------------
 def load_previous_run(prefix, threads):
-    # TODO: not working check chinks
+    # TODO: not working check chunks
     pfn = '%s_phenos.hdf5' % prefix
     gfn = '%s.geno.hdf5' % prefix
     f = h5py.File(gfn, 'r')

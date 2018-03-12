@@ -105,7 +105,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # If causal effects are provided use them, otherwise get them
     if causaleff is None:
         # chunks = estimate_chunks((ncausal,), threads)
-        if ncausal < 5:
+        if ncausal <= 5:
             pre_beta = np.repeat(std, ncausal)
         else:
             pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
@@ -201,19 +201,19 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 
 
 # ----------------------------------------------------------------------
-# TODO: include test of correlation of variants (LD)??
-def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
-                       causaleff=None, noenv=False, plothist=False, bfile2=None,
-                       freqthreshold=0.01, quality='png', seed=None, flip=False,
-                       uniform=False, normalize=False, max_memory=None,
-                       check=False, remove_causals=False):
+# TODO: include covariates
+def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
+                       causaleff=None, plothist=False, bfile2=None, flip=False,
+                       freq_thresh=0.01, quality='png',check=False, seed=None,
+                       uniform=False, normalize=False, remove_causals=False,
+                       threads=1):
     """
     Execute the code. This code should output a score file, a pheno file, and
     intermediate files with the dataframes produced
 
+    :param threads: Number of threads to use
     :param remove_causals: Remove the causal variants from the genotype file
     :param check: Whether to check for constant sites or not
-    :param max_memory: Memory limit
     :param flip: Whether to flip the genotype where MAF > 0.5 or not
     :param plothist: Whether to plot the phenotype histogram or not
     :param snps: List or array of causal snps
@@ -224,39 +224,45 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None,
     :param ncausal: Number of causal variants to simulate
     :param causaleff: File with DataFrame with the true causal effects
     :param noenv: whether or not environmental effect should be added
-    :param freqthreshold: Lower threshold to filter MAF by
+    :param freq_thresh: Lower threshold to filter MAF by
     :param bfile2: prefix of the plink bedfileset on a second population
     :param quality: quality of the plot (e.g. pdf, png, jpg)
     :param seed: random seed to use in sampling
     :param uniform: pick uniformingly distributed causal variants
     """
-    now = time.time()
+    now = time.time()  # record time
     line = "Performing simulation with h2=%.2f, and %d causal variants"
     print(line % (h2, ncausal))
+    # If causal effect, read it into pandas dataframe
     if causaleff is not None:
         if isinstance(causaleff, str):
             causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
         causaleff = causaleff.reindex(columns=['snp', 'beta'])
         assert causaleff.shape[0] == ncausal
+    # If another run has been performed, load it if not compiute it
     picklefile = '%s.pickle' % outprefix
     if not os.path.isfile(picklefile):
         opts = dict(prefix=outprefix, bfile=bfile, h2=h2, ncausal=ncausal,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
-                    causaleff=causaleff, uniform=uniform, f_thr=freqthreshold,
-                    flip=flip, max_memory=max_memory, check=check)
-        g, bim, truebeta, vec = true_prs(**opts)
+                    causaleff=causaleff, uniform=uniform, f_thr=freq_thresh,
+                    flip=flip, check=check, threads=threads)
+
+        g, bim, truebeta, vec = true_prs(**opts)  # Get true PRS
         with open(picklefile, 'wb') as F:
             pickle.dump((g, bim, truebeta, vec), F)
     else:
         with open(picklefile, 'rb') as F:
             g, bim, truebeta, vec = pickle.load(F)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
+        # Get phenotype
         pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv)
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
     if plothist:
+        # Plot phenotype histogram
         plot_pheno(outprefix, pheno, quality=quality)
+    # Write outfiles
     causals = bim.dropna(subset=['beta'])
     causals.to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
     if remove_causals:
@@ -287,9 +293,8 @@ if __name__ == '__main__':
                                               'produced by a previous run of '
                                               'this code with the extension '
                                               'full'), default=None)
-    parser.add_argument('-f', '--freqthreshold', help=('Lower threshold to filt'
-                                                       'er MAF by'), type=float,
-                        default=0.1)
+    parser.add_argument('-f', '--freqthreshold', default=0.1, type=float,
+                        help='Lower threshold to filter MAF by')
     parser.add_argument('-2', '--bfile2', help=('prefix of the plink bedfileset'
                                                 'o n a second population'))
     parser.add_argument('-u', '--uniform', default=False, action='store_true')
@@ -305,7 +310,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal,
                        plothist=args.plothist, causaleff=args.causal_eff,
-                       quality=args.quality, freqthreshold=args.freqthreshold,
+                       quality=args.quality, freq_thresh=args.freqthreshold,
                        bfile2=args.bfile2, seed=args.seed, uniform=args.uniform,
-                       flip=args.flip, max_memory=args.maxmem, check=args.check,
+                       flip=args.flip, check=args.check,
                        remove_causals=args.avoid_causals)

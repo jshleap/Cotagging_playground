@@ -44,6 +44,7 @@ def test_true_prs(prefix, h2, ncausal, normed, snp_list, uni, bfile2):
     np.testing.assert_allclose(f.gen_eff.values, fam.gen_eff.values)
     [os.remove(x) for x in glob('prefix.*')]
 
+
 # TODO: include noenv. This requires another true PRS as well
 @pytest.mark.parametrize("prefix,h2,noenv", [
     ('toy_trueprs_0.5_5_0.01_norm', 0.5, False),
@@ -56,8 +57,46 @@ def test_create_pheno(prefix, h2, noenv):
     pheno, realized_h2 = create_pheno("prefix", h2, fam, noenv)
     den = pheno.gen_eff.var() + pheno.env_eff.var()
     est_h2 = pheno.gen_eff.var() / den
-    #np.testing.assert_allclose(h2, est_h2, rtol=0.05, atol=0.05)
     np.testing.assert_allclose(pheno.PHENO.var(), 1, rtol=1E-2, atol=1E-2)
     np.testing.assert_allclose(realized_h2, est_h2, rtol=1E-3, atol=1E-3)
     [os.remove(x) for x in glob('prefix.*')]
-    
+
+
+@pytest.mark.parametrize("prefix,h2,ncausals,pop2,uni,normed,ceff", [
+    ('toy_trueprs_0.5_5_0.01_norm', 0.5, 5, False, False, True, None),
+    ('toy_trueprs_0.5_5_0.01_unorm', 0.5, 5, False, False, False, None),
+    ('toy_trueprs_0.2_5_0.01_norm', 0.2, 5, False, False, False, None),
+    ('toy_trueprs_0.2_5_0.01_norm', 0.2, 5, False, True, False, None),
+    ('toy_trueprs_0.5_5_0.01_norm', 0.5, 5, False, False, True, True)])
+def test_qtraits_simulation(prefix, h2, ncausals, pop2, uni, normed, ceff):
+    bfile = os.path.join(test_folder, 'toy200K')
+    bfile2 = os.path.join(test_folder, 'toy200K2') if pop2 else None
+    seed = 12345
+    expected = os.path.join(test_folder, prefix)
+    if ceff is not None:
+        with open(expected, 'rb') as F:
+            _, bim, _, _ = pickle.load(F)
+        ceff = bim.dropna(subset=['beta'])
+    else:
+        ceff = None
+    out = qtraits_simulation('prefix', bfile, h2, ncausals, causaleff=ceff,
+                             bfile2=bfile2, seed=seed, uniform=uni,
+                             normalize=normed)
+    pheno, realized_h2, (g, bim, truebeta, causals) = out
+    # Phenotype should have variance of approximately 1
+    np.testing.assert_allclose(pheno.PHENO.var(), 1, rtol=0.01, atol=0.01)
+    # Genetic effect should have variance equal to h2 and mean 0 N(0,h2)
+    if normed:
+        np.testing.assert_allclose(pheno.gen_eff.var(), h2, rtol=0.05,
+                                   atol=0.05)
+    if ncausals > 5:
+        np.testing.assert_allclose(pheno.gen_eff.mean(), 0, rtol=0.05, atol=0.05
+                                   )
+    # Error effect should have variance equal to 1 - va and mean 0 N(0,1-h2)
+    va = pheno.gen_eff.var()
+    np.testing.assert_allclose(pheno.env_eff.var(), max(1 - va, 0), rtol=0.05)
+
+    np.testing.assert_allclose(pheno.env_eff.mean(), 0, rtol=0.05, atol=0.05)
+    esth2 = pheno.gen_eff.var() / pheno.PHENO.var()
+    np.testing.assert_allclose(esth2, realized_h2, rtol=0.05, atol=0.05)
+    [os.remove(x) for x in glob('prefix.*')]

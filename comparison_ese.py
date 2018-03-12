@@ -1,7 +1,13 @@
-'''
-Code to execute parts of ese and plot the different sorts
-'''
+#!/usr/bin/env python
+# coding:utf-8
+"""
+  Author: Jose Sergio Hleap  --<2017>
+  Purpose: pipeline to test the expected squared effect strategies
+  on the optimized ranking
+  Created: 10/02/17
+"""
 
+from itertools import product
 from ese import *
 
 within_dict = {0: 'ese cotag', 1: 'ese EUR', 2: 'ese AFR'}
@@ -58,7 +64,7 @@ def sortbylocus(prefix, df, column='ese', title=None):
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix, memory, pedestrian=False):
     if pedestrian:
-        func_per_locus = per_locus2
+        func_per_locus = per_locus
     else:
         func_per_locus = per_locus
     within_str = within_dict[within]
@@ -193,10 +199,6 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 
 
 def main(args):
-    if args.pedestrian:
-        func_per_locus = per_locus2
-    else:
-        func_per_locus = per_locus
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     memory = 1E9 if args.maxmem is None else args.maxmem
@@ -256,7 +258,7 @@ def main(args):
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
         delayed_results = [
-            dask.delayed(func_per_locus)(locus, sumstats, avh2, h2, n, i,
+            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                          integral_only=True) for i, locus in
             enumerate(loci)]
         with ProgressBar():
