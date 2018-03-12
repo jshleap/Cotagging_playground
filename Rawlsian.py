@@ -1,5 +1,6 @@
 from comparison_ese import *
 
+
 #@jit(parallel=True)
 def tagged(D_r, snp_list, lds, pvals, sumstats):
     try:
@@ -36,7 +37,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
     # idx = selected.i.values
     # prs = tgeno[:, idx].dot(selected.slope)
     # est = np.corrcoef(prs, tpheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': score, 'EUR_n': i}
+    return {r'$R^2_{ppt}$': score, 'EUR_n': i, 'SNPs_n':len(index_snps)}
 
 
 def main(args):
@@ -97,7 +98,6 @@ def main(args):
             pickle.dump(t_r2, F)
         array = [10, 40, 160, 640, 2560, 10240, 40960, 45000]
         #array = [40000]
-
         res = []
         for i in array:
             res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
@@ -111,10 +111,15 @@ def main(args):
         with open('t_r2.pickle', 'rb') as F:
             pickle.dump(F)
     f, ax = plt.subplots()
-    res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', ms=5, ax=ax)
+    ax2 = ax.twinx()
+    r = res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', ms=5, ax=ax)
+    s = res.plot(x='EUR_n', y='SNPs_n', c='b', marker='.', ms=5, ax=ax2)
     plt.ylabel(r'AFR $R^2_{ppt}$')
     ax.axhline(max_r2, ls='-.', color='0.5', label='Causals')
     ax.axhline(t_r2, ls='-.', color='r', label=r'$%s_{P + T}$' % tarl)
+    ax2.spines["right"].set_visible(True)
+    ax2.spines["right"].set_edgecolor(s.get_color())
+    ax2.yaxis.label.set_color(s.get_color())
     plt.title('P + T with 1 and 0.6 pvalue and ld, respectively')
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
