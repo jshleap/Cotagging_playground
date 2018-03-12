@@ -52,7 +52,7 @@ def main(args):
                 'ncausal': args.ncausal, 'normalize': args.normalize,
                 'uniform': args.uniform, 'snps': None, 'seed': seed,
                 'bfile2': args.targeno, 'flip': args.gflip,
-                'freqthreshold': args.freq_thresh}
+                'freq_thresh': args.freq_thresh}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # randomize individuals to check if it changes the result
         # shuffle rerefence individuals
@@ -65,8 +65,7 @@ def main(args):
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
         opts.update(dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
-                         causaleff=rbim.dropna(subset=['beta']),
-                         validate=args.split))
+                         causaleff=rbim.dropna(subset=['beta'])))
         if args.reference:
             tpheno, tgeno = rpheno, rgeno
         else:
@@ -85,7 +84,8 @@ def main(args):
                       threads=args.threads, justd=True)
         # do ppt in AFR
         o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
-                 threads=args.threads, bim=tbim, seed=None)
+                 threads=args.threads, bim=tbim, seed=None, flip=args.gflip,
+                 freq_thresh=args.freq_thresh, check=args.check)
         out = plink_free_gwas(**o)
         t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
         out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2,
@@ -155,6 +155,7 @@ if __name__ == '__main__':
     parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('--pvals', default=None, nargs='+', type=float)
     parser.add_argument('--lds', default=None, nargs='+', type=float)
+    parser.add_argument('--check', default=False, type=float)
 
     args = parser.parse_args()
     main(args)

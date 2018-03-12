@@ -267,7 +267,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             (bim, fam, x) = read_geno(**options)
         else:
             # Check that is in an apropriate format of dask or numpy arrays
-            bim = pd.read_table(kwargs['bim'], delim_whitespace=True)
+            if isinstance(kwargs['bim'], str):
+                bim = pd.read_table(kwargs['bim'], delim_whitespace=True)
+            else:
+                bim = kwargs['bim']
             try:
                 assert isinstance(geno, Array)
                 x = geno.rechunk((geno.shape[0], geno.chunks[1]))
@@ -320,6 +323,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO)
                                for i in range(x_train.shape[1])]
         with ProgressBar():
+            print('Perfotming regressions')
             r = list(dask.compute(*delayed_results, num_workers=threads))
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
@@ -397,7 +401,7 @@ if __name__ == '__main__':
     parser.add_argument('--normalize', action='store_true', type=bool,
                         help=('Keyword argument for qtraits_simulation. Whether '
                               'to normalize the genotype or not.'))
-    parser.add_argument('--snps', type=list, action='+',
+    parser.add_argument('--snps', type=list, nargs='+',
                         help=('Keyword argument for qtraits_simulation. List of'
                               ' causal snps.'))
     parser.add_argument('--freqthreshold', default=0, type=float,

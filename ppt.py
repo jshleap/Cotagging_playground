@@ -15,7 +15,7 @@ matplotlib.use('Agg')
 from qtraitsimulation_old import *
 from simple_GWAS import *
 import gc
-from Chest import Chest
+from chest import Chest
 from tempfile import tempdir
 import operator
 plt.style.use('ggplot')
