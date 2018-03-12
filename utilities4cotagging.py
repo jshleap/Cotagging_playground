@@ -259,7 +259,7 @@ def estimate_chunks(shape, threads, memory=None):
     :param memory: Memory limit
     :return: The appropriate chunk in tuple form
     """
-    total = psutil.virtual_memory().available / 1E7  # a tenth of the memory
+    total = psutil.virtual_memory().available  # a tenth of the memory
     avail_mem = total if memory is None else memory  # Set available memory
     usage = estimate_size(shape) * threads     # Compute threaded estimated size
     # Determine number of chunks given usage and available memory

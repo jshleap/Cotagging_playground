@@ -10,7 +10,7 @@ import argparse
 import time
 from itertools import cycle
 from multiprocessing import cpu_count
-
+import gc
 import dask.array as da
 import h5py
 import matplotlib
@@ -43,6 +43,7 @@ def t_sf(t, df):
     lhs = mp.gamma((df + 1) / 2) / (mp.sqrt(df * mp.pi) * mp.gamma(df / 2))
     rhs = mp.quad(lambda x: (1 + (x * x) / df) ** (-df / 2 - 1 / 2),
                   [-mp.inf, t])
+    gc.collect()
     return lhs * rhs
 
 
@@ -235,6 +236,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
     of variants to be accurate (I believe that that is the case for most
     programs but it is not "advertised")
 
+    :param max_memory: Memory limit
     :param prefix: Prefix of outputs
     :param pheno: Filename or dataframe wiith phenotype
     :param geno: Filename or array (numpy or dask) with the genotype
@@ -258,12 +260,12 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         res, x_train, x_test, y_train, y_test = load_previous_run(prefix,
                                                                   threads)
     else:
-        options = dict(bfile=geno, freq_thresh=kwargs['freq_thresh'],
-                       threads=threads, flip=kwargs['flip'],
-                       check=kwargs['check'])
         np.random.seed(seed=seed)
         if isinstance(geno, str):
             # read the genotype files if the provided geno is a string
+            options = dict(bfile=geno, freq_thresh=kwargs['freq_thresh'],
+                           threads=threads, flip=kwargs['flip'],
+                           check=kwargs['check'])
             (bim, fam, x) = read_geno(**options)
         else:
             # Check that is in an apropriate format of dask or numpy arrays
@@ -277,12 +279,13 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             except AssertionError:
                 assert isinstance(geno, np.ndarray)
                 x = geno
+        del geno
+        gc.collect()
         if pheno is None:
             # If pheno is not provided, simulate it using qtraits_simulation
             options.update(kwargs)
             pheno, h2, gen = qtraits_simulation(prefix, **options)
-            (geno, bim, truebeta, vec) = gen
-            print('plink_free_gwas', bim.shape)
+            (x, bim, truebeta, vec) = gen
         elif isinstance(pheno, str):
             # If pheno is provided as a string, read it
             pheno = pd.read_table(pheno, delim_whitespace=True, header=None,
@@ -291,6 +294,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             y = pheno.compute(num_workers=threads)
         except AttributeError:
             y = pheno
+        del pheno
+        gc.collect()
         if validate is not None:
             print('making the crossvalidation data')
             x_train, x_test, y_train, y_test = train_test_split(
@@ -298,6 +303,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         else:
             # If validation is not require just return duplicates
             x_train, x_test, y_train, y_test = x, x, y, y
+        del x, y
+        gc.collect()
         # write test and train IDs
         opts = dict(sep=' ', index=False, header=False)
         y_test.to_csv('%s_testIDs.txt' % prefix, **opts)
@@ -320,6 +327,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         with ProgressBar():
             print('Performing regressions')
             r = list(dask.compute(*delayed_results, num_workers=threads))
+            gc.collect()
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
         except AttributeError:
@@ -336,7 +344,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             with ProgressBar():
                 zero_res = np.array(dask.compute(*dr, num_workers=threads))
             res.loc[res.pvalue == 0.0, 'pvalue'] = zero_res
-        res['pvalue'] = [mp.mpf(x) for x in res.pvalue]
+        res['pvalue'] = [mp.mpf(z) for z in res.pvalue]
         # Make a manhatan plot
         if plot:
             manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
