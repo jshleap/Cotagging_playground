@@ -113,7 +113,7 @@ def main(args):
         tpheno = pd.read_table('%s.prs_pheno.gz' % tarl, sep='\t')
         max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
         with open('t_r2.pickle', 'rb') as F:
-            pickle.dump(F)
+            t_r2 = pickle.load(F)
     f, ax = plt.subplots()
     ax2 = ax.twinx()
     res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', ms=5, ax=ax)
@@ -124,7 +124,8 @@ def main(args):
     ax2.spines["right"].set_visible(True)
     ax2.spines["right"].set_edgecolor('b')
     ax2.yaxis.label.set_color('b')
-    plt.title('P + T with 1 and 0.6 pvalue and ld, respectively')
+    plt.title('P + T with %.2f and %.2f pvalue and ld, respectively' % (
+        args.pvals[0], args.lds[0] ))
     plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
     plt.close()
