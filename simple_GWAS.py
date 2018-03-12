@@ -211,7 +211,7 @@ def load_previous_run(prefix, threads):
     f = h5py.File(gfn, 'r')  # Read the genotype h5 file
     chunks = np.load('chunks.npy')  # Load the chunks stored
     # Estimate chunk sizes given the number of threads
-    chunks = [estimate_chunks(i, threads) for i in chunks]
+    chunks = [estimate_chunks(tuple(i), threads) for i in chunks]
     # Get training set of the genotype array
     x_train = da.from_array(f.get('x_train'), chunks=tuple(chunks[0]))
     # Get the test set of the genotype array

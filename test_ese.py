@@ -8,7 +8,9 @@ from ese import *
 # Constants for tests
 script_path = os.path.dirname(os.path.realpath(__file__))
 test_folder = os.path.join(script_path, 'testfiles')
-bed = 
+bed = os.path.join(test_folder, 'EUR_single_locus')
+bed2 = os.path.join(test_folder, 'AFR_single_locus')
+
 (EUR_bim, EUR_fam, EUR_g) = read_geno(bed, 0.01, 1, False, False)
 (AFR_bim, AFR_fam, AFR_g) = read_geno(bed2, 0.01, 1, False, False)
 
@@ -28,6 +30,7 @@ def test_integral_b(h2_snp, m):
         estimated = integral_b(vs, mu, snps)
         assert np.allclose(expected, estimated.values)
 
-def test_per_locus(rgeno, rbim, tgeno, tbim)
+def test_per_locus(rgeno, rbim, tgeno, tbim, sumstats):
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=250,
                   threads=8, justd=True)
+
