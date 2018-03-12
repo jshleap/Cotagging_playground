@@ -20,15 +20,18 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
              validate=None, threads=threads, bim=rbim, seed=seed, check=False))
     sumstats, _, _, _, _ = plink_free_gwas(**opts)
     sumstats['beta_sq'] = sumstats.slope * sumstats.slope
-    index_snps = []
+    #index_snps = []
     delayed_results = [dask.delayed(tagged)(D_r, snp_list, lds, pvals, sumstats)
                        for snp_list, D_r, D_t in loci]
     with ProgressBar():
         print('Getting tag for', i, "EUR")
         d = list(dask.compute(*delayed_results, num_workers=threads,
                               memory_limit=memory))
+        gc.collect()
     index_snps = [item for sublist in d for item in sublist]
     score = just_score(index_snps, sumstats, tpheno, tgeno)
+    del sumstats, tpheno, tgeno, d
+    gc.collect()
     # out = dirty_ppt(loci, sumstats, X_test, y_test, threads, split, seed,
     #                 memory, pvals=pvals, lds=lds)
     # ppt, selected, tail, _, _ = out
@@ -102,6 +105,7 @@ def main(args):
         for i in array:
             res.append(single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno,
                               args.threads, seed, 1, 0.6, memory))
+            gc.collect()
         res = pd.DataFrame(res)
         res.to_csv(rawls_final, sep='\t', index=False)
     else:
