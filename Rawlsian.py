@@ -17,7 +17,7 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, threads, seed,
     prefix = '%d_gwas' % i
     opts.update(
         dict(prefix=prefix, pheno=rpheno.iloc[r_idx], geno=rgeno[r_idx, :],
-             validate=None, threads=threads, bim=rbim, seed=seed))
+             validate=None, threads=threads, bim=rbim, seed=seed, check=False))
     sumstats, _, _, _, _ = plink_free_gwas(**opts)
     sumstats['beta_sq'] = sumstats.slope * sumstats.slope
     index_snps = []

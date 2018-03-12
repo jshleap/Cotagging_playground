@@ -318,13 +318,12 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO)
                                for i in range(x_train.shape[1])]
         with ProgressBar():
-            print('Perfotming regressions')
+            print('Performing regressions')
             r = list(dask.compute(*delayed_results, num_workers=threads))
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
         except AttributeError:
             res = pd.DataFrame(r)
-        print(res.shape[0], bim.shape[0])
         assert res.shape[0] == bim.shape[0]  # Make sure no missing data
         res = pd.concat((res, bim), axis=1)  # Combine mapping and gwas
         # check precision issues and re-run the association
