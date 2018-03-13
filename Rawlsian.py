@@ -116,13 +116,14 @@ def main(args):
             t_r2 = pickle.load(F)
     f, ax = plt.subplots()
     # ax2 = ax.twinx()
-    res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', ms=5, ax=ax,
-             secondary_y=['SNPs_n'])
+    res.plot(x='EUR_n', y=r'$R^2_{ppt}$', marker='.', ms=5, ax=ax)#,
+             #secondary_y=['SNPs_n'])
     # res.plot(x='EUR_n', y='SNPs_n', c='b', marker='.', ms=5 )
     # ax.set_ylabel(r'AFR $R^2_{ppt}$')
     # ax2.set_ylabel('SNPs_n')
     ax.axhline(max_r2, ls='-.', color='0.5', label='Causals')
     ax.axhline(t_r2, ls='-.', color='r', label=r'$%s_{P + T}$' % tarl)
+    plt.legend()
     # ax2.spines["right"].set_visible(True)
     # ax2.spines["right"].set_edgecolor('b')
     # ax2.yaxis.label.set_color('b')
