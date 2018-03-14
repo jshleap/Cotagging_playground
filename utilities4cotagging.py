@@ -281,7 +281,7 @@ def estimate_chunks(shape, threads, memory=None):
 
 
 # ----------------------------------------------------------------------
-@jit
+#@jit
 def single_score(subdf, geno, pheno, label, beta='slope'):
     """
     Execute single score per subset of snps prunned. This is a

@@ -14,7 +14,7 @@ within_dict = {0: 'ese cotag', 1: 'ese EUR', 2: 'ese AFR'}
 prunestep = 30
 
 
-def sortbylocus(prefix, df, column='ese', title=None):
+def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
     picklefile = '%s.pickle' % prefix
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
@@ -25,10 +25,13 @@ def sortbylocus(prefix, df, column='ese', title=None):
             df['beta_sq'] = df.slope**2
         grouped = df.groupby('locus', as_index=False)
         try:
-            grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
+            if ascending:
+                grouped = grouped.apply(lambda grp: grp.nsmallest(1, column))
+            else:
+                grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
         except TypeError:
-            grouped = grouped.apply(lambda grp: grp.sort_values(by=column).iloc[
-                0])
+            grouped = grouped.apply(lambda grp: grp.sort_values(
+                by=column, ascending=ascending).iloc[0])
         sorteddf = grouped.sort_values(by=[column, 'beta_sq'],
                                        ascending=[False, False])
         tail = df[~df.snp.isin(sorteddf.snp)]
@@ -168,12 +171,15 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
                                                             random_state=seed)
     else:
         x_train, x_test, y_train, y_test = geno, geno, pheno, pheno
+    pre = []
+    pos =[]
     for r, locus in enumerate(loci):
         snps, D_r, D_t = locus
         snp_list = snps.tolist()
         D_r = dd.from_dask_array(D_r, columns=snps) ** 2
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
-            columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i'])
+            columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i', 'pos', 'beta'])
+        sub['locus'] = r
         # filter pvalue
         if pvals is None:
             pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
@@ -191,9 +197,10 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
             i, t, ld, pv = d[best_key]
             index += i
             tag += t
-    pre = sumstats[sumstats.snp.isin(index)].sort_values('pvalue',
-                                                         ascending=True)
-    pos = sumstats[sumstats.snp.isin(tag)].sort_values('pvalue', ascending=True)
+        pre.append(sub[sub.snp.isin(index)])
+        pos.append(sub[sub.snp.isin(tag)])
+    pre = pd.concat(pre).sort_values('pvalue', ascending=True)
+    pos = pd.concat(pos).sort_values('pvalue', ascending=True)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
@@ -241,26 +248,9 @@ def main(args):
     sum_snps = sumstats.snp.tolist()
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
                   max_memory=memory, threads=args.threads, extend=args.extend)
-    # include ppt
-    scs_title = r'Realized $h^2$: %f' % h2
-    pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
-    if not os.path.isfile(pptfile):
-        out = dirty_ppt(loci, sumstats, rgeno, rpheno, args.threads, args.split,
-                        seed, memory, pvals=args.p_thresh, lds=args.r_range)
-        ppt_df, _, _, x_test, y_test = out
-        ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
-                                ascending=True, title=scs_title)
-        assert ppt_df.shape[0] == sumstats.shape[0]
-        ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
-                       threads=args.threads, max_memory=memory)
-        ppt.to_csv(pptfile, index=False, sep='\t')
-    else:
-        ppt = pd.read_csv(pptfile, sep='\t')
-    ppt.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=3)
-    plt.savefig('ppt_afr.pdf')
-    plt.close()
     avh2 = h2 / len(sum_snps)
     n = tgeno.shape[0]
+    scs_title = r'Realized $h^2$: %f' % h2
     # compute ese only integral
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
@@ -301,6 +291,26 @@ def main(args):
     else:
         integral_df = pd.read_csv('df_' + intfile, sep='\t')
         integral = pd.read_csv(intfile, sep='\t')
+    # include ppt
+    pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
+    if not os.path.isfile(pptfile):
+        out = dirty_ppt(loci, integral_df, rgeno, rpheno, args.threads, args.split,
+                        seed, memory, pvals=args.p_thresh, lds=args.r_range)
+        ppt_df, _, _, x_test, y_test = out
+        # ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
+        #                         ascending=True, title=scs_title)
+        # ppt = sortbylocus('%s_ppt' % args.prefix, ppt_df, column='index',
+        #                   title=r'$\hat{\beta}^2$; %s' % scs_title,
+        #                   ascending=True)
+        assert ppt_df.shape[0] == sumstats.shape[0]
+        ppt = prune_it(ppt_df, tgeno, tpheno, 'P + T', step=prunestep,
+                       threads=args.threads, max_memory=memory)
+        ppt.to_csv(pptfile, index=False, sep='\t')
+    else:
+        ppt = pd.read_csv(pptfile, sep='\t')
+    ppt.plot(x='Number of SNPs', y='R2', kind='scatter', legend=True, s=3)
+    plt.savefig('ppt_afr.pdf')
+    plt.close()
     # expecetd square effect
     eses = [individual_ese(sumstats, avh2, h2, n, x, loci, tgeno, tpheno,
                            args.threads, tbim, args.prefix, memory,
@@ -308,13 +318,16 @@ def main(args):
     # prune by pval
     resfile = '%s_%s_res.tsv' % (args.prefix, 'pvalue')
     if not os.path.isfile(resfile):
-        pval = sumstats.sort_values(['pvalue', 'beta_sq'], ascending=[True,
-                                                                      False]
-                                    ).reset_index(
-            drop=True)
+        sub = integral_df.reindex(columns=['locus', 'snp', 'pvalue', 'beta_sq',
+                                           'slope', 'pos', 'beta', 'i'])
+        pval = sub.sort_values(['pvalue', 'beta_sq'],
+                               ascending=[True, False]).reset_index(drop=True)
         pval['index'] = pval.index
-        pval, _ = smartcotagsort('%s_pval' % args.prefix, pval, column='index',
-                                 ascending=True)
+        # pval = sortbylocus('%s_pvalue' % args.prefix, pval, column='pvalue',
+        #                       title='P-value; %s' % scs_title, ascending=True)
+        # pval, _ = smartcotagsort('%s_pval' % args.prefix, pval, column='index',
+        #                          ascending=True)
+        pval.to_csv('df_%s' % resfile, index=False, sep='\t')
         assert pval.shape[0] == sumstats.shape[0]
         pval = prune_it(pval, tgeno, tpheno, 'pval', step=prunestep,
                         threads=args.threads, max_memory=memory)
@@ -351,10 +364,12 @@ def main(args):
     else:
         beta = pd.read_csv(betafile, sep='\t')
     # include causals
-    causals = sumstats.dropna(subset=['beta'])
+    causals = integral_df.dropna(subset=['beta'])
     if not causals.empty:
-        caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
-                                 ascending=False, title='Causals; %s' % scs_title)
+        # caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
+        #                          ascending=False, title='Causals; %s' % scs_title)
+        caus = sortbylocus('%s_causals' % args.prefix, causals, column='beta',
+                          title='Causals; %s' % scs_title)
         caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
                         threads=args.threads, max_memory=memory)
         caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False,

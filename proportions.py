@@ -4,6 +4,7 @@ plt.style.use('ggplot')
 
 def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
            test_pheno, threads, memory, full):
+    print('\n\nPerforming %.2f of EUR' % i)
     seed = np.random.randint(54321)
     prefix = '%.2f_gwas' % i
     total_n = rgeno.shape[0] # ASSUMES THAT BOTH SOURCE POPS ARE THE SAME SIZE
@@ -67,6 +68,12 @@ def main(args):
         else:
             tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(
                 **opts)
+        # Use a subset of individuals
+        if args.sample:
+            tpheno = tpheno.sample(args.sample)
+            tgeno = tgeno[tpheno.i.values, :]
+            rpheno = rpheno.sample(args.sample)
+            rgeno = rgeno[rpheno.i.values, :]
         # # Get the diverse sample to be test on
         opts2 = dict(test_size=1 / args.split, random_state=seed)
         r_out = train_test_split(rgeno, rpheno, **opts2)
@@ -74,6 +81,13 @@ def main(args):
         rpheno = rpheno.reset_index(drop=True)
         t_out = train_test_split(tgeno, tpheno, **opts2)
         tgeno, tgeno_test, tpheno, tpheno_test = t_out
+        if args.normalize:
+            tgeno = (tgeno - tgeno.mean(axis=0)) / tgeno.std(axis=0)
+            rgeno = (rgeno - rgeno.mean(axis=0)) / rgeno.std(axis=0)
+            tgeno_test = (tgeno_test - tgeno_test.mean(
+                axis=0)) / tgeno_test.std(axis=0)
+            rgeno_test = (rgeno_test - rgeno_test.mean(
+                axis=0)) / rgeno_test.std(axis=0)
         max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
         np.save('max_r2', max_r2)
         # Get LD info
@@ -121,8 +135,8 @@ if __name__ == '__main__':
     parser.add_argument('-H', '--h2', type=float, help='Heritability of trait',
                         required=True)
     parser.add_argument('-m', '--ncausal', default=200, type=int)
-    parser.add_argument('--normalize', default=True, action='store_false')
-    parser.add_argument('--uniform', default=True, action='store_false')
+    parser.add_argument('--normalize', default=False, action='store_true')
+    parser.add_argument('--uniform', default=False, action='store_true')
     parser.add_argument('--split', default=None, type=int)
     parser.add_argument('--seed', default=None, type=int)
     parser.add_argument('--flip', action='store_true', help='flip sumstats')
@@ -138,5 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--pca', default=20, type=int)
     parser.add_argument('--pvals', default=[1], nargs='+', type=float)
     parser.add_argument('--lds', default=[0.6], nargs='+', type=float)
+    parser.add_argument('--sample', default=10000, type=int,
+                        help='Number of total individuals to test')
     args = parser.parse_args()
     main(args)

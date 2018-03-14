@@ -23,26 +23,40 @@ for j in range(len(betas)):
 
 print('Processing %d files' % len(fs))
 if one:
-    dfs = [pd.read_table(fn, sep='\t') for fn in fs]
-    dfs = [df[df.loc[:, 'Number of SNPs'] == one] for df in dfs]
+    dfs = []
+    for fn in fs:
+        d = pd.read_table(fn, sep='\t')
+        d = d[d.loc[:, 'Number of SNPs'] == one]
+        d['run'] = fn
+        dfs.append(d)
 else:
-    dfs = [pd.read_table(fn, sep='\t').groupby('type', as_index=False).max()
-           for fn in fs]
+    dfs = []
+    for fn in fs:
+        df = pd.read_table(fn, sep='\t').groupby('type', as_index=False).max()
+        df['run'] = fn
+
 l = []
-for i, df in enumerate(dfs):
-    df[r'R^2 difference'] = df.loc[:,'R2'] - df[(df.type == 'P + T')].R2.values
-    df['run'] = fs[i]
+for df in dfs:
+    df[r'$R^2$ difference'] = df.loc[:,'R2'] - df[(df.type == 'P + T')
+    ].R2.values
+    sc = df[(df.type == 'pval')].R2.values[0] - \
+         df[(df.type == r'$\hat{\beta}^2$')].R2.values[0]
+    if sc != 0:
+        print(df)
     l.append(df)
 df = pd.concat(l)
 df.rename(columns={'type':'Method'}, inplace=True)
 #df['Method'] = df['Method'].map({r'$\beta^2$': r'$\hat{\beta}^2$'})
 df.replace(to_replace=r'$\beta^2$', value=r'$\hat{\beta}^2$', inplace=True)
 df.replace(to_replace=r'$\hat{\beta^2}$', value=r'$\hat{\beta}^2$', inplace=True)
-print(df.nsmallest(1, r'R^2 difference'))
+print('smallest difference with P + T')
+print(df.nsmallest(1, r'$R^2$ difference'))
+# print('Largest difference between beta and pval')
+# print(df.nlargest(1, r'$/beta$ - pvalue $R^2$'))
 columns_my_order = ['Causals', 'P + T',  'pval', r'$\hat{\beta}^2$', 'Integral',
                     'ese AFR', 'ese EUR', 'ese cotag']
 fig, ax = plt.subplots()
-sns.boxplot(x='Method', y=r'R^2 difference', data=df, order=columns_my_order,
+sns.boxplot(x='Method', y=r'$R^2$ difference', data=df, order=columns_my_order,
             ax=ax)
 #df.boxplot(column=r'R^2 difference', by='Method')
 plt.ylabel(r'$R^2$ difference')

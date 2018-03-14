@@ -318,9 +318,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             x_train = x_train.rechunk(
                 estimate_chunks(x_train.shape, threads, max_memory))
         if 'normalize' in kwargs:
-            print('Normalizing train and test sets to variance 1 and mean 0')
-            x_train = (x_train - x_train.mean(axis=0)) / x_train.std(axis=0)
-            x_test = (x_test - x_test.mean(axis=0)) / x_test.std(axis=0)
+            if kwargs['normalize']:
+                print('Normalizing train/test sets to variance 1 and mean 0')
+                x_train = (x_train - x_train.mean(axis=0)) / x_train.std(axis=0)
+                x_test = (x_test - x_test.mean(axis=0)) / x_test.std(axis=0)
         # Get apropriate function for linear regression
         func = nu_linregress if high_precision else st_mod if stmd else lr
         if pca is not None:
