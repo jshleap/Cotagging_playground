@@ -68,11 +68,11 @@ def main(args):
             tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(
                 **opts)
         # # Get the diverse sample to be test on
-        opts = dict(test_size=1 / args.split, random_state=seed)
-        r_out = train_test_split(rgeno, rpheno, **opts)
+        opts2 = dict(test_size=1 / args.split, random_state=seed)
+        r_out = train_test_split(rgeno, rpheno, **opts2)
         rgeno, rgeno_test, rpheno, rpheno_test = r_out
         rpheno = rpheno.reset_index(drop=True)
-        t_out = train_test_split(tgeno, tpheno, **opts)
+        t_out = train_test_split(tgeno, tpheno, **opts2)
         tgeno, tgeno_test, tpheno, tpheno_test = t_out
         max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
         np.save('max_r2', max_r2)
