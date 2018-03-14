@@ -19,11 +19,12 @@ plt.style.use('ggplot')
 # ----------------------------------------------------------------------
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.01, seed=None, causaleff=None, uniform=False, usepi=False,
-             snps=None, threads=1, flip=False, check=False):
+             snps=None, threads=1, flip=False, check=False, max_memory=None):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
 
+    :param max_memory: Maximum allowed memory
     :param check: Whether to check for constant sites or not
     :param flip: Whether to flip the genotype where MAF > 0.5 or not
     :param threads: Number of thread to use in the parallelizing
@@ -46,11 +47,13 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
     # read the genotype files of the reference population
-    (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check)
+    (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check,
+                              max_memory=max_memory)
     # get indices of second pop if needed
     if bfile2 is not None:
         # merge the bim files of tw populations to use common snps
-        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check)
+        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check,
+                                     max_memory=max_memory)
         snps2 = bim2.snp
         # Save some memory
         del bim2, fam2, G2
@@ -110,7 +113,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         else:
             pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
         # Store them
-        causals['beta'] = pre_beta  # .compute()
+        causals['beta'] = pre_beta
         causals = causals.dropna()
         # make sure we have the right causals
         assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
@@ -206,11 +209,12 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                        causaleff=None, plothist=False, bfile2=None, flip=False,
                        freq_thresh=0.01, quality='png',check=False, seed=None,
                        uniform=False, normalize=False, remove_causals=False,
-                       threads=1):
+                       threads=1, max_memory=None, **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and
     intermediate files with the dataframes produced
 
+    :param max_memory: Maximum allowed memory
     :param threads: Number of threads to use
     :param remove_causals: Remove the causal variants from the genotype file
     :param check: Whether to check for constant sites or not
@@ -230,6 +234,10 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     :param seed: random seed to use in sampling
     :param uniform: pick uniformingly distributed causal variants
     """
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
     now = time.time()  # record time
     line = "Performing simulation with h2=%.2f, and %d causal variants"
     print(line % (h2, ncausal))
@@ -239,13 +247,14 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
             causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
         causaleff = causaleff.reindex(columns=['snp', 'beta'])
         assert causaleff.shape[0] == ncausal
-    # If another run has been performed, load it if not compiute it
+    # If another run has been performed, load it if not compute it
     picklefile = '%s.pickle' % outprefix
     if not os.path.isfile(picklefile):
         opts = dict(prefix=outprefix, bfile=bfile, h2=h2, ncausal=ncausal,
                     normalize=normalize, bfile2=bfile2, seed=seed, snps=snps,
                     causaleff=causaleff, uniform=uniform, f_thr=freq_thresh,
-                    flip=flip, check=check, threads=threads)
+                    flip=flip, check=check, threads=threads,
+                    max_memory=available_memory)
 
         g, bim, truebeta, vec = true_prs(**opts)  # Get true PRS
         with open(picklefile, 'wb') as F:
@@ -312,5 +321,5 @@ if __name__ == '__main__':
                        plothist=args.plothist, causaleff=args.causal_eff,
                        quality=args.quality, freq_thresh=args.freqthreshold,
                        bfile2=args.bfile2, seed=args.seed, uniform=args.uniform,
-                       flip=args.flip, check=args.check,
+                       flip=args.flip, check=args.check, max_memory=args.maxmem,
                        remove_causals=args.avoid_causals)

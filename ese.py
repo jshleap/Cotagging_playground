@@ -9,9 +9,6 @@
 from prankcster import prankcster
 from simple_GWAS import *
 
-# TODO: Include cache in all dask.compute with the available memory:
-# TODO: cache = Chest(path='/path/to/dir', available_memory=8e9)  # Use 8GB
-
 # ----------------------------------------------------------------------
 def integral_b(vs, mu, snps):
     """
@@ -30,9 +27,10 @@ def integral_b(vs, mu, snps):
     # Compute the right hand side portion of equation 12
     rhs = e / e.sum()
     vec = lhs * rhs         # Compute the i\integral
-    return pd.Series(vec, index=snps)
+    return pd.Series(vec, index=snps, dtype=np.float64)
 
 
+# ----------------------------------------------------------------------
 def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
               integral_only=False):
     """
@@ -52,16 +50,16 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
     m = snps.shape[0]
     h2_l = avh2 * m
+    assert isinstance(h2_l, float)
     den = np.clip((1 - h2_l), 1E-10, 1)
     mu = ((n / (2 * den)) + (m / (2 * h2)))
     assert np.all(mu >= 0)
-    vjs = ((n * locus.slope.values) / den)
+    vjs = ((n * locus.slope.values.astype(np.float64)) / den)
     I = integral_b(vjs, mu, snps)
     assert np.all(I >= 0)  # make sure integral is positive
     if integral_only:
-        return pd.DataFrame({'snp': snps, 'ese': I, 'locus': l_number})
+        return pd.DataFrame({'snp': snps, 'ese': I.values, 'locus': l_number})
     assert max(I) > 0 # check if at least one is different than 0
-    assert max(I) == max(locus.slope ** 2)
     # set the appropriate D to work with
     if within == 1:
         p = (D_r * D_r)
@@ -81,6 +79,13 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     """
     Execute trasnferability code
     """
+    # set Cache to protect memory spilling
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=available_memory)
+
     seed = np.random.randint(1e4) if seed is None else seed
     now = time.time()
     print('Performing expected square effect (ESE)!')
@@ -109,9 +114,11 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                          flip=kwargs['flip']))
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
-                                        check=kwargs['check'])
+                                        check=kwargs['check'],
+                                        max_memory=max_memory)
         (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
-                                        check=kwargs['check'])
+                                        check=kwargs['check'],
+                                        max_memory=max_memory)
     if isinstance(sumstats, str):
         sumstats = pd.read_table(sumstats, delim_whitespace=True)
     else:
@@ -121,8 +128,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     sum_snps = sumstats.snp.tolist()
     if refld is None:
         # Compute Ds
-        loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow,
-                      threads=threads, justd=True)
+        loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow, justd=True,
+                      threads=threads, max_memory=max_memory)
     else:
         raise NotImplementedError
     avh2 = h2 / len(sum_snps)
@@ -134,7 +141,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
             dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                     within=within) for i, locus in
             enumerate(loci)]
-        res = list(dask.compute(*delayed_results, num_workers=threads))
+        res = list(dask.compute(*delayed_results, num_workers=threads,
+                                cache=cache))
         res = pd.concat(res)
         result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
                            on='snp')
@@ -147,7 +155,8 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         result = result.merge(sumstats.reindex(columns=['snp', 'slope']),
                               on='snp')
     prod, _ = smartcotagsort(prefix, result, column='ese')
-    trans = prune_it(prod, tgeno, tpheno, 'ese', threads=threads)
+    trans = prune_it(prod, tgeno, tpheno, 'ese', threads=threads,
+                     max_memory=max_memory)
     if merged is not None:
         with open(merged, 'rb') as F:
             merged = pickle.load(F)

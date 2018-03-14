@@ -55,7 +55,8 @@ def main(args):
                 'ncausal': args.ncausal, 'normalize': args.normalize,
                 'uniform': args.uniform, 'snps': None, 'seed': seed,
                 'bfile2': args.targeno, 'flip': args.gflip,
-                'freq_thresh': args.freq_thresh, 'threads': args.threads}
+                'freq_thresh': args.freq_thresh, 'threads': args.threads,
+                'max_memory': memory}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # randomize individuals to check if it changes the result
         # shuffle rerefence individuals
@@ -84,11 +85,12 @@ def main(args):
         max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
         # perform GWASes
         loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
-                      threads=args.threads, justd=True)
+                      justd=True, threads=args.threads, max_memory=memory)
         # do ppt in AFR
         o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
                  threads=args.threads, bim=tbim, seed=None, flip=args.gflip,
-                 freq_thresh=args.freq_thresh, check=args.check)
+                 freq_thresh=args.freq_thresh, check=args.check,
+                 normalize=opts['normalize'])
         out = plink_free_gwas(**o)
         t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
         out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2,

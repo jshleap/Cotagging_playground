@@ -6,10 +6,10 @@
   on the optimized ranking
   Created: 10/02/17
 """
-
 from itertools import product
 from ese import *
 
+np.seterr(all='raise')  # Debugging
 within_dict = {0: 'ese cotag', 1: 'ese EUR', 2: 'ese AFR'}
 prunestep = 30
 
@@ -63,22 +63,23 @@ def sortbylocus(prefix, df, column='ese', title=None):
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                    tbim, prefix, memory, pedestrian=False):
-    if pedestrian:
-        func_per_locus = per_locus
-    else:
-        func_per_locus = per_locus
+    cache = Chest(available_memory=memory)
+    # if pedestrian:
+    #     func_per_locus = per_locus
+    # else:
+    #     func_per_locus = per_locus
     within_str = within_dict[within]
     prefix = '%s_%s' % (prefix, '_'.join(within_str.split()))
     print('Compute expected beta square per locus...')
     resfile = '%s_res.tsv' % prefix
     if not os.path.isfile(resfile):
         delayed_results = [
-            dask.delayed(func_per_locus)(locus, sumstats, avh2, h2, n, i,
+            dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                                 within=within) for i, locus in
             enumerate(loci)]
         with ProgressBar():
             res = list(dask.compute(*delayed_results, num_workers=args.threads,
-                                    memory_limit=memory))
+                                    memory_limit=memory, cache=cache))
         res = pd.concat(res)  # , ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
@@ -92,7 +93,7 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                            title=r'Realized $h^2$: %f' % h2)
         prod.to_csv('df' + resfile, index=False, sep='\t')
         prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
-                        threads=threads)
+                        threads=threads, max_memory=memory)
         prod.to_csv(resfile, index=False, sep='\t')
     else:
         prod = pd.read_csv(resfile, sep='\t')
@@ -151,6 +152,7 @@ def just_score(index_snp, sumstats,  pheno, geno):
 
 def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
               pvals=None, lds=None):
+    cache = Chest(available_memory=memory)
     now = time.time()
     if not 'beta_sq' in sumstats.columns:
         try:
@@ -184,7 +186,7 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
         with ProgressBar():
             print('    Locus', r)
             d = dict(list(dask.compute(*delayed_results, num_workers=threads,
-                                       memory_limit=memory)))
+                                       memory_limit=memory, cache=cache)))
             best_key = max(d.keys())
             i, t, ld, pv = d[best_key]
             index += i
@@ -201,7 +203,12 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 def main(args):
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
-    memory = 1E9 if args.maxmem is None else args.maxmem
+    # set Cache to protect memory spilling
+    if args.maxmem is not None:
+        memory = args.maxmem
+    else:
+        memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=memory)
     refl, tarl = args.labels
     # make simulations
     print('Simulating phenotype for reference population %s \n' % refl)
@@ -209,7 +216,7 @@ def main(args):
             'ncausal': args.ncausal, 'normalize': args.normalize,
             'uniform': args.uniform, 'snps': None, 'seed': seed,
             'bfile2': args.targeno, 'flip': args.gflip,
-            'max_memory': args.maxmem, 'freqthreshold': args.freq_thresh,
+            'max_memory': args.maxmem, 'freq_thresh': args.freq_thresh,
             'remove_causals':args.avoid_causals}
     rpheno, h2, (rgeno, rbim, rtruebeta, rcausals) = qtraits_simulation(**opts)
     # make simulation for target
@@ -232,8 +239,8 @@ def main(args):
         sumstats['beta_sq'] = [mp.mpf(x) ** 2 for x in sumstats.slope]
         sumstats['pvalue'] = [mp.mpf(x) for x in sumstats.pvalue]
     sum_snps = sumstats.snp.tolist()
-    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
-                  threads=args.threads, justd=True, extend=args.extend)
+    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
+                  max_memory=memory, threads=args.threads, extend=args.extend)
     # include ppt
     scs_title = r'Realized $h^2$: %f' % h2
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
@@ -245,7 +252,7 @@ def main(args):
                                 ascending=True, title=scs_title)
         assert ppt_df.shape[0] == sumstats.shape[0]
         ppt = prune_it(ppt, tgeno, tpheno, 'P + T', step=prunestep,
-                       threads=args.threads)
+                       threads=args.threads, max_memory=memory)
         ppt.to_csv(pptfile, index=False, sep='\t')
     else:
         ppt = pd.read_csv(pptfile, sep='\t')
@@ -257,14 +264,15 @@ def main(args):
     # compute ese only integral
     intfile = '%s_%s_res.tsv' % (args.prefix, 'integral')
     if not os.path.isfile(intfile):
+        print('Compute ese only integral')
         delayed_results = [
             dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
-                                         integral_only=True) for i, locus in
+                                    integral_only=True) for i, locus in
             enumerate(loci)]
         with ProgressBar():
             integral = list(
                 dask.compute(*delayed_results, num_workers=args.threads,
-                             memory_limit=memory))
+                             memory_limit=memory, cache=cache))
         integral = pd.concat(integral, ignore_index=True)
         integral = integral.merge(sumstats.reindex(
             columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
@@ -274,7 +282,8 @@ def main(args):
                                   )
         assert integral_df.shape[0] == sumstats.shape[0]
         integral = prune_it(integral_df, tgeno, tpheno, 'Integral',
-                            step=prunestep, threads=args.threads)
+                            step=prunestep, threads=args.threads,
+                            max_memory=memory)
         integral_df.to_csv('df_' + intfile, index=False, sep='\t')
         integral.to_csv(intfile, index=False, sep='\t')
         # plot beta_sq vs integral
@@ -308,7 +317,7 @@ def main(args):
                                  ascending=True)
         assert pval.shape[0] == sumstats.shape[0]
         pval = prune_it(pval, tgeno, tpheno, 'pval', step=prunestep,
-                        threads=args.threads)
+                        threads=args.threads, max_memory=memory)
         pval.to_csv(resfile, index=False, sep='\t')
     else:
         pval = pd.read_csv(resfile, sep='\t')
@@ -326,17 +335,16 @@ def main(args):
         assert beta_df.shape[0] == sumstats.shape[0]
         #assert beta_df.iloc[0].snp == integral_df.iloc[0].snp
         beta = prune_it(beta_df, tgeno, tpheno, r'$\hat{\beta}^2$',
-                        step=prunestep, threads=args.threads)
+                        step=prunestep, threads=args.threads, max_memory=memory)
         beta.to_csv(betafile, index=False, sep='\t')
         # plot beta_sq vs pval
         try:
             sumstats['-log(pval)'] = -np.log10(sumstats.pvalue.values)
         except AttributeError:
-            sumstats['-log(pval)'] = [
-                float(i.split('-')[1]) if '-' in i else np.log10(float(i)) for i
-                in sumstats.pvalue]
+            sumstats['-log(pval)'] = [float(-mp.log10(x)) for x in
+                                      sumstats.pvalue]
         f, ax = plt.subplots()
-        sumstats.plot.scatter(x='beta_sq', y='pvalue', ax=ax)
+        sumstats.plot.scatter(x='beta_sq', y='-log(pval)', ax=ax)
         plt.tight_layout()
         plt.savefig('%s_betasqvspval.pdf' % args.prefix)
         plt.close()
@@ -348,16 +356,13 @@ def main(args):
         caus, _ = smartcotagsort('%s_causal' % args.prefix, causals, column='beta',
                                  ascending=False, title='Causals; %s' % scs_title)
         caus = prune_it(caus, tgeno, tpheno, 'Causals', step=prunestep,
-                        threads=args.threads)
+                        threads=args.threads, max_memory=memory)
         caus.to_csv('%s_%s_res.tsv' % (args.prefix, 'causal'), index=False,
                     sep='\t')
     else:
         caus = None
     # plot them
     res = pd.concat(eses + [pval, beta, caus, ppt, integral])
-    # best_r2 = lr(
-    #     tgeno[:, sumstats.dropna().i.values].dot(sumstats.dropna().slope),
-    #     tpheno.PHENO).rvalue ** 2
     res.to_csv('%s_finaldf.tsv' % args.prefix, sep='\t', index=False)
     colors = iter([dict(s=10, c='r', marker='p'), dict(s=15, c='b', marker='*'),
                    dict(s=7, c='m', marker=','), dict(s=6, c='g', marker='o'),

@@ -16,6 +16,7 @@ from subprocess import Popen, PIPE
 import dask
 import dask.array as da
 import dask.dataframe as dd
+from chest import Chest
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -25,9 +26,6 @@ from joblib import Parallel, delayed
 from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
-
-# TODO: Include cache in all dask.compute with the available memory:
-# TODO: cache = Chest(path='/path/to/dir', available_memory=8e9)  # Use 8GB
 
 # Numbafy linregress (makes it a bit faster)
 lr = jit(linregress)
@@ -115,12 +113,14 @@ def norm(array, a=0, b=1):
 
 
 # ---------------------------------------------------------------------------
-def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
+def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
+              max_memory=None):
     """
     Read the plink bed fileset, restrict to a given frequency (optional,
     freq_thresh), flip the sequence to match the MAF (optional; flip), and check
     if constant variants present (optional; check)
 
+    :param max_memory: Maximum allowed memory
     :param bfile: Prefix of the bed (plink) fileset
     :param freq_thresh: If greater than 0, limit MAF to at least freq_thresh
     :param threads: Number of threads to use in computation
@@ -128,6 +128,12 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
     :param check: Whether to check for constant sites
     :return: Dataframes (bim, fam) and array corresponding to the bed fileset
     """
+    # set Cache to protect memory spilling
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=available_memory)
     (bim, fam, g) = read_plink(bfile)   # read the files using pandas_plink
     m, n = g.shape                      # get the dimensions of the genotype
     # remove invariant sites
@@ -136,7 +142,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
         with ProgressBar():
             print('Removing invariant sites')
             with dask.set_options(pool=ThreadPool(threads)):
-                idx = (g_std != 0).compute()
+                idx = (g_std != 0).compute(cache=cache)
         g = g[idx, :]
         bim = bim[idx].copy()
     # compute the mafs if required
@@ -160,7 +166,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False):
         good = (mafs < (1 - float(freq_thresh))) & (mafs > float(freq_thresh))
         with ProgressBar():
             with dask.set_options(pool=ThreadPool(threads)):
-                good, mafs = dask.compute(good, mafs)
+                good, mafs = dask.compute(good, mafs, cache=cache)
         g = g[:, good]
         bim = bim[good]
         bim['mafs'] = mafs[good]
@@ -298,10 +304,12 @@ def single_score(subdf, geno, pheno, label, beta='slope'):
 
 
 # ----------------------------------------------------------------------
-def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope'):
+def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
+             max_memory=None):
     """
     Prune and score a dataframe of sorted snps
 
+    :param max_memory: Maximum available memory
     :param str beta: Column with the effect size
     :param int threads: Number of threads to use
     :param int step: Step of the pruning
@@ -311,6 +319,12 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope'):
     :param df: sorted dataframe
     :return: scored dataframe
     """
+    # set Cache to protect memory spilling
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=available_memory)
     print('Prunning %s...' % label)
     # Process the first 200 snps at one step regardless of the step passed.
     # This is done to have a finer grain in the first part of the prunning
@@ -322,14 +336,16 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope'):
     # Run the scoring in parallel threads
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     with ProgressBar():
-        res = list(dask.compute(*delayed_results, num_workers=threads))
+        res = list(dask.compute(*delayed_results, num_workers=threads,
+                   cache=cache))
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
                 range(201, df.shape[0] + 1, int(step)))
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
         with ProgressBar():
-            res += list(dask.compute(*delayed_results, num_workers=threads))
+            res += list(dask.compute(*delayed_results, num_workers=threads,
+                        cache=cache))
     return pd.DataFrame(res)
 
 
@@ -350,6 +366,12 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
     :param extend: 'Circularize' the genome by extending both ends
     :return:
     """
+    # set Cache to protect memory spilling
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=available_memory)
     # Get the mapping indices
     ridx, tidx = df.i_ref.values, df.i_tar.values
     # Subset the genotype arrays
@@ -390,7 +412,7 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
     c_h_u_n_k_s = estimate_chunks(stacked.shape, threads, max_memory)
     stacked = da.rechunk(stacked, chunks=c_h_u_n_k_s)
     columns = ['snp', 'ref', 'tar', 'cotag']
-    return dd.from_dask_array(stacked, columns=columns).compute()
+    return dd.from_dask_array(stacked, columns=columns).compute(cache=cache)
 
 
 # ----------------------------------------------------------------------
@@ -410,6 +432,12 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     :param extend: 'Circularize' the genome by extending both ends
     :return: A list of tuples (or dataframe if not justd) with the ld per blocks
     """
+    # set Cache to protect memory spilling
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=available_memory)
     print('Computing LD score per window')
     # Get the overlapping snps and their info
     shared = ['chrom', 'snp', 'pos']
@@ -430,7 +458,8 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
                                     justd, extend) for window, df in
         mbim.groupby('windows')]
     with ProgressBar():
-        r = tuple(dask.compute(*delayed_results, num_workers=threads))
+        r = tuple(dask.compute(*delayed_results, num_workers=threads,
+                               cache=cache))
     if justd:
         return r
     r = pd.concat(r)

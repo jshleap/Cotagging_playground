@@ -150,7 +150,8 @@ def pplust(prefix, geno, pheno, sumstats, r_range, p_thresh, split=3, seed=None,
         pheno, h2, (geno, bim, truebeta, vec) = qtraits_simulation(**opts)
         assert bim.shape[0] == geno.shape[1]
         opt2 = {'prefix': 'ppt_simulation', 'pheno': pheno, 'geno': geno,
-                'validate': 2, 'seed': seed, 'threads': threads, 'bim':bim}
+                'validate': 2, 'seed': seed, 'threads': threads, 'bim':bim,
+                'normalize': kwargs['normalize']}
         sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opt2)
     if isinstance(geno, str) and pheno is not None:
         (bim, fam, geno) = read_plink(geno)

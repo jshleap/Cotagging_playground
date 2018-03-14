@@ -475,7 +475,7 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
         cotags = cotagfn
     else:
         cotags = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=kwargs['window'],
-                        threads=threads)
+                        threads=threads, max_memory=kwargs['maxmem'])
         cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
     gwas = cotags.merge(sumstats, on='snp')
     # Sort the sumstats based on scores
@@ -491,8 +491,6 @@ def ranumo(prefix, refgeno, refpheno, sumstats, targeno, tarpheno, cotagfn,
     # Tagging Target
     params = dict(column='tar', ascending=False)
     sortedtagT, beforetailTT = smartcotagsort(prefix, gwas, **params)
-    # sortedtagT['gen_index'] = [tbim[tbim.snp == i].i.values[0] for i in
-    #                            sortedtagT.snp]
     assert sortedtagT[sortedtagT.snp.isin(tbim)].i.equals(
         tbim[tbim.snp.isin(sortedtagT)].i)
     sortedtagT = sortedtagT.merge(tbim.reindex(columns=['snp', 'i']), on=['snp',

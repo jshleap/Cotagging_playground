@@ -158,9 +158,9 @@ def st_mod(x, y, covs=None):
     :return: Regression results
     """
     df = pd.DataFrame({'geno': x, 'pheno': y})
+    cols = ['slope', 'intercept', 'rvalue', 'pvalue', 'stderr', 'b_pval',
+            'b_std_err']
     if np.allclose(x.var(), 0.0):
-        cols = ['slope', 'intercept', 'rvalue', 'pvalue', 'stderr', 'b_pval',
-                'b_std_err']
         linregress_result = dict(zip(cols, cycle([np.nan])))
     else:
         if covs is not None:
@@ -173,14 +173,10 @@ def st_mod(x, y, covs=None):
             formula = 'pheno ~ geno'
         model = smf.ols(formula=formula, data=df)
         results = model.fit()
-        linregress_result = dict(
-            intercept=results.params.Intercept,
-            slope=results.params.geno,
-            b_pval=results.pvalues.Intercept,
-            p_value=results.pvalues.geno,
-            r_value=results.rsquared,
-            b_std_err=results.bse.Intercept,
-            std_err=results.bse.geno)
+        vals = [results.params.Intercept, results.params.geno,
+                results.pvalues.Intercept, results.pvalues.geno,
+                results.rsquared, results.bse.Intercept, results.bse.geno]
+        linregress_result = dict(zip(cols, vals))
     return linregress_result
 
 
@@ -254,6 +250,12 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
     :param kwargs: Keyword arguments for qtraits_simulation and read_geno
     :return: regression results and validation sets
     """
+    # set Cache to protect memory spilling
+    if max_memory is not None:
+        available_memory = max_memory
+    else:
+        available_memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=available_memory)
     seed = np.random.randint(10000) if seed is None else seed
     print('Performing GWAS\n    Using seed', seed)
     now = time.time()
@@ -268,7 +270,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             # read the genotype files if the provided geno is a string
             options = dict(bfile=geno, freq_thresh=kwargs['freq_thresh'],
                            threads=threads, flip=kwargs['flip'],
-                           check=kwargs['check'])
+                           check=kwargs['check'], max_memory=max_memory)
             (bim, fam, x) = read_geno(**options)
         else:
             # Check that is in an apropriate format of dask or numpy arrays
@@ -294,7 +296,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             pheno = pd.read_table(pheno, delim_whitespace=True, header=None,
                                   names=['fid', 'iid', 'PHENO'])
         try:
-            y = pheno.compute(num_workers=threads)
+            y = pheno.compute(num_workers=threads, cache=cache)
         except AttributeError:
             y = pheno
         del pheno
@@ -315,6 +317,10 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         if isinstance(x_train, dask.array.core.Array):
             x_train = x_train.rechunk(
                 estimate_chunks(x_train.shape, threads, max_memory))
+        if 'normalize' in kwargs:
+            print('Normalizing train and test sets to variance 1 and mean 0')
+            x_train = (x_train - x_train.mean(axis=0)) / x_train.std(axis=0)
+            x_test = (x_test - x_test.mean(axis=0)) / x_test.std(axis=0)
         # Get apropriate function for linear regression
         func = nu_linregress if high_precision else st_mod if stmd else lr
         if pca is not None:
@@ -329,7 +335,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
                                for i in range(x_train.shape[1])]
         with ProgressBar():
             print('Performing regressions')
-            r = list(dask.compute(*delayed_results, num_workers=threads))
+            r = list(dask.compute(*delayed_results, num_workers=threads,
+                                  cache=cache))
             gc.collect()
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
@@ -345,7 +352,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             dr = [dask.delayed(high_precision_pvalue)(df, r) for r in
                   zeros.rvalue.values]
             with ProgressBar():
-                zero_res = np.array(dask.compute(*dr, num_workers=threads))
+                zero_res = np.array(dask.compute(*dr, num_workers=threads,
+                                                 cache=cache))
             res.loc[res.pvalue == 0.0, 'pvalue'] = zero_res
         res['pvalue'] = [mp.mpf(z) for z in res.pvalue]
         # Make a manhatan plot

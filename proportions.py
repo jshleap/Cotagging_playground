@@ -41,54 +41,63 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
 
 
 def main(args):
-    seed = np.random.randint(1e4) if args.seed is None else args.seed
-    memory = 1E9 if args.maxmem is None else args.maxmem
-    refl, tarl = args.labels
-    # make simulations
-    print('Simulating phenotype for reference population %s \n' % refl)
-    opts = {'outprefix': refl, 'bfile': args.refgeno, 'h2': args.h2,
-            'ncausal': args.ncausal, 'normalize': args.normalize,
-            'uniform': args.uniform, 'snps': None, 'seed': seed,
-            'bfile2': args.targeno, 'flip': args.gflip,
-            'freqthreshold': args.freq_thresh}
-    rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
-    # make simulation for target
-    print('Simulating phenotype for target population %s \n' % tarl)
-    opts.update(dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
-                     causaleff=rbim.dropna(subset=['beta']), validate=args.split
-                     ))
-    if args.reference:
-        tpheno, tgeno = rpheno, rgeno
+    if os.path.isfile('proportions.tsv'):
+        results = pd.read_table('proportions.tsv', sep='\t')
+        t_r2 = np.load('t_r2')
+        max_r2 = np.load('max_r2')
     else:
-        tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(**opts)
-    # # Get the diverse sample to be test on
-    opts = dict(test_size=1 / args.split, random_state=seed)
-    r_out = train_test_split(rgeno, rpheno, **opts)
-    rgeno, rgeno_test, rpheno, rpheno_test = r_out
-    rpheno = rpheno.reset_index(drop=True)
-    t_out = train_test_split(tgeno, tpheno, **opts)
-    tgeno, tgeno_test, tpheno, tpheno_test = t_out
-    max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
-    # Get LD info
-    loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window, justd=True,
-                  threads=args.threads)
-    # do ppt in AFR
-    o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
-             threads=args.threads, bim=tbim, seed=None, pca=args.pca)
-    out = plink_free_gwas(**o)
-    t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
-    out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2, None,
-                    memory)
-    t_ppt, t_pre, t_pos, t_x_test, t_y_test = out
-    idx_tar = t_pre.i.values
-    t_prs = t_x_test[:, idx_tar].dot(t_pre.slope)
-    t_r2 = np.corrcoef(t_prs, t_y_test.PHENO)[1, 0] ** 2
-    full = tgeno.shape[0]
-    results = pd.DataFrame([
-        single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, tgeno_test,
-               tpheno_test, args.threads, memory, full=full) for i in
-        np.clip(np.arange(0, 1.1, 0.1), a_min=0, a_max=1)])
-    results.to_csv('proportions.tsv', sep='\t', index=False)
+        seed = np.random.randint(1e4) if args.seed is None else args.seed
+        memory = 1E9 if args.maxmem is None else args.maxmem
+        refl, tarl = args.labels
+        # make simulations
+        print('Simulating phenotype for reference population %s \n' % refl)
+        opts = {'outprefix': refl, 'bfile': args.refgeno, 'h2': args.h2,
+                'ncausal': args.ncausal, 'normalize': args.normalize,
+                'uniform': args.uniform, 'snps': None, 'seed': seed,
+                'bfile2': args.targeno, 'flip': args.gflip,
+                'freq_thresh': args.freq_thresh, 'max_memory': memory}
+        rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
+        # make simulation for target
+        print('Simulating phenotype for target population %s \n' % tarl)
+        opts.update(
+            dict(outprefix=tarl, bfile=args.targeno, bfile2=args.refgeno,
+                 causaleff=rbim.dropna(subset=['beta']), validate=args.split))
+        if args.reference:
+            tpheno, tgeno = rpheno, rgeno
+        else:
+            tpheno, h2, (tgeno, tbim, truebeta, tvec) = qtraits_simulation(
+                **opts)
+        # # Get the diverse sample to be test on
+        opts = dict(test_size=1 / args.split, random_state=seed)
+        r_out = train_test_split(rgeno, rpheno, **opts)
+        rgeno, rgeno_test, rpheno, rpheno_test = r_out
+        rpheno = rpheno.reset_index(drop=True)
+        t_out = train_test_split(tgeno, tpheno, **opts)
+        tgeno, tgeno_test, tpheno, tpheno_test = t_out
+        max_r2 = np.corrcoef(tpheno.gen_eff.values, tpheno.PHENO)[1, 0] ** 2
+        np.save('max_r2', max_r2)
+        # Get LD info
+        loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=args.window,
+                      justd=True, threads=args.threads, max_memory=args.maxmem)
+        # do ppt in AFR
+        o = dict(prefix='Target_sumstats', pheno=tpheno, geno=tgeno, validate=2,
+                 threads=args.threads, bim=tbim, seed=None, pca=args.pca,
+                 normalize=opts['normalize'])
+        out = plink_free_gwas(**o)
+        t_sumstats, t_X_train, t_X_test, t_y_train, t_y_test = out
+        out = dirty_ppt(loci, t_sumstats, t_X_test, t_y_test, args.threads, 2,
+                        None, memory,pvals=args.pvals, lds=args.lds)
+        t_ppt, t_pre, t_pos, t_x_test, t_y_test = out
+        idx_tar = t_pre.i.values
+        t_prs = t_x_test[:, idx_tar].dot(t_pre.slope)
+        t_r2 = np.corrcoef(t_prs, t_y_test.PHENO)[1, 0] ** 2
+        np.save('t_r2', t_r2)
+        full = tgeno.shape[0]
+        results = pd.DataFrame([
+            single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, tgeno_test,
+                   tpheno_test, args.threads, memory, full=full) for i in
+            np.clip(np.arange(0, 1.1, 0.1), a_min=0, a_max=1)])
+        results.to_csv('proportions.tsv', sep='\t', index=False)
     f, ax = plt.subplots()
     ax.axhline(max_r2, ls='-.', color='0.5', label='Causals in %s' % tarl)
     ax.axhline(t_r2, ls='-.', color='r', label='%s P + T' % tarl)
@@ -127,5 +136,7 @@ if __name__ == '__main__':
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('--pca', default=20, type=int)
+    parser.add_argument('--pvals', default=[1], nargs='+', type=float)
+    parser.add_argument('--lds', default=[0.6], nargs='+', type=float)
     args = parser.parse_args()
     main(args)

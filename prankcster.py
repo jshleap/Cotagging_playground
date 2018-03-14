@@ -165,7 +165,7 @@ def prankcster(prefix, tbed, rbed, tpheno, labels, alpha_step, prune_step,
         except AssertionError:
             print('Please provide the sumary statistics as a keyword argument')
         cotags = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=kwargs['window'],
-                        threads=threads)
+                        threads=threads, max_memory=max_memory)
         cotags.to_csv('%s_cotags.tsv' % prefix, sep='\t', index=False)
     sorted_cotag, _ = smartcotagsort(prefix, cotags, column='cotag')
     sorted_cotag = sorted_cotag.merge(
