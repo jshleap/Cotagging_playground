@@ -29,6 +29,7 @@ def per_locus2(locus, sumstats, avh2, h2, n, l_number):
     mu = ((n / (2 * den)) + (m / (2 * h2)))
     vjs = ((n * locus.slope.values) / den)
     I = integral_b(vjs, mu, snps)
+    assert (I.values >= 0).all()
     p = (D_r * D_t)
     Eejb = []
     for i in range(p.shape[0]):
@@ -70,6 +71,10 @@ def test_per_locus(sumstats, rpicklefile, tpicklefile):#rgeno, rbim, tgeno, tbim
     n = tgeno.shape[0]
     result = per_locus2(loci[0], sumstats, 0.4, 0.4, n, 0) # double for loop
     estimated = per_locus(loci[0], sumstats, 0.4, 0.4, n, 0)
-    assert (result.values.ravel() == estimated.values.ravel()).all()
+    #assert (result.values.ravel() == estimated.values.ravel()).all()
+    np.testing.assert_allclose(result.ese.values, estimated.ese.values)
+    pd.testing.assert_series_equal(result.snp, estimated.snp)
+    #pd.testing.assert_frame_equal(result, estimated, check_names=False,
+    #                              check_like=True)
 
 
