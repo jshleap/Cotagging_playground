@@ -16,6 +16,7 @@ prunestep = 30
 
 def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
     picklefile = '%s.pickle' % prefix
+    sort_columns = [column, 'beta_sq', 'pos']
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as F:
             sorteddf = pickle.load(F)
@@ -23,6 +24,7 @@ def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
         df['m_size'] = norm(abs(df.slope), 20, 200)
         if 'beta_sq' not in df.columns:
             df['beta_sq'] = df.slope**2
+        df = df.sort_values(by=sort_columns, ascending=[ascending, False, True])
         grouped = df.groupby('locus', as_index=False)
         try:
             if ascending:
@@ -32,14 +34,14 @@ def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
         except TypeError:
             grouped = grouped.apply(lambda grp: grp.sort_values(
                 by=column, ascending=ascending).iloc[0])
-        sorteddf = grouped.sort_values(by=[column, 'beta_sq', 'pos'],
-                                       ascending=[ascending, False, False])
+        sorteddf = grouped.sort_values(by=sort_columns, ascending=[ascending,
+                                                                   False, True])
         tail = df[~df.snp.isin(sorteddf.snp)]
         # grouped = tail.groupby('locus', as_index=False)
         if not tail.empty:
             sorteddf = sorteddf.append(
-                tail.sort_values(by=[column, 'beta_sq', 'pos'],
-                                 ascending=[ascending, False, False]))
+                tail.sort_values(by=sort_columns, ascending=[ascending, False,
+                                                             True]))
         sorteddf = sorteddf.reset_index(drop=True)
         sorteddf['index'] = sorteddf.index.tolist()
         with open(picklefile, 'wb') as F:
@@ -110,7 +112,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     text = tag.extend
     # sort just once
     sumstats = sumstats[sumstats.snp.isin(snp_list)].sort_values(
-        ['pvalue', 'beta_sq', 'pos'], ascending=[True, False])
+        ['pvalue', 'beta_sq', 'pos'], ascending=[True, False, True])
     if any([isinstance(x,str) for x in sumstats.pvalue]):
         sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in  sumstats.pvalue]
     total_snps = sumstats.shape[0]
