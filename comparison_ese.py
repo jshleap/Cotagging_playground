@@ -32,14 +32,14 @@ def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
         except TypeError:
             grouped = grouped.apply(lambda grp: grp.sort_values(
                 by=column, ascending=ascending).iloc[0])
-        sorteddf = grouped.sort_values(by=[column, 'beta_sq'],
-                                       ascending=[False, False])
+        sorteddf = grouped.sort_values(by=[column, 'beta_sq', 'pos'],
+                                       ascending=[ascending, False, False])
         tail = df[~df.snp.isin(sorteddf.snp)]
         # grouped = tail.groupby('locus', as_index=False)
         if not tail.empty:
-            sorteddf = sorteddf.append(tail.sort_values(by=[column, 'beta_sq'],
-                                                        ascending=[False, False]
-                                                        ))
+            sorteddf = sorteddf.append(
+                tail.sort_values(by=[column, 'beta_sq', 'pos'],
+                                 ascending=[ascending, False, False]))
         sorteddf = sorteddf.reset_index(drop=True)
         sorteddf['index'] = sorteddf.index.tolist()
         with open(picklefile, 'wb') as F:
@@ -110,7 +110,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     text = tag.extend
     # sort just once
     sumstats = sumstats[sumstats.snp.isin(snp_list)].sort_values(
-        ['pvalue', 'beta_sq'], ascending=[True, False])
+        ['pvalue', 'beta_sq', 'pos'], ascending=[True, False])
     if any([isinstance(x,str) for x in sumstats.pvalue]):
         sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in  sumstats.pvalue]
     total_snps = sumstats.shape[0]
@@ -199,8 +199,8 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
             tag += t
         pre.append(sub[sub.snp.isin(index)])
         pos.append(sub[sub.snp.isin(tag)])
-    pre = pd.concat(pre).sort_values('pvalue', ascending=True)
-    pos = pd.concat(pos).sort_values('pvalue', ascending=True)
+    pre = pd.concat(pre).sort_values(['pvalue', 'pos'], ascending=True)
+    pos = pd.concat(pos).sort_values(['pvalue', 'pos'], ascending=True)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
