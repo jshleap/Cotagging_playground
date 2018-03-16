@@ -21,8 +21,8 @@ for i, fn in enumerate(files):
     df = pd.read_table(fn, delim_whitespace=True)
     df['run'] = i
     todas.append(df)
-    t_r2s.append(np.load(os.path.join(path[0], 't_r2')))
-    max_r2s.append(np.load(os.path.join(path[0], 'max_r2s')))
+    t_r2s.append(np.load(os.path.join(path[0], 't_r2.npy')))
+    max_r2s.append(np.load(os.path.join(path[0], 'max_r2s.npy')))
 df = pd.concat(todas)
 t_r2 = np.mean(t_r2s)
 max_r2 = np.mean(max_r2s)

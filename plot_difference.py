@@ -22,21 +22,39 @@ for j in range(len(betas)):
         print('Mismatch in', betas[j], 'and', integrals[j])
 
 print('Processing %d files' % len(fs))
+# if one:
+#     dfs = []
+#     for fn in fs:
+#         d = pd.read_table(fn, sep='\t')
+#         d = d[d.loc[:, 'Number of SNPs'] == one]
+#         d['run'] = fn
+#         dfs.append(d)
+# else:
+dfs = []
+for fn in fs:
+    # df = pd.read_table(fn, sep='\t').groupby('type', as_index=False).max()
+    d = pd.read_table(fn, sep='\t')
+    d['run'] = fn
+    dfs.append(d)
+df = pd.concat(dfs)
+grouped = df.groupby(['Number of SNPs', 'type'], as_index=False).mean()
+fig, ax = plt.subplots()
+for typ, gr in grouped.groupby('type'):
+    gr.plot(x='Number of SNPs', y='R2', label=typ, ax=ax, marker='.')
+plt.savefig('average%d_transferability_plot.pdf' % len(fn))
+
+dfs2 = []
+for df in dfs:
+    d = d.groupby(['run', 'type'], as_index=False).agg({'R2': max})
+    d[r'$R^2$ difference'] = d.R2.values - d[(d.type == 'P + T')].R2.values
+
+g = d.groupby('type', as_index=False).agg({'R2': max})
 if one:
-    dfs = []
-    for fn in fs:
-        d = pd.read_table(fn, sep='\t')
-        d = d[d.loc[:, 'Number of SNPs'] == one]
-        d['run'] = fn
-        dfs.append(d)
-else:
-    dfs = []
-    for fn in fs:
-        df = pd.read_table(fn, sep='\t').groupby('type', as_index=False).max()
-        df['run'] = fn
+    df= df[df.loc[:, 'Number of SNPs'] == 1]
+
 
 l = []
-for df in dfs:
+for d in dfs:
     df[r'$R^2$ difference'] = df.loc[:,'R2'] - df[(df.type == 'P + T')
     ].R2.values
     sc = df[(df.type == 'pval')].R2.values[0] - \
@@ -48,7 +66,8 @@ df = pd.concat(l)
 df.rename(columns={'type':'Method'}, inplace=True)
 #df['Method'] = df['Method'].map({r'$\beta^2$': r'$\hat{\beta}^2$'})
 df.replace(to_replace=r'$\beta^2$', value=r'$\hat{\beta}^2$', inplace=True)
-df.replace(to_replace=r'$\hat{\beta^2}$', value=r'$\hat{\beta}^2$', inplace=True)
+df.replace(to_replace=r'$\hat{\beta^2}$', value=r'$\hat{\beta}^2$', inplace=True
+           )
 print('smallest difference with P + T')
 print(df.nsmallest(1, r'$R^2$ difference'))
 # print('Largest difference between beta and pval')
