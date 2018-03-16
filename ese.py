@@ -142,7 +142,7 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                                     within=within) for i, locus in
             enumerate(loci)]
         res = list(dask.compute(*delayed_results, num_workers=threads,
-                                cache=cache))
+                                cache=cache, pool=ThreadPool(threads)))
         res = pd.concat(res)
         result = res.merge(sumstats.reindex(columns=['slope', 'snp', 'beta']),
                            on='snp')

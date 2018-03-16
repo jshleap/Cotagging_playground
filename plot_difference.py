@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from glob import glob
+import scipy
 import sys
 
 plt.style.use('ggplot')
@@ -41,28 +42,17 @@ grouped = df.groupby(['Number of SNPs', 'type'], as_index=False).mean()
 fig, ax = plt.subplots()
 for typ, gr in grouped.groupby('type'):
     gr.plot(x='Number of SNPs', y='R2', label=typ, ax=ax, marker='.')
-plt.savefig('average%d_transferability_plot.pdf' % len(fn))
+plt.ylabel(r'$\bar{R^{2}}$')
+plt.savefig('average%d_transferability_plot.pdf' % len(fs))
 
 dfs2 = []
-for df in dfs:
+for d in dfs:
+    if one:
+        d = d[d.loc[:, 'Number of SNPs'] == 1]
     d = d.groupby(['run', 'type'], as_index=False).agg({'R2': max})
     d[r'$R^2$ difference'] = d.R2.values - d[(d.type == 'P + T')].R2.values
-
-g = d.groupby('type', as_index=False).agg({'R2': max})
-if one:
-    df= df[df.loc[:, 'Number of SNPs'] == 1]
-
-
-l = []
-for d in dfs:
-    df[r'$R^2$ difference'] = df.loc[:,'R2'] - df[(df.type == 'P + T')
-    ].R2.values
-    sc = df[(df.type == 'pval')].R2.values[0] - \
-         df[(df.type == r'$\hat{\beta}^2$')].R2.values[0]
-    if sc != 0:
-        print(df)
-    l.append(df)
-df = pd.concat(l)
+    dfs2.append(d)
+df = pd.concat(dfs2)
 df.rename(columns={'type':'Method'}, inplace=True)
 #df['Method'] = df['Method'].map({r'$\beta^2$': r'$\hat{\beta}^2$'})
 df.replace(to_replace=r'$\beta^2$', value=r'$\hat{\beta}^2$', inplace=True)
@@ -74,6 +64,15 @@ print(df.nsmallest(1, r'$R^2$ difference'))
 # print(df.nlargest(1, r'$/beta$ - pvalue $R^2$'))
 columns_my_order = ['Causals', 'P + T',  'pval', r'$\hat{\beta}^2$', 'Integral',
                     'ese AFR', 'ese EUR', 'ese cotag']
+a = df[df.Method == 'ese cotag'].loc[:,r'$R^2$ difference']
+for i, col in enumerate(columns_my_order[:-1]):
+    b = df[df.Method == col].loc[:,r'$R^2$ difference']
+    res = scipy.stats.ttest_ind(a, b, equal_var=False)
+    if res.pvalue <= 0.05:
+        new =  col + '*'
+        columns_my_order[i] = new
+        df.replace(to_replace=col, value=new, inplace=True)
+
 fig, ax = plt.subplots()
 sns.boxplot(x='Method', y=r'$R^2$ difference', data=df, order=columns_my_order,
             ax=ax)

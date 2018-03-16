@@ -337,7 +337,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
     with ProgressBar():
         res = list(dask.compute(*delayed_results, num_workers=threads,
-                   cache=cache))
+                   cache=cache, pool=ThreadPool(threads)))
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
@@ -345,7 +345,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
         with ProgressBar():
             res += list(dask.compute(*delayed_results, num_workers=threads,
-                        cache=cache))
+                        cache=cache, pool=ThreadPool(threads)))
     return pd.DataFrame(res)
 
 
@@ -459,7 +459,7 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
         mbim.groupby('windows')]
     with ProgressBar():
         r = tuple(dask.compute(*delayed_results, num_workers=threads,
-                               cache=cache))
+                               cache=cache, pool=ThreadPool(threads)))
     if justd:
         return r
     r = pd.concat(r)

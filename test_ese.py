@@ -17,6 +17,7 @@ tpicklefile = '%s.pickle' % bed2
 (EUR_bim, EUR_fam, EUR_g) = read_geno(bed, 0.01, 1, False, False)
 (AFR_bim, AFR_fam, AFR_g) = read_geno(bed2, 0.01, 1, False, False)
 
+
 def per_locus2(locus, sumstats, avh2, h2, n, l_number):
     """
     compute the per-locus expectation on double loop
@@ -35,7 +36,7 @@ def per_locus2(locus, sumstats, avh2, h2, n, l_number):
     for i in range(p.shape[0]):
         expcovs = 0
         for j in range(p.shape[1]):
-            expcovs += p[i,j] * I[j]
+            expcovs += p[i, j] * I[j]
         Eejb.append(expcovs)
     Eejb = np.array(Eejb)
     return pd.DataFrame({'snp': snps, 'ese': abs(Eejb), 'locus': l_number})
@@ -71,10 +72,8 @@ def test_per_locus(sumstats, rpicklefile, tpicklefile):#rgeno, rbim, tgeno, tbim
     n = tgeno.shape[0]
     result = per_locus2(loci[0], sumstats, 0.4, 0.4, n, 0) # double for loop
     estimated = per_locus(loci[0], sumstats, 0.4, 0.4, n, 0)
-    #assert (result.values.ravel() == estimated.values.ravel()).all()
-    np.testing.assert_allclose(result.ese.values, estimated.ese.values)
+    np.testing.assert_allclose(np.abs(result.ese.values),
+                               np.abs(estimated.ese.values))
     pd.testing.assert_series_equal(result.snp, estimated.snp)
-    #pd.testing.assert_frame_equal(result, estimated, check_names=False,
-    #                              check_like=True)
 
 

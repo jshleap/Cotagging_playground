@@ -22,16 +22,13 @@ from sklearn.model_selection import train_test_split
 
 from qtraitsimulation import qtraits_simulation
 from utilities4cotagging import *
-
+from dask.distributed import Client, LocalCluster
 # require gmpy
 mp.dps = 25
 mp.pretty = True
 matplotlib.use('Agg')
 plt.style.use('ggplot')
 
-
-# TODO: Include cache in all dask.compute with the available memory:
-# TODO: cache = Chest(path='/path/to/dir', available_memory=8e9)  # Use 8GB
 
 # ----------------------------------------------------------------------
 def t_sf(t, df):
@@ -227,7 +224,7 @@ def load_previous_run(prefix, threads):
 
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
-                    causal_pos=None, threads=cpu_count(), pca=None, stmd=False,
+                    causal_pos=None, threads=8, pca=None, stmd=False,
                     high_precision=False, max_memory=None, **kwargs):
     """
     Compute the least square regression for a genotype in a phenotype. This
@@ -325,6 +322,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         # Get apropriate function for linear regression
         func = nu_linregress if high_precision else st_mod if stmd else lr
         if pca is not None:
+            print('Using %d PCs' % pca)
             #Perform PCA
             func = st_mod                   # Force function to statsmodels
             covs = do_pca(x_train, pca)     # Estimate PCAs
@@ -337,7 +335,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         with ProgressBar():
             print('Performing regressions')
             r = list(dask.compute(*delayed_results, num_workers=threads,
-                                  cache=cache))
+                                  cache=cache), pool=ThreadPool(threads))
             gc.collect()
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
@@ -354,7 +352,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
                   zeros.rvalue.values]
             with ProgressBar():
                 zero_res = np.array(dask.compute(*dr, num_workers=threads,
-                                                 cache=cache))
+                                                 cache=cache, pool=ThreadPool(
+                        threads)))
             res.loc[res.pvalue == 0.0, 'pvalue'] = zero_res
         res['pvalue'] = [mp.mpf(z) for z in res.pvalue]
         # Make a manhatan plot

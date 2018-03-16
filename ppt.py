@@ -72,7 +72,8 @@ def clump(R2, sumstats, r_thr, p_thr, threads, field='pvalue', max_memory=None,
         r = list(dask.compute(*delayed_results, num_workers=threads,
                               cache=cache))
     else:
-        r = list(dask.compute(*delayed_results, num_workers=threads))
+        r = list(dask.compute(*delayed_results, num_workers=threads,
+                              pool=ThreadPool(threads)))
     clumps = dict(pair for d in r for pair in d.items())
     del r
     gc.collect()

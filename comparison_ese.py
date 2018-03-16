@@ -83,8 +83,9 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                                                 within=within) for i, locus in
             enumerate(loci)]
         with ProgressBar():
-            res = list(dask.compute(*delayed_results, num_workers=args.threads,
-                                    memory_limit=memory, cache=cache))
+            res = list(dask.compute(*delayed_results, num_workers=threads,
+                                    memory_limit=memory, cache=cache,
+                                    pool=ThreadPool(threads)))
         res = pd.concat(res)  # , ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
@@ -194,7 +195,8 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
         with ProgressBar():
             print('    Locus', r)
             d = dict(list(dask.compute(*delayed_results, num_workers=threads,
-                                       memory_limit=memory, cache=cache)))
+                                       memory_limit=memory, cache=cache,
+                                       pool=ThreadPool(threads))))
             best_key = max(d.keys())
             i, t, ld, pv = d[best_key]
             index += i
@@ -264,7 +266,8 @@ def main(args):
         with ProgressBar():
             integral = list(
                 dask.compute(*delayed_results, num_workers=args.threads,
-                             memory_limit=memory, cache=cache))
+                             memory_limit=memory, cache=cache,
+                             pool=ThreadPool(args.threads)))
         integral = pd.concat(integral, ignore_index=True)
         integral = integral.merge(sumstats.reindex(
             columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
