@@ -48,7 +48,7 @@ plt.savefig('average%d_transferability_plot.pdf' % len(fs))
 dfs2 = []
 for d in dfs:
     if one:
-        d = d[d.loc[:, 'Number of SNPs'] == 1]
+        d = d[d.loc[:, 'Number of SNPs'] == one]
     d = d.groupby(['run', 'type'], as_index=False).agg({'R2': max})
     d[r'$R^2$ difference'] = d.R2.values - d[(d.type == 'P + T')].R2.values
     dfs2.append(d)
