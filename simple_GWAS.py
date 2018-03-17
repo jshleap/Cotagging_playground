@@ -335,7 +335,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         with ProgressBar():
             print('Performing regressions')
             r = list(dask.compute(*delayed_results, num_workers=threads,
-                                  cache=cache), pool=ThreadPool(threads))
+                                  cache=cache, pool=ThreadPool(threads)))
             gc.collect()
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
