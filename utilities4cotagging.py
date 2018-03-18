@@ -12,7 +12,7 @@ from collections import Counter
 from functools import reduce
 from multiprocessing.pool import ThreadPool
 from subprocess import Popen, PIPE
-
+import resource
 import dask
 import dask.array as da
 import dask.dataframe as dd
@@ -319,6 +319,11 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     :param df: sorted dataframe
     :return: scored dataframe
     """
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
     # set Cache to protect memory spilling
     if max_memory is not None:
         available_memory = max_memory
@@ -432,6 +437,12 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     :param extend: 'Circularize' the genome by extending both ends
     :return: A list of tuples (or dataframe if not justd) with the ld per blocks
     """
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
+
     # set Cache to protect memory spilling
     if max_memory is not None:
         available_memory = max_memory

@@ -212,6 +212,12 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 
 
 def main(args):
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
+
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     # set Cache to protect memory spilling

@@ -42,6 +42,12 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
 
 
 def main(args):
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
+
     if os.path.isfile('proportions.tsv'):
         results = pd.read_table('proportions.tsv', sep='\t')
         t_r2 = np.load('t_r2')
