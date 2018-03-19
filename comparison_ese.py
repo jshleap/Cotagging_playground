@@ -82,10 +82,10 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
             dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                                 within=within) for i, locus in
             enumerate(loci)]
-        with ProgressBar():
-            res = list(dask.compute(*delayed_results, num_workers=threads,
-                                    memory_limit=memory, cache=cache,
-                                    pool=ThreadPool(threads)))
+        dask_options = dict(num_workers=threads, memory_limit=memory,
+                            cache=cache, pool=ThreadPool(threads))
+        with ProgressBar(), dask.set_options(**dask_options):
+            res = list(dask.compute(*delayed_results))
         res = pd.concat(res)  # , ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
@@ -192,11 +192,11 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, y_train, x_train)
             for p, l in pairs]
-        with ProgressBar():
+        dask_options = dict(num_workers=threads, cache=cache,
+                            pool=ThreadPool(threads))
+        with ProgressBar(), dask.set_options(**dask_options):
             print('    Locus', r)
-            d = dict(list(dask.compute(*delayed_results, num_workers=threads,
-                                       memory_limit=memory, cache=cache,
-                                       pool=ThreadPool(threads))))
+            d = dict(list(dask.compute(*delayed_results)))
             best_key = max(d.keys())
             i, t, ld, pv = d[best_key]
             index += i
@@ -214,8 +214,9 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 def main(args):
     # Set CPU limits
     soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    print('Processor limits are:', soft, hard)
     resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
     print('Soft limit changed to :', soft)
 
     now = time.time()
@@ -269,11 +270,10 @@ def main(args):
             dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                     integral_only=True) for i, locus in
             enumerate(loci)]
-        with ProgressBar():
-            integral = list(
-                dask.compute(*delayed_results, num_workers=args.threads,
-                             memory_limit=memory, cache=cache,
-                             pool=ThreadPool(args.threads)))
+        dask_options = dict(num_workers=args.threads, cache=cache,
+                            pool=ThreadPool(args.threads))
+        with ProgressBar(), dask.set_options(**dask_options):
+            integral = list(dask.compute(*delayed_results))
         integral = pd.concat(integral, ignore_index=True)
         integral = integral.merge(sumstats.reindex(
             columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
