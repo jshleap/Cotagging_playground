@@ -19,9 +19,9 @@ def do_pca(g, n_comp):
 def main():
     (bim, fam, g) = read_geno(sys.argv[1], 0, int(sys.argv[2]),
                               max_memory=int(sys.argv[3]))
-    pca =  pd.DataFrame(do_pca(g, int(sys.argv[4])))
-    pca['iid'] = bim.iid.tolist()
-    pca['fid'] = bim.fid.tolist()
+    pca = pd.DataFrame(do_pca(g, int(sys.argv[4])))
+    pca['iid'] = fam.iid.tolist()
+    pca['fid'] = fam.fid.tolist()
     pca.to_csv('%s.pca' % sys.argv[1], sep=' ', header=False, index=False)
 
 
