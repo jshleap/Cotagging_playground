@@ -462,8 +462,8 @@ if __name__ == '__main__':
     parser.add_argument('-q', '--qrange', default=None,
                         help="File of previous qrange. e.g. ranumo's qrange")
     parser.add_argument('--ncausal', default=200, type=int)
-    parser.add_argument('--normalize', default=True, action='store_false')
-    parser.add_argument('--uniform', default=True, action='store_false')
+    parser.add_argument('--normalize', default=False, action='store_true')
+    parser.add_argument('--uniform', default=False, action='store_true')
     parser.add_argument('--split', default=2, type=int)
     parser.add_argument('--seed', default=None, type=int)
     parser.add_argument('--r_range', default=None, nargs=3,

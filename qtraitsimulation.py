@@ -93,6 +93,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals = bim[bim.snp.isin(causaleff.snp)].copy()
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
+        bim[bim.snp.isin(causaleff.snp)] = causals.beta.tolist()
         # print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
@@ -244,7 +245,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     # If causal effect, read it into pandas dataframe
     if causaleff is not None:
         if isinstance(causaleff, str):
-            causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
+            causaleff = pd.read_table('%s' % causaleff, sep='\t')
         causaleff = causaleff.reindex(columns=['snp', 'beta'])
         assert causaleff.shape[0] == ncausal
     # If another run has been performed, load it if not compute it
@@ -315,6 +316,7 @@ if __name__ == '__main__':
     parser.add_argument('-C', '--check', default=False, action='store_true')
     parser.add_argument('-a', '--avoid_causals', default=False,
                         action='store_true', help='Remove causals from set')
+    parser.add_argument('--normalize', default=False, action='store_true')
 
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal,
