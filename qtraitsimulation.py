@@ -93,7 +93,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         causals = bim[bim.snp.isin(causaleff.snp)].copy()
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
-        bim[bim.snp.isin(causaleff.snp)] = causals.beta.tolist()
+        bim = bim.merge(causaleff, on='snp', how='outer')
+        print(bim.head())
         # print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
