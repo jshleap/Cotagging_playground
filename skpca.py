@@ -2,6 +2,7 @@ from sklearn.decomposition import PCA
 from utilities4cotagging import read_geno
 import pandas as pd
 import sys
+import argparse
 
 def do_pca(g, n_comp):
     """
@@ -16,16 +17,22 @@ def do_pca(g, n_comp):
     return pca
 
 
-def main():
-    (bim, fam, g) = read_geno(sys.argv[1], 0, int(sys.argv[2]),
-                              max_memory=int(sys.argv[3]))
-    pca = pd.DataFrame(do_pca(g, int(sys.argv[4])))
+def main(args):
+    (bim, fam, g) = read_geno(args.bfile, 0, args.cpus, max_memory=args.mem)
+    pca = pd.DataFrame(do_pca(g, args.comps))
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
     ordered_cols = ['fid','iid'] + cols
-    pca.loc[:, ordered_cols].to_csv('%s.pca' % sys.argv[1], sep=' ',
+    pca.loc[:, ordered_cols].to_csv('%s.pca' % args.bfile, sep=' ',
                                     header=False, index=False)
 
-
-main()
+# ----------------------------------------------------------------------
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--bfile')
+    parser.add_argument('-t', '--cpus', type=int)
+    parser.add_argument('-t', '--mem', type=int)
+    parser.add_argument('-c', '--comps', type=int)
+    args = parser.parse_args()
+    main(args)
