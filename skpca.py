@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--bfile')
     parser.add_argument('-t', '--cpus', type=int)
-    parser.add_argument('-t', '--mem', type=int)
+    parser.add_argument('-m', '--mem', type=int)
     parser.add_argument('-c', '--comps', type=int)
     args = parser.parse_args()
     main(args)
