@@ -20,9 +20,12 @@ def main():
     (bim, fam, g) = read_geno(sys.argv[1], 0, int(sys.argv[2]),
                               max_memory=int(sys.argv[3]))
     pca = pd.DataFrame(do_pca(g, int(sys.argv[4])))
+    cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
-    pca.to_csv('%s.pca' % sys.argv[1], sep=' ', header=False, index=False)
+    ordered_cols = ['fid','iid'] + cols
+    pca.loc[:, ordered_cols].to_csv('%s.pca' % sys.argv[1], sep=' ',
+                                    header=False, index=False)
 
 
 main()
