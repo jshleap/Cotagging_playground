@@ -10,7 +10,7 @@ def main(args):
     prop = int(args.clump.split('.')[0])
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
-                                                                    'pheno',])
+                                                                    'pheno'])
     sub = sumstats.merge(clump, on=['CHR', 'SNP', 'BP', 'P'])
     sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(num_workers=args.cpus)
