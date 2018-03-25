@@ -77,9 +77,9 @@ def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
                                 ]
     if n_natives > 1:
         population_configurations += [
-            msprime.PopulationConfiguration( sample_size=nhaps[4 + x],
-                                             initial_size=N_O, growth_rate=r_O)
-            for x in range( n_natives)]
+            msprime.PopulationConfiguration(sample_size=nhaps[4 + x],
+                                            initial_size=N_O, growth_rate=r_O)
+            for x in range(n_natives)]
     migration_matrix = [
                            [0, m_AF_EU, m_AF_AS] + [0] * n_natives,
                            [m_AF_EU, 0, m_EU_AS] + [0] * n_natives,

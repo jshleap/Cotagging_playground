@@ -9,6 +9,7 @@
 from prankcster import prankcster
 from simple_GWAS import *
 
+
 # ----------------------------------------------------------------------
 def integral_b(vs, mu, snps):
     """
@@ -80,10 +81,10 @@ def transferability(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     Execute trasnferability code
     """
     # Set CPU limits
-    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    print('Soft limit changed to :', soft)
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # print('Soft limit changed to :', soft)
 
     # set Cache to protect memory spilling
     if max_memory is not None:

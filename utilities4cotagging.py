@@ -281,7 +281,7 @@ def estimate_chunks(shape, threads, memory=None):
 
 
 # ----------------------------------------------------------------------
-#@jit
+@jit
 def single_score(subdf, geno, pheno, label, beta='slope'):
     """
     Execute single score per subset of snps prunned. This is a
@@ -467,7 +467,7 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     delayed_results = [
         dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
                                     justd, extend) for window, df in
-        mbim.groupby('windows')]
+        mbim.groupby('windows') if not df.snp.empty]
     with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
                                          pool=ThreadPool(threads)):
         r = tuple(dask.compute(*delayed_results))

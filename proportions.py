@@ -38,7 +38,8 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
     idx_tar = sel_tar.i.values
     prs_tar = test_geno[:, idx_tar].dot(sel_tar.slope)
     r2_tar = np.corrcoef(prs_tar, test_pheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac': 1 - i}
+    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac': 1 - i,
+            'number': frac_n}
 
 
 def main(args):

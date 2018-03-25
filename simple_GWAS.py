@@ -247,11 +247,11 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
     :param kwargs: Keyword arguments for qtraits_simulation and read_geno
     :return: regression results and validation sets
     """
-    # Set CPU limits
-    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    print('Soft limit changed to :', soft)
+    # # Set CPU limits
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Soft limit changed to :', soft)
 
     # set Cache to protect memory spilling
     if max_memory is not None:

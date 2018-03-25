@@ -7,6 +7,7 @@
   Created: 10/02/17
 """
 from itertools import product
+from operator import itemgetter
 from ese import *
 
 np.seterr(all='raise')  # Debugging
@@ -108,6 +109,7 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
 
 def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     index = []
+    high=[]
     ippend = index.append
     tag = []
     text = tag.extend
@@ -121,7 +123,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
         curr_high = sumstats.iloc[0]
         if mp.mpf(curr_high.pvalue) < p_thresh:
             curr_high = curr_high.snp
-            ippend(curr_high)
+            high.append(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
             # get snps in LD
             vec = D_r.loc[chidx, :] # Is in the row since is square and rows are
@@ -130,17 +132,18 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
             if curr_high in tagged: # TODO: it is necessary.. possible bug
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
+            ippend((curr_high, tagged))
         else:
             low = sumstats.snp.tolist()
             text(low)
-        sumstats = sumstats[~sumstats.snp.isin(index + tag)]
-    return index, tag
+        sumstats = sumstats[~sumstats.snp.isin(high + tag)]
+    return index, tag, high
 
 
 @jit
 def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
-    index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
-    clump = sumstats[sumstats.snp.isin(index)]
+    index, tag, high = get_tagged(snp_list, D_r, l, p, sumstats)
+    clump = sumstats[sumstats.snp.isin(high)]
     idx = clump.i.values.astype(int)
     prs = geno[:, idx].dot(clump.slope)
     est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
@@ -199,11 +202,13 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
             d = dict(list(dask.compute(*delayed_results)))
             best_key = max(d.keys())
             i, t, ld, pv = d[best_key]
-            index += i
+            clump = sub[sub.snp.isin([x[0] for x in i])]
+            clump['tag'] = ';'.join([';'.join(x[1]) for x in i])
+            index.append(clump)
             tag += t
-        pre.append(sub[sub.snp.isin(index)])
         pos.append(sub[sub.snp.isin(tag)])
-    pre = pd.concat(pre).sort_values(['pvalue', 'pos'], ascending=True)
+    pre = pd.concat(index).sort_values(['pvalue', 'pos'], ascending=True)
+    pre.to_csv('PPT.clumped.tsv', sep='\t', index=False)
     pos = pd.concat(pos).sort_values(['pvalue', 'pos'], ascending=True)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
@@ -213,11 +218,11 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 
 def main(args):
     # Set CPU limits
-    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-    print('Processor limits are:', soft, hard)
-    resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
-    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-    print('Soft limit changed to :', soft)
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Processor limits are:', soft, hard)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Soft limit changed to :', soft)
 
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
@@ -305,8 +310,9 @@ def main(args):
     # include ppt
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        out = dirty_ppt(loci, integral_df, rgeno, rpheno, args.threads, args.split,
-                        seed, memory, pvals=args.p_thresh, lds=args.r_range)
+        out = dirty_ppt(loci, integral_df, rgeno, rpheno, args.threads,
+                        args.split, seed, memory, pvals=args.p_thresh,
+                        lds=args.r_range)
         ppt_df, _, _, x_test, y_test = out
         # ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
         #                         ascending=True, title=scs_title)
