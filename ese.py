@@ -39,7 +39,7 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     :param locus: Tuple with source an target LD matrices and the list of snps
     :param sumstats: Dataframe with the sumary statistics
     :param avh2: Average heritability of the trait
-    :param h2: Heritability pf the trait
+    :param h2: Heritability of the trait
     :param n: Number of individuals in the analysis
     :param l_number: Number of the locus being analyzed
     :param within: Type of LD product to use
