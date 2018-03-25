@@ -7,6 +7,7 @@
   Created: 10/02/17
 """
 from itertools import product
+from operator import itemgetter
 from ese import *
 
 np.seterr(all='raise')  # Debugging
@@ -82,10 +83,10 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
             dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                                 within=within) for i, locus in
             enumerate(loci)]
-        with ProgressBar():
-            res = list(dask.compute(*delayed_results, num_workers=threads,
-                                    memory_limit=memory, cache=cache,
-                                    pool=ThreadPool(threads)))
+        dask_options = dict(num_workers=threads, memory_limit=memory,
+                            cache=cache, pool=ThreadPool(threads))
+        with ProgressBar(), dask.set_options(**dask_options):
+            res = list(dask.compute(*delayed_results))
         res = pd.concat(res)  # , ignore_index=True)
         result = res.merge(
             sumstats.reindex(columns=['slope', 'snp', 'beta', 'pos']), on='snp')
@@ -108,6 +109,7 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
 
 def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
     index = []
+    high=[]
     ippend = index.append
     tag = []
     text = tag.extend
@@ -121,7 +123,7 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
         curr_high = sumstats.iloc[0]
         if mp.mpf(curr_high.pvalue) < p_thresh:
             curr_high = curr_high.snp
-            ippend(curr_high)
+            high.append(curr_high)
             chidx = np.where(D_r.columns == curr_high)[0]
             # get snps in LD
             vec = D_r.loc[chidx, :] # Is in the row since is square and rows are
@@ -130,17 +132,18 @@ def get_tagged(snp_list, D_r, ld_thr, p_thresh, sumstats):
             if curr_high in tagged: # TODO: it is necessary.. possible bug
                 tagged.pop(tagged.index(curr_high))
             text(tagged)
+            ippend((curr_high, tagged))
         else:
             low = sumstats.snp.tolist()
             text(low)
-        sumstats = sumstats[~sumstats.snp.isin(index + tag)]
-    return index, tag
+        sumstats = sumstats[~sumstats.snp.isin(high + tag)]
+    return index, tag, high
 
 
 @jit
 def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
-    index, tag = get_tagged(snp_list, D_r, l, p, sumstats)
-    clump = sumstats[sumstats.snp.isin(index)]
+    index, tag, high = get_tagged(snp_list, D_r, l, p, sumstats)
+    clump = sumstats[sumstats.snp.isin(high)]
     idx = clump.i.values.astype(int)
     prs = geno[:, idx].dot(clump.slope)
     est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
@@ -192,18 +195,20 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
         delayed_results = [
             dask.delayed(loop_pairs)(snp_list, D_r, l, p, sub, y_train, x_train)
             for p, l in pairs]
-        with ProgressBar():
+        dask_options = dict(num_workers=threads, cache=cache,
+                            pool=ThreadPool(threads))
+        with ProgressBar(), dask.set_options(**dask_options):
             print('    Locus', r)
-            d = dict(list(dask.compute(*delayed_results, num_workers=threads,
-                                       memory_limit=memory, cache=cache,
-                                       pool=ThreadPool(threads))))
+            d = dict(list(dask.compute(*delayed_results)))
             best_key = max(d.keys())
             i, t, ld, pv = d[best_key]
-            index += i
+            clump = sub[sub.snp.isin([x[0] for x in i])]
+            clump['tag'] = ';'.join([';'.join(x[1]) for x in i])
+            index.append(clump)
             tag += t
-        pre.append(sub[sub.snp.isin(index)])
         pos.append(sub[sub.snp.isin(tag)])
-    pre = pd.concat(pre).sort_values(['pvalue', 'pos'], ascending=True)
+    pre = pd.concat(index).sort_values(['pvalue', 'pos'], ascending=True)
+    pre.to_csv('PPT.clumped.tsv', sep='\t', index=False)
     pos = pd.concat(pos).sort_values(['pvalue', 'pos'], ascending=True)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
@@ -212,6 +217,13 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
 
 
 def main(args):
+    # Set CPU limits
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Processor limits are:', soft, hard)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Soft limit changed to :', soft)
+
     now = time.time()
     seed = np.random.randint(1e4) if args.seed is None else args.seed
     # set Cache to protect memory spilling
@@ -263,11 +275,10 @@ def main(args):
             dask.delayed(per_locus)(locus, sumstats, avh2, h2, n, i,
                                     integral_only=True) for i, locus in
             enumerate(loci)]
-        with ProgressBar():
-            integral = list(
-                dask.compute(*delayed_results, num_workers=args.threads,
-                             memory_limit=memory, cache=cache,
-                             pool=ThreadPool(args.threads)))
+        dask_options = dict(num_workers=args.threads, cache=cache,
+                            pool=ThreadPool(args.threads))
+        with ProgressBar(), dask.set_options(**dask_options):
+            integral = list(dask.compute(*delayed_results))
         integral = pd.concat(integral, ignore_index=True)
         integral = integral.merge(sumstats.reindex(
             columns=['snp', 'pvalue', 'beta_sq', 'slope', 'pos', 'i', 'beta']),
@@ -299,8 +310,9 @@ def main(args):
     # include ppt
     pptfile = '%s_%s_res.tsv' % (args.prefix, 'ppt')
     if not os.path.isfile(pptfile):
-        out = dirty_ppt(loci, integral_df, rgeno, rpheno, args.threads, args.split,
-                        seed, memory, pvals=args.p_thresh, lds=args.r_range)
+        out = dirty_ppt(loci, integral_df, rgeno, rpheno, args.threads,
+                        args.split, seed, memory, pvals=args.p_thresh,
+                        lds=args.r_range)
         ppt_df, _, _, x_test, y_test = out
         # ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
         #                         ascending=True, title=scs_title)
@@ -456,8 +468,8 @@ if __name__ == '__main__':
     parser.add_argument('-q', '--qrange', default=None,
                         help="File of previous qrange. e.g. ranumo's qrange")
     parser.add_argument('--ncausal', default=200, type=int)
-    parser.add_argument('--normalize', default=True, action='store_false')
-    parser.add_argument('--uniform', default=True, action='store_false')
+    parser.add_argument('--normalize', default=False, action='store_true')
+    parser.add_argument('--uniform', default=False, action='store_true')
     parser.add_argument('--split', default=2, type=int)
     parser.add_argument('--seed', default=None, type=int)
     parser.add_argument('--r_range', default=None, nargs=3,

@@ -247,6 +247,12 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
     :param kwargs: Keyword arguments for qtraits_simulation and read_geno
     :return: regression results and validation sets
     """
+    # # Set CPU limits
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Soft limit changed to :', soft)
+
     # set Cache to protect memory spilling
     if max_memory is not None:
         available_memory = max_memory
@@ -332,10 +338,11 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         else:
             delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO)
                                for i in range(x_train.shape[1])]
-        with ProgressBar():
+        dask_options = dict(num_workers=threads, cache=cache,
+                            pool=ThreadPool(threads))
+        with ProgressBar(), dask.set_options(**dask_options):
             print('Performing regressions')
-            r = list(dask.compute(*delayed_results, num_workers=threads,
-                                  cache=cache, pool=ThreadPool(threads)))
+            r = list(dask.compute(*delayed_results))
             gc.collect()
         try:
             res = pd.DataFrame.from_records(r, columns=r[0]._fields)
@@ -350,10 +357,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             df = x_train.shape[0] - 2
             dr = [dask.delayed(high_precision_pvalue)(df, r) for r in
                   zeros.rvalue.values]
-            with ProgressBar():
-                zero_res = np.array(dask.compute(*dr, num_workers=threads,
-                                                 cache=cache, pool=ThreadPool(
-                        threads)))
+            with ProgressBar(), dask.set_options(**dask_options):
+                zero_res = np.array(dask.compute(*dr))
             res.loc[res.pvalue == 0.0, 'pvalue'] = zero_res
         res['pvalue'] = [mp.mpf(z) for z in res.pvalue]
         # Make a manhatan plot

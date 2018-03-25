@@ -12,7 +12,7 @@ from collections import Counter
 from functools import reduce
 from multiprocessing.pool import ThreadPool
 from subprocess import Popen, PIPE
-
+import resource
 import dask
 import dask.array as da
 import dask.dataframe as dd
@@ -281,7 +281,7 @@ def estimate_chunks(shape, threads, memory=None):
 
 
 # ----------------------------------------------------------------------
-#@jit
+@jit
 def single_score(subdf, geno, pheno, label, beta='slope'):
     """
     Execute single score per subset of snps prunned. This is a
@@ -319,6 +319,11 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     :param df: sorted dataframe
     :return: scored dataframe
     """
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
     # set Cache to protect memory spilling
     if max_memory is not None:
         available_memory = max_memory
@@ -335,17 +340,17 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
            range(1, min(201, df.shape[0] + 1), 1))
     # Run the scoring in parallel threads
     delayed_results = [dask.delayed(single_score)(*i) for i in gen]
-    with ProgressBar():
-        res = list(dask.compute(*delayed_results, num_workers=threads,
-                   cache=cache, pool=ThreadPool(threads)))
+    with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
+                                         pool=ThreadPool(threads)):
+        res = list(dask.compute(*delayed_results))
     print('Processing the rest of variants')
     if df.shape[0] > 200:
         ngen = ((df.iloc[: i], geno, pheno, label) for i in
                 range(201, df.shape[0] + 1, int(step)))
         delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
-        with ProgressBar():
-            res += list(dask.compute(*delayed_results, num_workers=threads,
-                        cache=cache, pool=ThreadPool(threads)))
+        with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
+                                             pool=ThreadPool(threads)):
+            res += list(dask.compute(*delayed_results))
     return pd.DataFrame(res)
 
 
@@ -432,6 +437,12 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     :param extend: 'Circularize' the genome by extending both ends
     :return: A list of tuples (or dataframe if not justd) with the ld per blocks
     """
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
+
     # set Cache to protect memory spilling
     if max_memory is not None:
         available_memory = max_memory
@@ -456,10 +467,10 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     delayed_results = [
         dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
                                     justd, extend) for window, df in
-        mbim.groupby('windows')]
-    with ProgressBar():
-        r = tuple(dask.compute(*delayed_results, num_workers=threads,
-                               cache=cache, pool=ThreadPool(threads)))
+        mbim.groupby('windows') if not df.snp.empty]
+    with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
+                                         pool=ThreadPool(threads)):
+        r = tuple(dask.compute(*delayed_results))
     if justd:
         return r
     r = pd.concat(r)

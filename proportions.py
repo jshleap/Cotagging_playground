@@ -38,10 +38,17 @@ def single(opts, i, rpheno, rbim, rgeno, loci, tpheno, tgeno, test_geno,
     idx_tar = sel_tar.i.values
     prs_tar = test_geno[:, idx_tar].dot(sel_tar.slope)
     r2_tar = np.corrcoef(prs_tar, test_pheno.PHENO)[1, 0] ** 2
-    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac': 1 - i}
+    return {r'$R^2_{ppt}$': r2_tar, 'EUR_frac': i, 'AFR_frac': 1 - i,
+            'number': frac_n}
 
 
 def main(args):
+    # Set CPU limits
+    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    resource.setrlimit(resource.RLIMIT_NPROC, (args.threads, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print('Soft limit changed to :', soft)
+
     if os.path.isfile('proportions.tsv'):
         results = pd.read_table('proportions.tsv', sep='\t')
         t_r2 = np.load('t_r2')
