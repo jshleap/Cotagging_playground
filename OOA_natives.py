@@ -28,36 +28,37 @@ def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
     assert len(nhaps) == (n_natives + 3) # AFR, EUR, ASN
     # First we set out the maximum likelihood values of the various parameters
     # given in Table 1.
-    N_A = 7300
-    N_B = 2100
-    N_AF = 12300
-    N_EU0 = 1350  # ==> modified so is within both table 1 and 2 confidence interval
-    N_AS0 = 555  # ==> modified so is within both table 1 and 2 confidence interval
-    N_MX0 = 800  # From table 2
+    N_A = 11273
+    N_B = 3104
+    N_AF = 23721
+    N_EU0 = 2271
+    N_AS0 = 924
+    N_MX0 = 800 # From Table 2 Gutenkust 2009
     N_O0 = 500
     # Times are provided in years, so we convert into generations.
-    generation_time = 25
-    T_AF = 220e3 / generation_time
-    T_B = 140e3 / generation_time
-    T_EU_AS = 22e3 / generation_time  # modified so is within both table 1 and 2
-    T_MX = 21.6e3 / generation_time  # from table 2
+    # from Jouganous et al. 2017:
+    generation_time = 29
+    T_AF = 312e3 / generation_time
+    T_B = 125e3 / generation_time
+    T_EU_AS = 42.3e3 / generation_time
+    T_MX = 12.2e3 / generation_time  # from table 1 Gravel 2013
     T_O = 12e3 / generation_time
     # confidence interval
     # We need to work out the starting (diploid) population sizes based on
     # the growth rates provided for these two population
-    r_EU = 0.0037  # ==> modified so is within both table 1 and 2 confidence interval
-    r_AS = 0.0052  # ==> modified so is within both table 1 and 2 confidence interval
-    r_MX = 0.0050  # from table 2
+    r_EU = 0.0019
+    r_AS = 0.00309
+    r_MX = 0.0050  # From Table 2 Gutenkust
     r_O = r_MX
     N_EU = N_EU0 / math.exp(-r_EU * T_EU_AS)
     N_AS = N_AS0 / math.exp(-r_AS * T_EU_AS)
     N_MX = N_MX0 / math.exp(-r_AS * T_MX)
     N_O = N_O0 / math.exp(-r_O * T_O)
     # Migration rates during the various epochs.
-    m_AF_B = 25e-5
-    m_AF_EU = 3e-5
-    m_AF_AS = 1.9e-5
-    m_EU_AS = 11.55e-5
+    m_AF_B = 15.8e-5
+    m_AF_EU = 1.1e-5
+    m_AF_AS = 0.48e-5
+    m_EU_AS = 4.19e-5
     # Population IDs correspond to their indexes in the population
     # configuration array. Therefore, we have 0=YRI, 1=CEU, 2=CHB, and 3=MX
     # initially.
@@ -93,16 +94,23 @@ def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
             time=T_O, source=x, destination=3, proportion=1.0) for x in
             range(4, 4 + n_natives)]
     demographic_events += [
-        # CEU and CHB merge into B with rate changes at T_EU_AS
+        # Natives merge into asian trunk
         msprime.MassMigration(
             time=T_MX, source=3, destination=2, proportion=1.0),
+        # Merge asian trunk wih european
         msprime.MassMigration(
             time=T_EU_AS, source=2, destination=1, proportion=1.0),
+        # Turn off migrations between EUR-ASN at time of split
         msprime.MigrationRateChange(time=T_EU_AS, rate=0),
+
+
+
+
         msprime.MigrationRateChange(
             time=T_EU_AS, rate=m_AF_B, matrix_index=(0, 1)),
         msprime.MigrationRateChange(
             time=T_EU_AS, rate=m_AF_B, matrix_index=(1, 0)),
+        # Size change for non-YRI to N_B
         msprime.PopulationParametersChange(
             time=T_EU_AS, initial_size=N_B, growth_rate=0, population_id=1),
         # Population B merges into YRI at T_B
