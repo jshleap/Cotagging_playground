@@ -10,7 +10,11 @@ from itertools import product
 from ese import *
 from comparison_ese import dirty_ppt
 
-def get_tagged2(snp_list, D_r, ld_thr, p_thresh, sumstats):
+
+def get_tagged2(locus, ld_thr, ese_thresh, sumstats, avh2, h2, n):
+    snp_list, d_r, d_t = locus
+    d_r = pd.DataFrame(d_r, index=snp_list, columns=snp_list) ** 2
+    d_t = pd.DataFrame(d_t, index=snp_list, columns=snp_list) ** 2
     index = []
     ippend = index.append
     tag = []
@@ -20,20 +24,29 @@ def get_tagged2(snp_list, D_r, ld_thr, p_thresh, sumstats):
         ['ese', 'pvalue', 'beta_sq', 'pos'], ascending=[False, True, False,
                                                         True])
     if any([isinstance(x, str) for x in sumstats.pvalue]):
-        sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in  sumstats.pvalue]
+        sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in sumstats.pvalue]
     total_snps = sumstats.shape[0]
+    r = 0
     while len(index + tag) != total_snps:
         curr_high = sumstats.iloc[0]
-        if mp.mpf(curr_high.pvalue) < p_thresh:
-            curr_high = curr_high.snp
-            ippend(curr_high)
-            chidx = np.where(D_r.columns == curr_high)[0]
+        #if mp.mpf(curr_high.pvalue) < p_thresh:
+        if curr_high.ese > ese_thresh:
             # get snps in LD
-            vec = D_r.loc[chidx, :] # Is in the row since is square and rows are
-            #  index while columns aren't
-            tagged = vec[vec > ld_thr].columns.tolist()
-            if curr_high in tagged: # TODO: it is necessary.. possible bug
-                tagged.pop(tagged.index(curr_high))
+            vec = d_r.loc[curr_high.snp, :]
+            tagged = vec[vec > ld_thr].index.tolist()
+            # re-score ese for the clump
+            ss = sumstats[sumstats.snp.isin(tagged)]
+            n_locus = (tagged, d_r.loc[tagged, tagged], d_t.loc[tagged, tagged])
+            # TODO: include within as option?
+            df_ese = per_locus(n_locus, ss, avh2, h2, n, r, within=0)
+            ss.merge(df_ese.reindex(columns=['snp', 'ese']), on='snp')
+            r += 1
+            largest = ss.nlargest(1, 'ese')
+            if largest.ese > curr_high.ese:
+                curr_high = largest
+            ippend(curr_high.snp)
+            if curr_high.snp in tagged:
+                tagged.pop(tagged.index(curr_high.snp))
             text(tagged)
         else:
             low = sumstats.snp.tolist()
@@ -43,8 +56,11 @@ def get_tagged2(snp_list, D_r, ld_thr, p_thresh, sumstats):
 
 
 @jit
-def loop_pairs2(snp_list, D_r, l, p, sumstats, pheno, geno):
-    index, tag = get_tagged2(snp_list, D_r, l, p, sumstats)
+def loop_pairs2(locus, l, p, e, sumstats, pheno, geno, avh2, h2):
+    # clean with soft pvalue
+    n, m = geno.shape
+    ss = sumstats[sumstats.pvalue < p]
+    index, tag = get_tagged2(locus, l, e, ss, avh2, h2, n)
     clump = sumstats[sumstats.snp.isin(index)]
     idx = clump.i.values.astype(int)
     prs = geno[:, idx].dot(clump.slope)
@@ -53,7 +69,7 @@ def loop_pairs2(snp_list, D_r, l, p, sumstats, pheno, geno):
 
 
 @jit
-def just_score(index_snp, sumstats,  pheno, geno):
+def just_score(index_snp, sumstats, pheno, geno):
     clump = sumstats[sumstats.snp.isin(index_snp)]
     idx = clump.i.values.astype(int)
     prs = geno[:, idx].dot(clump.slope)
@@ -61,50 +77,44 @@ def just_score(index_snp, sumstats,  pheno, geno):
     return est
 
 
-def pptc(loci, sumstats, geno, pheno, h2, threads, split, seed, memory,
-         pvals=None, lds=None, within=0 ):
+def pptc(loci, sumstats, geno, pheno, h2, threads, memory, pvals=None, lds=None,
+         within=0):
     cache = Chest(available_memory=memory)
     now = time.time()
     if not 'beta_sq' in sumstats.columns:
         try:
-            sumstats.loc[: , 'beta_sq'] = sumstats.slope ** 2
+            sumstats.loc[:, 'beta_sq'] = sumstats.slope ** 2
         except TypeError:
             sumstats['beta_sq'] = [mp.mpf(x) ** 2 for x in sumstats.slope]
 
     print('Starting PPTC...')
     index, tag = [], []
-
-    if split > 1:
-        x_train, x_test, y_train, y_test = train_test_split(geno, pheno,
-                                                            test_size=1 / split,
-                                                            random_state=seed)
-    else:
-        x_train, x_test, y_train, y_test = geno, geno, pheno, pheno
     n, m = geno.shape
     avh2 = h2 / m
     pre = []
-    pos =[]
-    big_sumstats =[]
+    pos = []
+    big_sumstats = []
     for r, locus in enumerate(loci):
-        snps, D_r, D_t = locus
-        ese_df = per_locus(locus, sumstats, avh2, h2, n, i, within=within)
+        snps, d_r, d_t = locus
+        ese_df = per_locus(locus, sumstats, avh2, h2, n, r, within=within)
         snp_list = snps.tolist()
-        D_r = dd.from_dask_array(D_r, columns=snps) ** 2
+        d_r = dd.from_dask_array(d_r, columns=snps) ** 2
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
             columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i', 'pos', 'beta'])
         sub['locus'] = r
         sub = sub.merge(ese_df.reindex(columns=['snp', 'ese']), on='snp')
         big_sumstats.append(sub)
         # TODO: include ese threshold?
+        ese_threshold = sub.ese.quantile(np.arange(.0, 1, .1))
         # filter pvalue
         if pvals is None:
-            pvals = [1, 0.5, 0.2, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+            pvals = [1, 0.5, 0.05, 5E-4, 10E-8]
         if lds is None:
             lds = np.arange(0.1, 0.8, 0.1)
-        pairs = product(pvals, lds)
+        pairs = product(pvals, lds, ese_threshold)
         delayed_results = [
-            dask.delayed(loop_pairs2)(snp_list, D_r, l, p, sub, y_train, x_train
-                                      ) for p, l in pairs]
+            dask.delayed(loop_pairs2)(locus, l, p, e, sub, geno, pheno, avh2, h2
+                                      ) for p, l, e in pairs]
         with ProgressBar():
             print('    Locus', r)
             d = dict(list(dask.compute(*delayed_results, num_workers=threads,
@@ -124,13 +134,13 @@ def pptc(loci, sumstats, geno, pheno, h2, threads, split, seed, memory,
     ppt['index'] = ppt.index.tolist()
     big_sumstats.to_csv('%s.big_sumstats.tsv', sep='\t', index=False)
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
-    return ppt, pre, pos, x_test, y_test
+    return ppt, pre, pos
 
 
 def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
-                    LDwindow, sumstats, refld=None, tarld=None, seed=None,
-                    max_memory=None, threads=1, merged=None, within=False,
-                    **kwargs):
+         LDwindow, sumstats, refld=None, tarld=None, seed=None,
+         max_memory=None, threads=1, merged=None, within=False,
+         **kwargs):
     """
     Execute trasnferability code
     """
@@ -155,7 +165,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
         opts = {'outprefix': refl, 'bfile': refgeno, 'h2': h2,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
-                'bfile2': targeno, 'flip':kwargs['gflip'],
+                'bfile2': targeno, 'flip': kwargs['gflip'],
                 'max_memory': max_memory}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
@@ -165,7 +175,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                  causaleff=rbim.dropna(subset=['beta']), bfile2=refgeno))
         tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate=kwargs['split'], threads=threads, bim=rbim,
+                         validate=0, threads=threads, bim=rbim,
                          flip=kwargs['flip']))
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
@@ -188,8 +198,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     else:
         raise NotImplementedError
     # run pptc
-    out =  pptc(loci, sumstats, X_train, y_train, h2, threads, 2, seed,
-                max_memory, pvals=None, lds=None, within=within)
+    out = pptc(loci, sumstats, X_train, y_train, h2, threads, max_memory,
+               pvals=None, lds=None, within=within)
     merged, index, tagged, x_test, y_test = out
     out_ppt = dirty_ppt(loci, sumstats, X_train, y_train, threads, 2, seed,
                         max_memory, pvals=None, lds=None)
@@ -223,6 +233,7 @@ if __name__ == '__main__':
         def __call__(self, parser, namespace, values, option_string=None):
             values = np.array(values)
             return super().__call__(parser, namespace, values, option_string)
+
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--prefix', help='prefix for outputs',
@@ -283,12 +294,12 @@ if __name__ == '__main__':
     parser.add_argument('--pedestrian', default=False, action='store_true')
 
     args = parser.parse_args()
-    transferability(args.prefix, args.reference, args.refpheno, args.target,
-                    args.tarpheno, args.h2, args.labels, args.window,
-                    args.sumstats, refld=args.refld, tarld=args.tarld,
-                    seed=args.seed, threads=args.threads, merged=args.merged,
-                    ncausal=args.ncausal, normalize=True, uniform=args.uniform,
-                    r_range=args.r_range, p_tresh=args.p_tresh,
-                    max_memory=args.maxmem, split=args.split, flip=args.flip,
-                    gflip=args.gflip, within=args.within, check=args.check,
-                    ld_operator=args.ld_operator, graph=args.graph)
+    main(args.prefix, args.reference, args.refpheno, args.target,
+         args.tarpheno, args.h2, args.labels, args.window,
+         args.sumstats, refld=args.refld, tarld=args.tarld,
+         seed=args.seed, threads=args.threads, merged=args.merged,
+         ncausal=args.ncausal, normalize=True, uniform=args.uniform,
+         r_range=args.r_range, p_tresh=args.p_tresh,
+         max_memory=args.maxmem, split=args.split, flip=args.flip,
+         gflip=args.gflip, within=args.within, check=args.check,
+         ld_operator=args.ld_operator, graph=args.graph)

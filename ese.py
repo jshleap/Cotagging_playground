@@ -49,7 +49,10 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     """
     snps, D_r, D_t = locus
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
-    m = snps.shape[0]
+    try:
+        m = snps.shape[0]
+    except AttributeError:
+        m = len(snps)
     h2_l = avh2 * m
     assert isinstance(h2_l, float)
     den = np.clip((1 - h2_l), 1E-10, 1)
