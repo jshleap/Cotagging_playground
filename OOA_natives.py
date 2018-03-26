@@ -94,32 +94,49 @@ def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
             time=T_O, source=x, destination=3, proportion=1.0) for x in
             range(4, 4 + n_natives)]
     demographic_events += [
+        # Natives grow from N_MX0 at rate r_MX at time T_MX
+        msprime.PopulationParametersChange(
+            time=T_MX, initial_size=N_MX0, growth_rate=r_MX, population_id=3),
         # Natives merge into asian trunk
-        msprime.MassMigration(
-            time=T_MX, source=3, destination=2, proportion=1.0),
+        msprime.MassMigration(time=T_MX, source=3, destination=2, proportion=1.0
+                              ),
+        # As the natives merge to the asians, turn off their growth rates
+        msprime.PopulationParametersChange(
+            time=T_MX, initial_size=N_MX0, growth_rate=0, population_id=3),
+        # Asians grow from N_AS0 at rate r_AS at time T_EU_AS
+        msprime.PopulationParametersChange(
+            time=T_EU_AS, initial_size=N_AS0, growth_rate=r_AS, population_id=2
+        ),
         # Merge asian trunk wih european
-        msprime.MassMigration(
-            time=T_EU_AS, source=2, destination=1, proportion=1.0),
-        # Turn off migrations between EUR-ASN at time of split
+        msprime.MassMigration(time=T_EU_AS, source=2, destination=1,
+                              proportion=1.0),
+        # As the Asians merge to EUR, turn off their migration rates
+        msprime.MigrationRateChange(time=T_EU_AS, rate=0, matrix_index=(1, 2)),
+        msprime.MigrationRateChange(time=T_EU_AS, rate=0, matrix_index=(2, 1)),
+        msprime.MigrationRateChange(time=T_EU_AS, rate=0, matrix_index=(0, 2)),
+        msprime.MigrationRateChange(time=T_EU_AS, rate=0, matrix_index=(2, 0)),
+        # As the Asians merge to EUR, turn off their growth rates
+        msprime.PopulationParametersChange(
+            time=T_EU_AS, initial_size=N_AS0, growth_rate=0, population_id=2),
+        # Europeans grow from N_EU0 at rate r_EU at time T_EU_AS
+        msprime.PopulationParametersChange(
+            time=T_EU_AS, initial_size=N_EU0, growth_rate=r_EU, population_id=1
+        ),
+        # Pop 1 (EUR/AS) size change at time T_B
+        msprime.PopulationParametersChange(time=T_B, initial_size=N_EU0,
+                                           growth_rate=0, population_id=1),
+        # Pop 0 (AFR) size change at time T_B
+        msprime.PopulationParametersChange(time=T_B, initial_size=N_B,
+                                           growth_rate=0, population_id=0),
+        # YRI merges with B at T_B
+        msprime.MassMigration(time=T_B, source=1, destination=0, proportion=1.0
+                              ),
+        # Set migrations to 0
         msprime.MigrationRateChange(time=T_EU_AS, rate=0),
-
-
-
-
-        msprime.MigrationRateChange(
-            time=T_EU_AS, rate=m_AF_B, matrix_index=(0, 1)),
-        msprime.MigrationRateChange(
-            time=T_EU_AS, rate=m_AF_B, matrix_index=(1, 0)),
-        # Size change for non-YRI to N_B
-        msprime.PopulationParametersChange(
-            time=T_EU_AS, initial_size=N_B, growth_rate=0, population_id=1),
-        # Population B merges into YRI at T_B
-        msprime.MassMigration(
-            time=T_B, source=1, destination=0, proportion=1.0),
-        msprime.MigrationRateChange(time=T_B, rate=0),
+        # msprime.MigrationRateChange(time=T_B, rate=0),
         # Size changes to N_A at T_AF
-        msprime.PopulationParametersChange(
-            time=T_AF, initial_size=N_A, population_id=0)
+        msprime.PopulationParametersChange(time=T_AF, initial_size=N_A,
+                                           population_id=0)
     ]
     dp = msprime.DemographyDebugger(
         Ne=N_A,
