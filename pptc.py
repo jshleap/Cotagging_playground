@@ -15,6 +15,9 @@ def get_tagged2(locus, ld_thr, ese_thresh, sumstats, avh2, h2, n):
     snp_list, d_r, d_t = locus
     d_r = pd.DataFrame(d_r, index=snp_list, columns=snp_list) ** 2
     d_t = pd.DataFrame(d_t, index=snp_list, columns=snp_list) ** 2
+    snp_list = sumstats[sumstats.snp.isin(snp_list)].snp.tolist()
+    d_r = d_r.loc[snp_list, snp_list]
+    d_t = d_t.loc[snp_list, snp_list]
     index = []
     ippend = index.append
     tag = []
@@ -25,33 +28,33 @@ def get_tagged2(locus, ld_thr, ese_thresh, sumstats, avh2, h2, n):
                                                         True])
     if any([isinstance(x, str) for x in sumstats.pvalue]):
         sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in sumstats.pvalue]
-    total_snps = sumstats.shape[0]
+    stats = sumstats.copy()
     r = 0
-    while len(index + tag) != total_snps:
-        curr_high = sumstats.iloc[0]
+    while not stats.empty:
+        curr_high = stats.iloc[0]
         #if mp.mpf(curr_high.pvalue) < p_thresh:
         if curr_high.ese > ese_thresh:
             # get snps in LD
             vec = d_r.loc[curr_high.snp, :]
             tagged = vec[vec > ld_thr].index.tolist()
             # re-score ese for the clump
-            ss = sumstats[sumstats.snp.isin(tagged)]
+            ss = stats[stats.snp.isin(tagged)]
             n_locus = (tagged, d_r.loc[tagged, tagged], d_t.loc[tagged, tagged])
             # TODO: include within as option?
             df_ese = per_locus(n_locus, ss, avh2, h2, n, r, within=0)
             ss.merge(df_ese.reindex(columns=['snp', 'ese']), on='snp')
             r += 1
             largest = ss.nlargest(1, 'ese')
-            if largest.ese > curr_high.ese:
+            if largest.ese.iloc[0] > curr_high.ese:
                 curr_high = largest
             ippend(curr_high.snp)
             if curr_high.snp in tagged:
                 tagged.pop(tagged.index(curr_high.snp))
             text(tagged)
         else:
-            low = sumstats.snp.tolist()
+            low = stats.snp.tolist()
             text(low)
-        sumstats = sumstats[~sumstats.snp.isin(index + tag)]
+        stats = stats[~stats.snp.isin(index + tag)]
     return index, tag
 
 
@@ -97,8 +100,6 @@ def pptc(loci, sumstats, geno, pheno, h2, threads, memory, pvals=None, lds=None,
     for r, locus in enumerate(loci):
         snps, d_r, d_t = locus
         ese_df = per_locus(locus, sumstats, avh2, h2, n, r, within=within)
-        snp_list = snps.tolist()
-        d_r = dd.from_dask_array(d_r, columns=snps) ** 2
         sub = sumstats[sumstats.snp.isin(snps)].reindex(
             columns=['snp', 'slope', 'beta_sq', 'pvalue', 'i', 'pos', 'beta'])
         sub['locus'] = r
@@ -113,7 +114,7 @@ def pptc(loci, sumstats, geno, pheno, h2, threads, memory, pvals=None, lds=None,
             lds = np.arange(0.1, 0.8, 0.1)
         pairs = product(pvals, lds, ese_threshold)
         delayed_results = [
-            dask.delayed(loop_pairs2)(locus, l, p, e, sub, geno, pheno, avh2, h2
+            dask.delayed(loop_pairs2)(locus, l, p, e, sub, pheno, geno, avh2, h2
                                       ) for p, l, e in pairs]
         with ProgressBar():
             print('    Locus', r)
@@ -132,7 +133,7 @@ def pptc(loci, sumstats, geno, pheno, h2, threads, memory, pvals=None, lds=None,
     pos = pd.concat(pos).sort_values(cols, ascending=asc)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
-    big_sumstats.to_csv('%s.big_sumstats.tsv', sep='\t', index=False)
+    pd.concat(big_sumstats).to_csv('%s.big_sumstats.tsv', sep='\t', index=False)
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
     return ppt, pre, pos
 
@@ -153,7 +154,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
 
     seed = np.random.randint(1e4) if seed is None else seed
     now = time.time()
-    print('Performing expected square effect (ESE)!')
+    print('Performing P + T + C!')
     refl, tarl = labels
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):

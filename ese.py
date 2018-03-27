@@ -49,6 +49,10 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     """
     snps, D_r, D_t = locus
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
+    if sumstats.shape[0] < len(snps):
+        snps = locus.snp
+        D_r = D_r.loc[snps, snps]
+        D_t = D_t.loc[snps, snps]
     try:
         m = snps.shape[0]
     except AttributeError:
