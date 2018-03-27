@@ -125,14 +125,14 @@ def out_of_africa_with_native(n_natives=1, nhaps=None, recomb=None,
         # Pop 1 (EUR/AS) size change at time T_B
         msprime.PopulationParametersChange(time=T_B, initial_size=N_EU0,
                                            growth_rate=0, population_id=1),
-        # Pop 0 (AFR) size change at time T_B
-        msprime.PopulationParametersChange(time=T_B, initial_size=N_B,
-                                           growth_rate=0, population_id=0),
         # YRI merges with B at T_B
         msprime.MassMigration(time=T_B, source=1, destination=0, proportion=1.0
                               ),
         # Set migrations to 0
-        msprime.MigrationRateChange(time=T_EU_AS, rate=0),
+        msprime.MigrationRateChange(time=T_B, rate=0),
+        # Pop 0 (AFR) size change at time T_B
+        msprime.PopulationParametersChange(time=T_B, initial_size=N_B,
+                                           growth_rate=0, population_id=0),
         # msprime.MigrationRateChange(time=T_B, rate=0),
         # Size changes to N_A at T_AF
         msprime.PopulationParametersChange(time=T_AF, initial_size=N_A,
@@ -244,10 +244,39 @@ def make_plink(vcf_filename, plink_exe, threads=1):
     executeLine(sed)
     prefix = vcf_filename[: vcf_filename.rfind('.')]
     line = '%s --vcf %s --make- --out %s --threads %d'
-    executeLine(line  % (plink_exe, vcf_filename, prefix, threads))
+    executeLine(line % (plink_exe, vcf_filename, prefix, threads))
     df = pd.read_table('%s.bim' % prefix, delim_whitespace=True, header=None)
     df.loc[:, 1] = ['SNP%d' % x for x in range(1, df.shape[0] + 1)]
     df.to_csv('%s.bim' % prefix, sep='\t', index=False, header=False)
+
+
+def strip_singletons(ts, maf):
+    """
+    TODO: include maf filtering... done??
+    modified from Jerome's
+    :param ts:
+    :return:
+    """
+    n = ts.get_sample_size()
+    sites = msprime.SiteTable()
+    mutations = msprime.MutationTable()
+    for tree in ts.trees():
+        for site in tree.sites():
+            assert len(site.mutations) == 1  # Only supports infinite sites muts.
+            mut = site.mutations[0]
+            f = tree.get_num_leaves(mut.node) / n
+            if (tree.num_samples(mut.node) > 1) and (f > maf) :
+                site_id = sites.add_row(
+                    position=site.position,
+                    ancestral_state=site.ancestral_state)
+                mutations.add_row(
+                    site=site_id, node=mut.node, derived_state=mut.derived_state
+                )
+    tables = ts.dump_tables()
+    new_ts = msprime.load_tables(
+        nodes=tables.nodes, edges=tables.edges, sites=sites, mutations=mutations
+    )
+    return new_ts
 
 
 def main(args):
@@ -257,7 +286,9 @@ def main(args):
                                                     nvars=args.nvars,
                                                     debug=args.debug)
     ts = msprime.simulate(**one_native_settings)
-    print("There are {0} total variant sites\n".format(ts.get_num_mutations()))
+    print("Original file contains ", ts.get_num_mutations(), "mutations")
+    ts = strip_singletons(ts)
+    print("New file contains ", ts.get_num_mutations(), "mutations")
     ts.dump('Natives_pops_%d.hdf5' % args.n_natives, True)
     vcf_filename = "OOA_natives.vcf"
     with open(vcf_filename, "w") as vcf_file:
@@ -280,5 +311,6 @@ if __name__ == '__main__':
                         help=('Transform the vcf into plink binaries. You have '
                               'to provide the path to plink here'))
     parser.add_argument('--threads', default=1, type=int)
+    parser.add_argument('--maf', default=0.05, type=int)
     args = parser.parse_args()
     main(args)
