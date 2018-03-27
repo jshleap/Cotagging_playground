@@ -10,6 +10,7 @@ from itertools import product
 from ese import *
 from comparison_ese import dirty_ppt
 
+np.seterr(all='raise')  # Debugging
 
 def get_tagged2(locus, ld_thr, ese_thresh, sumstats, avh2, h2, n):
     snp_list, d_r, d_t = locus
@@ -201,15 +202,14 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     # run pptc
     out = pptc(loci, sumstats, X_train, y_train, h2, threads, max_memory,
                pvals=None, lds=None, within=within)
-    merged, index, tagged, x_test, y_test = out
+    merged, index, tagged = out
     out_ppt = dirty_ppt(loci, sumstats, X_train, y_train, threads, 2, seed,
                         max_memory, pvals=None, lds=None)
-
     merged_ppt, index_ppt, tagged_ppt, x_test_ppt, y_test_ppt = out_ppt
     R2_ppt = just_score(index_ppt.snp, index_ppt, tpheno, tgeno)
     R2_pptc = just_score(index.snp, index, tpheno, tgeno)
-    pd.DataFrame({'ppt': R2_ppt, 'pptc': R2_pptc}).to_csv('%s.pptcres.tsv',
-                                                          sep='\t', index=False)
+    pd.DataFrame({'ppt': R2_ppt, 'pptc': R2_pptc}).to_csv(
+        '%s.pptcres.tsv' % prefix, sep='\t', index=False)
 
     # f, ax = plt.subplots()
     # for t, df in res.groupby('type'):

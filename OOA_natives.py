@@ -243,7 +243,7 @@ def make_plink(vcf_filename, plink_exe, threads=1):
     sed = "sed s'/_//'g %s > temp; mv temp %s" % (vcf_filename, vcf_filename)
     executeLine(sed)
     prefix = vcf_filename[: vcf_filename.rfind('.')]
-    line = '%s --vcf %s --make- --out %s --threads %d'
+    line = '%s --vcf %s --make-bed --out %s --threads %d'
     executeLine(line % (plink_exe, vcf_filename, prefix, threads))
     df = pd.read_table('%s.bim' % prefix, delim_whitespace=True, header=None)
     df.loc[:, 1] = ['SNP%d' % x for x in range(1, df.shape[0] + 1)]
@@ -265,7 +265,7 @@ def strip_singletons(ts, maf):
             assert len(site.mutations) == 1  # Only supports infinite sites muts.
             mut = site.mutations[0]
             f = tree.get_num_leaves(mut.node) / n
-            if (tree.num_samples(mut.node) > 1) and (f > maf) :
+            if (tree.num_samples(mut.node) > 1) and (f > maf):
                 site_id = sites.add_row(
                     position=site.position,
                     ancestral_state=site.ancestral_state)
