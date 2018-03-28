@@ -1,6 +1,6 @@
 import argparse
 import math
-
+import gzip
 import matplotlib.pylab as plt
 import msprime
 import pandas as pd
@@ -9,6 +9,7 @@ from skpca import main as skpca
 from utilities4cotagging_old import executeLine
 
 plt.style.use('ggplot')
+
 
 def make_plink(vcf_filename, plink_exe, threads=1):
     sed = "sed s'/_//'g %s > temp; mv temp %s" % (vcf_filename, vcf_filename)
@@ -88,14 +89,12 @@ def main(args):
     N_MX = N_MX0 / math.exp(-r_MX * T_MX)
     N_AD0 = N_MX0 # / math.exp(-r_MX * T_AD)) / 3
     N_AD = (N_AD0 / math.exp(-r_AD * T_AD))# * 0.45
-    propEU = (0.44 * (N_AD * 100 / 45)) / N_EU
-    propAF = (0.09 * (N_AD * 100 / 45)) / N_AF
     # Migration rates during the various epochs.
     m_AF_B = 15.8e-5
     m_AF_EU = 1.1e-5
     m_AF_AS = 0.48e-5
     m_EU_AS = 4.19e-5
-    m_MX_AD = 5E-4
+    m_MX_AD = 5E-5
     # Population IDs correspond to their indexes in the population
     # configuration array. Therefore, we have 0=YRI, 1=CEU, 2=CHB, and 3=MX
     # initially.
@@ -120,11 +119,11 @@ def main(args):
 
     demographic_events = [
         # Slaves arrival
-        msprime.MassMigration(time=13.758620689655173, source=0, destination=4,
-                              proportion=propAF),
+        msprime.MassMigration(time=13.758620689655173, source=4, destination=0,
+                              proportion=.0982094110374),
         # Colonials arrival
-        msprime.MassMigration(time=T_AD-2, source=1, destination=4,
-                              proportion=propEU),
+        msprime.MassMigration(time=T_AD-2, source=4, destination=1,
+                              proportion=.443073849784 ),
         # Admixed fraction grow from N_AD0 at rate r_AD at time T_MX
         msprime.PopulationParametersChange(
             time=T_AD, initial_size=N_AD0, growth_rate=r_AD, population_id=4),
@@ -132,8 +131,8 @@ def main(args):
         msprime.MigrationRateChange(time=T_AD, rate=0, matrix_index=(3, 4)),
         msprime.MigrationRateChange(time=T_AD, rate=0, matrix_index=(4, 3)),
         # Admixed fraction merges with MX trunk
-        msprime.MassMigration(time=T_AD, source=4, destination=3, proportion=1.0
-                              ),
+        msprime.MassMigration(time=T_AD, source=4, destination=3,
+                              proportion=.458716739179),
         # Natives grow from N_MX0 at rate r_MX at time T_MX
         msprime.PopulationParametersChange(
             time=T_MX, initial_size=N_MX0, growth_rate=r_MX, population_id=3),
@@ -207,8 +206,8 @@ def main(args):
     ts = strip_singletons(ts, args.maf)
     print("New file contains ", ts.get_num_mutations(), "mutations")
     ts.dump('Latino.hdf5', True)
-    vcf_filename = "OOA_Latino.vcf"
-    with open(vcf_filename, "w") as vcf_file:
+    vcf_filename = "OOA_Latino.vcf.gz"
+    with gzip.open(vcf_filename, "wb") as vcf_file:
         ts.write_vcf(vcf_file, 2)
     if args.to_bed is not None:
         make_plink(vcf_filename, args.to_bed, args.threads)

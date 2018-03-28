@@ -72,7 +72,7 @@ def loop_pairs2(locus, l, p, e, sumstats, pheno, geno, avh2, h2):
     return est, (index, tag, l, p)
 
 
-@jit
+#@jit
 def just_score(index_snp, sumstats, pheno, geno):
     clump = sumstats[sumstats.snp.isin(index_snp)]
     idx = clump.i.values.astype(int)
@@ -81,8 +81,8 @@ def just_score(index_snp, sumstats, pheno, geno):
     return est
 
 
-def pptc(loci, sumstats, geno, pheno, h2, threads, memory, pvals=None, lds=None,
-         within=0):
+def pptc(prefix, loci, sumstats, geno, pheno, h2, threads, memory, pvals=None,
+         lds=None, within=0):
     cache = Chest(available_memory=memory)
     now = time.time()
     if not 'beta_sq' in sumstats.columns:
@@ -134,7 +134,8 @@ def pptc(loci, sumstats, geno, pheno, h2, threads, memory, pvals=None, lds=None,
     pos = pd.concat(pos).sort_values(cols, ascending=asc)
     ppt = pre.append(pos, ignore_index=True).reset_index(drop=True)
     ppt['index'] = ppt.index.tolist()
-    pd.concat(big_sumstats).to_csv('%s.big_sumstats.tsv', sep='\t', index=False)
+    pd.concat(big_sumstats).to_csv('%s.big_sumstats.tsv' % prefix, sep='\t',
+                                   index=False)
     print('Dirty ppt done after %.2f minutes' % ((time.time() - now) / 60.))
     return ppt, pre, pos
 
@@ -200,15 +201,15 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     else:
         raise NotImplementedError
     # run pptc
-    out = pptc(loci, sumstats, X_train, y_train, h2, threads, max_memory,
+    out = pptc(prefix, loci, sumstats, X_train, y_train, h2, threads,max_memory,
                pvals=None, lds=None, within=within)
     merged, index, tagged = out
-    out_ppt = dirty_ppt(loci, sumstats, X_train, y_train, threads, 2, seed,
+    out_ppt = dirty_ppt(loci, sumstats, X_train, y_train, threads, 0, seed,
                         max_memory, pvals=None, lds=None)
     merged_ppt, index_ppt, tagged_ppt, x_test_ppt, y_test_ppt = out_ppt
     R2_ppt = just_score(index_ppt.snp, index_ppt, tpheno, tgeno)
     R2_pptc = just_score(index.snp, index, tpheno, tgeno)
-    pd.DataFrame({'ppt': R2_ppt, 'pptc': R2_pptc}).to_csv(
+    pd.DataFrame([{'ppt': R2_ppt, 'pptc': R2_pptc}]).to_csv(
         '%s.pptcres.tsv' % prefix, sep='\t', index=False)
 
     # f, ax = plt.subplots()
