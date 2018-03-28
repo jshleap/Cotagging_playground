@@ -17,15 +17,17 @@ def do_pca(g, n_comp):
     return pca
 
 
-def main(args):
-    (bim, fam, g) = read_geno(args.bfile, 0, args.cpus, max_memory=args.mem)
-    pca = pd.DataFrame(do_pca(g, args.comps))
+def main(bfile, n_comps, cpus, mem):
+    (bim, fam, g) = read_geno(bfile, 0, cpus, max_memory=mem)
+    cols = ['PC%d' % (x + 1) for x in range(n_comps)]
+    pca = pd.DataFrame(do_pca(g, n_comps), columns=cols)
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
     ordered_cols = ['fid','iid'] + cols
-    pca.loc[:, ordered_cols].to_csv('%s.pca' % args.bfile, sep=' ',
-                                    header=False, index=False)
+    pca = pca.loc[:, ordered_cols]
+    pca.to_csv('%s.pca' % bfile, sep=' ', header=False, index=False)
+    return pca
 
 # ----------------------------------------------------------------------
 if __name__ == '__main__':
@@ -35,4 +37,4 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mem', type=int)
     parser.add_argument('-c', '--comps', type=int)
     args = parser.parse_args()
-    main(args)
+    main(args.bfile, args.comps, args.cpus, args.mem)
