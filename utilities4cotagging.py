@@ -437,11 +437,11 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     :param extend: 'Circularize' the genome by extending both ends
     :return: A list of tuples (or dataframe if not justd) with the ld per blocks
     """
-    # Set CPU limits
-    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    print('Soft limit changed to :', soft)
+    # # Set CPU limits
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # print('Soft limit changed to :', soft)
 
     # set Cache to protect memory spilling
     if max_memory is not None:
