@@ -178,7 +178,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
                  causaleff=rbim.dropna(subset=['beta']), bfile2=refgeno))
         tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
         opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate=0, threads=threads, bim=rbim,
+                         validate=None, threads=threads, bim=rbim,
                          flip=kwargs['flip']))
     elif isinstance(refgeno, str):
         (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
