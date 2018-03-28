@@ -204,7 +204,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels,
     out = pptc(prefix, loci, sumstats, X_train, y_train, h2, threads,max_memory,
                pvals=None, lds=None, within=within)
     merged, index, tagged = out
-    out_ppt = dirty_ppt(loci, sumstats, X_train, y_train, threads, 0, seed,
+    out_ppt = dirty_ppt(loci, sumstats, X_train, y_train, threads, 1, seed,
                         max_memory, pvals=None, lds=None)
     merged_ppt, index_ppt, tagged_ppt, x_test_ppt, y_test_ppt = out_ppt
     R2_ppt = just_score(index_ppt.snp, index_ppt, tpheno, tgeno)
@@ -263,10 +263,10 @@ if __name__ == '__main__':
                         help=('Filename of the true phenotype of the reference '
                               'population'))
     parser.add_argument('-S', '--sliding', default=False, action='store_true',
-                        help=('Use a sliding window instead of hard block'))
+                        help='Use a sliding window instead of hard block')
 
     parser.add_argument('-w', '--window', default=1000, type=int,
-                        help=('Size of the LD window. a.k.a locus'))
+                        help='Size of the LD window. a.k.a locus')
     parser.add_argument('-P', '--plinkexe', default=None)
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=None, type=int)

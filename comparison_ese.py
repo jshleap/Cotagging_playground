@@ -252,7 +252,8 @@ def main(args):
         tpheno, h2, (tgeno, tbim, truebeta, tcausals) = qtraits_simulation(
             **opts)
     opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno, bim=rbim,
-                     validate=args.split, threads=args.threads, flip=args.flip,
+                     validate=None if args.split <= 1 else args.split,
+                     threads=args.threads, flip=args.flip,
                      high_precision=args.high_precision))
     # perform GWAS
     sumstats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
