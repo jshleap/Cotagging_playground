@@ -94,7 +94,7 @@ def main(args):
     m_AF_EU = 1.1e-5
     m_AF_AS = 0.48e-5
     m_EU_AS = 4.19e-5
-    m_MX_AD = 5E-5
+    m_MX_AD = 5e-5
     # Population IDs correspond to their indexes in the population
     # configuration array. Therefore, we have 0=YRI, 1=CEU, 2=CHB, and 3=MX
     # initially.
@@ -120,10 +120,10 @@ def main(args):
     demographic_events = [
         # Slaves arrival
         msprime.MassMigration(time=13.758620689655173, source=4, destination=0,
-                              proportion=.0982094110374),
+                              proportion=0.098),
         # Colonials arrival
         msprime.MassMigration(time=T_AD-2, source=4, destination=1,
-                              proportion=.443073849784 ),
+                              proportion=0.443),
         # Admixed fraction grow from N_AD0 at rate r_AD at time T_MX
         msprime.PopulationParametersChange(
             time=T_AD, initial_size=N_AD0, growth_rate=r_AD, population_id=4),
@@ -132,7 +132,7 @@ def main(args):
         msprime.MigrationRateChange(time=T_AD, rate=0, matrix_index=(4, 3)),
         # Admixed fraction merges with MX trunk
         msprime.MassMigration(time=T_AD, source=4, destination=3,
-                              proportion=.458716739179),
+                              proportion=1.0),#0.459),
         # Natives grow from N_MX0 at rate r_MX at time T_MX
         msprime.PopulationParametersChange(
             time=T_MX, initial_size=N_MX0, growth_rate=r_MX, population_id=3),
@@ -207,7 +207,7 @@ def main(args):
     print("New file contains ", ts.get_num_mutations(), "mutations")
     ts.dump('Latino.hdf5', True)
     vcf_filename = "OOA_Latino.vcf.gz"
-    with gzip.open(vcf_filename, "wb") as vcf_file:
+    with open(vcf_filename, "w") as vcf_file:
         ts.write_vcf(vcf_file, 2)
     if args.to_bed is not None:
         make_plink(vcf_filename, args.to_bed, args.threads)

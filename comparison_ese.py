@@ -151,7 +151,7 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
 
 
 @jit
-def just_score(index_snp, sumstats,  pheno, geno):
+def just_score(index_snp, sumstats, pheno, geno):
     clump = sumstats[sumstats.snp.isin(index_snp)]
     idx = clump.i.values.astype(int)
     prs = geno[:, idx].dot(clump.slope)
