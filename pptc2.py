@@ -23,14 +23,15 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
     d_target = pd.DataFrame(d_target, index=snp_list, columns=snp_list)
     # subset sum_stats
     sum_stats = sum_stats[sum_stats.snp.isin(snp_list)]
+    # TODO: inlcude index snp selection by ese???
     # Get the clumps pfr this locus
     clumps = {}
     while not sum_stats.empty:
         # get the index snp
-        if select_by == 'pvalue':
-            index = sum_stats.nsmallest(1, select_by)
-        else:
-            index = sum_stats.nlargest(1, select_by)
+        # if select_by == 'pvalue':
+        index = sum_stats.nsmallest(1, 'pvalue')
+        # else:
+        #     index = sum_stats.nlargest(1, select_by)
         # get the clump around index for
         vec = (locals()[clump_with] ** 2).loc[index.snp, :]
         tag = vec[vec > ld_threshold].index.tolist()
@@ -101,6 +102,9 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
     :param by: Ranking strategy (ESE or Pvalue)
     :return: Tuple with the list of index snps and their R2
     """
+
+    #TODO: remove the snp_index by computing exclusively pval or exclusively
+    # ese, and propagate the change
     if by == 'pvalue':
         rank = getattr(operator, 'lt')
         snp_index = 0
@@ -118,20 +122,21 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
                       all_clumps.keys() if rank(k[snp_index + 1], by_threshold)]
         r2 = just_score(index_snps, sum_stats, test_pheno, test_geno)
         if r2 > curr_best[1]:
-            curr_best = (index_snps, r2)
-    return r2
+            curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
+    return curr_best
 
 
 def run_optimization_by(by_range, by, loci, h2, m, n, threads, cache, sum_stats,
                         available_memory,test_geno, test_pheno, tpheno, tgeno,
                         prefix, select_by='pvalue', clump_with='d_reference'):
     avh2 = h2 / m
-    ld_range = np.arange(0.1, 0.8, 0.1)
+    ld_range = np.arange(.2, .8, .2)
     if by_range is None and (by == 'pvalue'):
             by_range = [1, 0.5, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
     r2_tuple = optimize_it(loci, ld_range, by_range, h2, avh2, n, threads,
                            cache, available_memory, sum_stats, test_geno,
                            test_pheno, select_by, clump_with)
+    sum_stats = r2_tuple[-1]
     # score in target
     r2 = just_score(r2_tuple[0], sum_stats, tpheno, tgeno)
     ascending = True if by == 'pvalue' else False
