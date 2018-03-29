@@ -59,11 +59,12 @@ def get_tagged2(locus, ld_thr, ese_thresh, sumstats, avh2, h2, n):
     return index, tag
 
 
-@jit
+#@jit
 def loop_pairs2(locus, l, p, e, sumstats, pheno, geno, avh2, h2):
-    # clean with soft pvalue
     n, m = geno.shape
-    ss = sumstats[sumstats.pvalue < p]
+    if any([isinstance(x, str) for x in sumstats.pvalue]):
+        sumstats.loc[:, 'pvalue'] = [mp.mpf(i) for i in sumstats.pvalue]
+    ss = sumstats[sumstats.pvalue.values < float(p)]  # clean with soft pvalue
     index, tag = get_tagged2(locus, l, e, ss, avh2, h2, n)
     clump = sumstats[sumstats.snp.isin(index)]
     idx = clump.i.values.astype(int)
@@ -72,7 +73,7 @@ def loop_pairs2(locus, l, p, e, sumstats, pheno, geno, avh2, h2):
     return est, (index, tag, l, p)
 
 
-#@jit
+@jit
 def just_score(index_snp, sumstats, pheno, geno):
     clump = sumstats[sumstats.snp.isin(index_snp)]
     idx = clump.i.values.astype(int)
@@ -114,18 +115,25 @@ def pptc(prefix, loci, sumstats, geno, pheno, h2, threads, memory, pvals=None,
         if lds is None:
             lds = np.arange(0.1, 0.8, 0.1)
         pairs = product(pvals, lds, ese_threshold)
-        delayed_results = [
-            dask.delayed(loop_pairs2)(locus, l, p, e, sub, pheno, geno, avh2, h2
-                                      ) for p, l, e in pairs]
-        with ProgressBar():
-            print('    Locus', r)
-            d = dict(list(dask.compute(*delayed_results, num_workers=threads,
-                                       memory_limit=memory, cache=cache,
-                                       pool=ThreadPool(threads))))
-            best_key = max(d.keys())
-            i, t, ld, pv = d[best_key]
-            index += i
-            tag += t
+        picklefile = '%s_locus_%d.pickle' % (prefix, r)
+        if os.path.isfile(picklefile):
+            with open(picklefile, 'rb') as F:
+                d = pickle.load(F)
+        else:
+            delayed_results = [
+                dask.delayed(loop_pairs2)(locus, l, p, e, sub, pheno, geno, avh2, h2
+                                          ) for p, l, e in pairs]
+            with ProgressBar():
+                print('    Locus', r)
+                d = dict(list(dask.compute(*delayed_results, num_workers=threads,
+                                           memory_limit=memory, cache=cache,
+                                           pool=ThreadPool(threads))))
+                with open(picklefile, 'wb') as F:
+                    pickle.dump(d, F)
+        best_key = max(d.keys())
+        i, t, ld, pv = d[best_key]
+        index += i
+        tag += t
         pre.append(sub[sub.snp.isin(index)])
         pos.append(sub[sub.snp.isin(tag)])
     cols = ['ese', 'pvalue', 'pos']
