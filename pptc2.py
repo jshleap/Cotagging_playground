@@ -60,7 +60,7 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
         try:
             assert np.allclose(tried.values, index.pvalue.values)
         except AttributeError:
-            assert np.allclose(tried.values == index.pvalue)
+            assert np.allclose(tried.values, index.pvalue)
         # Get the highest ESE of the clump
         max_ese = ss.nlargest(1, 'ese')
         # Store the results in clump dictionary
