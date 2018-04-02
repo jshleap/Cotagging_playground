@@ -225,7 +225,8 @@ def load_previous_run(prefix, threads):
 # ----------------------------------------------------------------------
 def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
                     causal_pos=None, threads=8, pca=None, stmd=False,
-                    high_precision=False, max_memory=None, **kwargs):
+                    high_precision=False, max_memory=None,
+                    high_precision_on_zero=False, **kwargs):
     """
     Compute the least square regression for a genotype in a phenotype. This
     assumes that the phenotype has been computed from a nearly independent set
@@ -352,7 +353,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         res = pd.concat((res, bim), axis=1)  # Combine mapping and gwas
         # check precision issues and re-run the association
         zeros = res[res.pvalue == 0.0]
-        if not zeros.empty and not stmd:
+        if not zeros.empty and not stmd and high_precision_on_zero:
             print('    Processing zeros with arbitrary precision')
             df = x_train.shape[0] - 2
             dr = [dask.delayed(high_precision_pvalue)(df, r) for r in

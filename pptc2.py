@@ -57,7 +57,10 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
             tried = ss.pvalue.nsmallest(1)
         except TypeError:
             tried = ss.sort_values('pvalue').pvalue
-        assert tried.values == index.pvalue.values
+        try:
+            assert tried.values == index.pvalue.values
+        except AttributeError:
+            assert tried.values == index.pvalue
         # Get the highest ESE of the clump
         max_ese = ss.nlargest(1, 'ese')
         # Store the results in clump dictionary
@@ -194,7 +197,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                 'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
                 'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
                 'bfile2': targeno, 'flip': kwargs['gflip'],
-                'max_memory': max_memory}
+                'max_memory': max_memory,
+                'high_precision_on_zero': kwargs['highp']}
         rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
         # make simulation for target
         print('Simulating phenotype for target population %s \n' % tarl)
@@ -318,6 +322,9 @@ if __name__ == '__main__':
                         help='check and clean invariant sites')
     parser.add_argument('--clump_with', default='d_reference',
                         help='ld matrix to clump with: d_reference or d_target')
+    parser.add_argument('--highp', action='store_true',
+                        help='Use arbitrary precision')
+
 
     args = parser.parse_args()
     main(args.prefix, args.reference, args.refpheno, args.target, args.tarpheno,
@@ -325,4 +332,4 @@ if __name__ == '__main__':
          threads=args.threads, ncausal=args.ncausal, normalize=True, by=args.by,
          uniform=args.uniform, by_range=args.r_range, max_memory=args.maxmem,
          split=args.split, flip=args.flip, gflip=args.gflip, within=args.within,
-         check=args.check)
+         check=args.check, highp=args.highp)
