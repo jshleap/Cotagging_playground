@@ -361,7 +361,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
             with ProgressBar(), dask.set_options(**dask_options):
                 zero_res = np.array(dask.compute(*dr))
             res.loc[res.pvalue == 0.0, 'pvalue'] = zero_res
-        res['pvalue'] = [mp.mpf(z) for z in res.pvalue]
+            res['pvalue'] = [mp.mpf(z) for z in res.pvalue]
         # Make a manhatan plot
         if plot:
             manhattan_plot('%s.manhatan.pdf' % prefix, res.slope, causal_pos,
