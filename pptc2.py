@@ -8,7 +8,7 @@ np.seterr(all='raise')  # Debugging
 
 
 def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
-           clump_with='d_reference'):
+           clump_with='d_reference', do_locus_ese=False):
     """
     Get clumps from locus
     :param r2_reference: the r2 (LD) matrix for the subset
@@ -23,13 +23,23 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
     d_target = pd.DataFrame(d_target, index=snp_list, columns=snp_list)
     # subset sum_stats
     sum_stats = sum_stats[sum_stats.snp.isin(snp_list)]
-    # TODO: inlcude index snp selection by ese???
+    if do_locus_ese:
+        locus_ese = per_locus(locus, sum_stats, avh2, h2, n, 0, within=0)
+        locus_ese = locus_ese.reindex(columns=['snp', 'ese']).rename(columns={
+            'ese': 'locus_ese'})
+        sum_stats = sum_stats.merge(locus_ese, on='snp')
     # Get the clumps pfr this locus
     clumps = {}
     while not sum_stats.empty:
         # get the index snp
         # if select_by == 'pvalue':
-        index = sum_stats.nsmallest(1, 'pvalue')
+        if do_locus_ese:
+            index = sum_stats.nlargest(1, 'locus_ese')
+        else:
+            try:
+                index = sum_stats.nsmallest(1, 'pvalue')
+            except TypeError:
+                index = sum_stats.sort_values('pvalue').iloc[0]
         # else:
         #     index = sum_stats.nlargest(1, select_by)
         # get the clump around index for
@@ -43,7 +53,11 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
         df_ese = per_locus(n_locus, sub_stats, avh2, h2, n, 0, within=0)
         ss = sub_stats.merge(df_ese.reindex(columns=['snp', 'ese']), on='snp')
         # make sure it matches
-        assert ss.pvalue.nsmallest(1).values ==  index.pvalue.values
+        try:
+            tried = ss.pvalue.nsmallest(1)
+        except TypeError:
+            tried = ss.sort_values('pvalue').pvalue
+        assert tried.values == index.pvalue.values
         # Get the highest ESE of the clump
         max_ese = ss.nlargest(1, 'ese')
         # Store the results in clump dictionary
@@ -56,7 +70,8 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
 
 
 def compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n, threads, cache,
-                   memory, select_by='pvalue', clump_with='d_reference'):
+                   memory, select_by='pvalue', clump_with='d_reference',
+                   do_locus_ese=False):
     """
 
     :param loci: list of tuples with the LDs and snps per locus
@@ -72,7 +87,8 @@ def compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n, threads, cache,
     """
     delayed_results = [
         dask.delayed(clumps)(locus, sum_stats, ld_threshold, h2, avh2, n,
-                             select_by, clump_with) for locus in loci]
+                             select_by, clump_with, do_locus_ese)
+        for locus in loci]
     with ProgressBar():
         print("Identifying clumps with R2 threshold of %.3f" % ld_threshold)
         l = list(dask.compute(*delayed_results, num_workers=threads,
@@ -83,7 +99,7 @@ def compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n, threads, cache,
 
 def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
                 sum_stats, test_geno, test_pheno, by='pvalue',
-                clump_with='d_reference'):
+                clump_with='d_reference', do_locus_ese=False):
     """
     Optimize the R2 based on summary statistics
 
@@ -114,7 +130,8 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
     curr_best = ([], 0)
     for ld_threshold in ld_range:
         all_clumps = compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n,
-                                    threads, cache, memory, by, clump_with)
+                                    threads, cache, memory, by, clump_with,
+                                    do_locus_ese)
         if by_range is None:
             by_range = pd.concat(all_clumps.values()).ese.quantile(
                 np.arange(.0, 1, .1))
@@ -128,14 +145,15 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
 
 def run_optimization_by(by_range, by, loci, h2, m, n, threads, cache, sum_stats,
                         available_memory,test_geno, test_pheno, tpheno, tgeno,
-                        prefix, select_by='pvalue', clump_with='d_reference'):
+                        prefix, select_by='pvalue', clump_with='d_reference',
+                        do_locus_ese=False):
     avh2 = h2 / m
     ld_range = np.arange(.2, .8, .2)
     if by_range is None and (by == 'pvalue'):
             by_range = [1, 0.5, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
     r2_tuple = optimize_it(loci, ld_range, by_range, h2, avh2, n, threads,
                            cache, available_memory, sum_stats, test_geno,
-                           test_pheno, select_by, clump_with)
+                           test_pheno, select_by, clump_with, do_locus_ese)
     sum_stats = r2_tuple[-1]
     # score in target
     r2 = just_score(r2_tuple[0], sum_stats, tpheno, tgeno)
@@ -218,9 +236,14 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                                   cache, sum_stats, available_memory, X_test,
                                   y_test, tpheno, tgeno, '%s_pval' % prefix,
                                   'ese', clump_with)
+        # run ese + locus ese
+        l_ese = run_optimization_by(by_range, 'ese', loci, h2, m, n, threads,
+                                    cache, sum_stats, available_memory, X_test,
+                                    y_test, tpheno, tgeno, '%s_pval' % prefix,
+                                  'ese', clump_with, do_locus_ese=True)
         pd.DataFrame([{r'R^{2}_{ese}': ese[-1], r'R^{2}_{pvalue}': pvalue[-1],
-                       'prefix': prefix}]).to_csv('%s.tsv' % prefix, sep='\t',
-                                                  index=False)
+                       r'R^{2}_{locus ese}': l_ese[-1], 'prefix': prefix}]).to_csv(
+            '%s.tsv' % prefix, sep='\t', index=False)
     else:
         index, tagged, r2 = run_optimization_by(
             by_range, by, loci, h2, m, n, threads, cache, sum_stats,
