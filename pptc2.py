@@ -58,9 +58,9 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, select_by='pvalue',
         except TypeError:
             tried = ss.sort_values('pvalue').pvalue
         try:
-            assert tried.values == index.pvalue.values
+            assert np.allclose(tried.values, index.pvalue.values)
         except AttributeError:
-            assert tried.values == index.pvalue
+            assert np.allclose(tried.values == index.pvalue)
         # Get the highest ESE of the clump
         max_ese = ss.nlargest(1, 'ese')
         # Store the results in clump dictionary
@@ -324,7 +324,6 @@ if __name__ == '__main__':
                         help='ld matrix to clump with: d_reference or d_target')
     parser.add_argument('--highp', action='store_true',
                         help='Use arbitrary precision')
-
 
     args = parser.parse_args()
     main(args.prefix, args.reference, args.refpheno, args.target, args.tarpheno,
