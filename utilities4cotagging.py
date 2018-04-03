@@ -319,11 +319,11 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     :param df: sorted dataframe
     :return: scored dataframe
     """
-    # Set CPU limits
-    soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-    resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    print('Soft limit changed to :', soft)
+    # # Set CPU limits
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # resource.setrlimit(resource.RLIMIT_NPROC, (threads, hard))
+    # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+    # print('Soft limit changed to :', soft)
     # set Cache to protect memory spilling
     if max_memory is not None:
         available_memory = max_memory
