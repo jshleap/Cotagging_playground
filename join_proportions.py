@@ -16,9 +16,9 @@ files = glob('run*/proportions.tsv')
 todas = []
 #t_r2s = []
 #max_r2s = []
-if sys.argv[1] == 'TRUE':
-    read_opts = dict(delim_whitespace=True, header=None, names=['number',
-                                                                r'$R^2$'])
+if sys.argv[1] == 'TRUE': # if done with plink
+    names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal']
+    read_opts = dict(delim_whitespace=True, header=None, names=names)
     time = 'EUR (%)'
     value = r"$R^2$"
 
@@ -52,14 +52,34 @@ f, ax = plt.subplots()
 sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,  ci=[25, 50, 75,
                                                                     95])
 plt.title('Sample size: %d' % df.number.max())
-plt.savefig('Proportions_%sruns.pdf' % str(df.run.max() + 1))
 plt.tight_layout()
+plt.savefig('Proportions_%sruns.pdf' % str(df.run.max() + 1))
 plt.close()
 
 f, ax = plt.subplots()
 sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
            err_style="unit_traces")
 plt.title('Sample size: %d' % df.number.max())
-plt.savefig('Proportions_%sruns_traces.pdf' % str(df.run.max() + 1))
 plt.tight_layout()
+plt.savefig('Proportions_%sruns_traces.pdf' % str(df.run.max() + 1))
 plt.close()
+
+# plot number of true and false positives SNPs found
+assert pd.unique(df.ncausal).shape[0] == 1
+ncausal = pd.unique(df.ncausal).ncausal[0]
+sub = df.reindex(columns=['TP', 'FP', 'EUR (%)', 'run'])
+ndf = []
+for run, d in sub.groupby('run'):
+    for i, ser in d.iterrows():
+        ndf.append({'Type': 'TP', '# Discovered SNPS': ser.TP,
+                    'EUR (%)': ser.loc['EUR (%)', 'run': run]})
+        ndf.append({'Type': 'FP', '# Discovered SNPS': ser.FP,
+                    'EUR (%)': ser.loc['EUR (%)', 'run': run]})
+ndf = pd.DataFrame(ndf)
+f, ax = plt.subplots()
+sns.barplot(x="EUR (%)", y="# Discovered SNPS", hue="Type", data=ndf, ax=ax,
+            capsize=.2)
+ax.axhline(ncausal, ls='-.', color='0.5', label='Causals in AFR')
+plt.title('Sample size: %d' % df.number.max())
+plt.tight_layout()
+plt.savefig('Proportions_%sruns_discovered_snps.pdf' % str(df.run.max() + 1))
