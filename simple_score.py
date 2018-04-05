@@ -5,10 +5,18 @@ import numpy as np
 
 
 def main(args):
+    causals = pd.read_table('AFR.causaleff', delim_whitespace=True)
     (bim, fam, g) = read_geno(args.bfile, 0, args.cpus, max_memory=args.mem)
     clump = pd.read_table(args.clump, delim_whitespace=True)
     prop = int(args.clump.split('.')[0])
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
+    over_gwsig = sumstats[sumstats.P <= 1E-8]
+    if over_gwsig.empty:
+        tp = 0
+        fp = 0
+    else:
+        tp = over_gwsig[over_gwsig.SNP.isin(causals.snp.tolist())].shape[0]
+        fp = over_gwsig.shape[0] - tp
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
                                                                     'pheno'])
     sub = sumstats.merge(clump, on=['CHR', 'SNP', 'BP', 'P'])
@@ -18,7 +26,8 @@ def main(args):
     sub_pheno = pheno[pheno.iid.isin(fam.iid)]
     r2 = np.corrcoef(fam.prs.values, sub_pheno.pheno)[1, 0] ** 2
     with open('proportions.tsv', 'a') as F:
-        F.write('%d\t%f\n' % (prop, r2))
+        # output have | proportion | r2 | TP | FP | ncausal
+        F.write('%d\t%f\t%d\t%d\t%d\n' % (prop, r2, tp, fp, causals.shape[0]))
 
 
 
