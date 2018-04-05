@@ -133,6 +133,8 @@ def main(args):
         # Admixed fraction merges with MX trunk
         msprime.MassMigration(time=T_AD, source=4, destination=3,
                               proportion=1.0),#0.459),
+        # switch to standard coalescent
+        #msprime.SimulationModelChange(T_AD, msprime.StandardCoalescent(1)),
         # Natives grow from N_MX0 at rate r_MX at time T_MX
         msprime.PopulationParametersChange(
             time=T_MX, initial_size=N_MX0, growth_rate=r_MX, population_id=3),
@@ -177,14 +179,14 @@ def main(args):
         msprime.PopulationParametersChange(time=T_AF, initial_size=N_A,
                                            population_id=0)
     ]
-    dp = msprime.DemographyDebugger(
-        Ne=N_A,
-        population_configurations=population_configurations,
-        migration_matrix=migration_matrix,
-        demographic_events=demographic_events)
-    dp.print_history()
-    with open('demography.txt', 'w') as fn:
-        dp.print_history(output=fn)
+    # dp = msprime.DemographyDebugger(
+    #     Ne=N_A,
+    #     population_configurations=population_configurations,
+    #     migration_matrix=migration_matrix,
+    #     demographic_events=demographic_events)
+    # dp.print_history()
+    # with open('demography.txt', 'w') as fn:
+    #     dp.print_history(output=fn)
     if args.rec_map is not None:
         rmap = msprime.RecombinationMap.read_hapmap(args.rec_map)
         nvars = None
@@ -193,6 +195,7 @@ def main(args):
         rmap = None
         rr = 2e-8
     settings = {
+        'model': msprime.DiscreteTimeWrightFisher(0.25),
         'population_configurations': population_configurations,
         'migration_matrix': migration_matrix,
         'recombination_rate': rr,
