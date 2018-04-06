@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
 from utilities4cotagging import prune_it
-import argparse
+import argparse, pickle, os
 plt.style.use('ggplot')
 
 def main(args):
@@ -24,8 +24,15 @@ def main(args):
 
     # process and plot the full tsvs
     pheno = pd.read_table(args.pheno, delim_whitespace=True)
-    concat = []
-    for fn in filesall:
+    picklefile = 'locusese.pickle'
+    if os.path.isfile(picklefile):
+        with open(picklefile, 'wb') as F:
+            x, concat = pickle.load(F)
+        loaded = True
+    else:
+        x, concat  = 0, []
+    for i, fn in enumerate(filesall[x:]):
+        i = x + i
         alldf = pd.read_table(fn, sep='\t')
         # process by pvalue
         pval = alldf.sort_values('pvalue')
@@ -40,6 +47,8 @@ def main(args):
         le_res = prune_it(ese_locus, args.bfile, pheno, 'ese')
         le_res['run'] = fn
         concat.append(pd.concat([p_res, e_res, le_res]))
+        with open(picklefile, 'wb') as F:
+            pickle.dump((i, concat), F)
     df = pd.concat(concat)
     grouped = df.groupby(['Number of SNPs', 'type'], as_index=False).mean()
     fig, ax = plt.subplots()
