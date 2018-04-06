@@ -66,15 +66,15 @@ plt.close()
 
 # plot number of true and false positives SNPs found
 assert pd.unique(df.ncausal).shape[0] == 1
-ncausal = pd.unique(df.ncausal).ncausal[0]
+ncausal = pd.unique(df.ncausal)[0]
 sub = df.reindex(columns=['TP', 'FP', 'EUR (%)', 'run'])
 ndf = []
 for run, d in sub.groupby('run'):
     for i, ser in d.iterrows():
         ndf.append({'Type': 'TP', '# Discovered SNPS': ser.TP,
-                    'EUR (%)': ser.loc['EUR (%)', 'run': run]})
+                    'EUR (%)': ser.loc['EUR (%)'], 'run': run})
         ndf.append({'Type': 'FP', '# Discovered SNPS': ser.FP,
-                    'EUR (%)': ser.loc['EUR (%)', 'run': run]})
+                    'EUR (%)': ser.loc['EUR (%)'], 'run': run})
 ndf = pd.DataFrame(ndf)
 f, ax = plt.subplots()
 sns.barplot(x="EUR (%)", y="# Discovered SNPS", hue="Type", data=ndf, ax=ax,

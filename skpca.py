@@ -4,6 +4,7 @@ import pandas as pd
 import sys
 import argparse
 
+
 def do_pca(g, n_comp):
     """
     Perform a PCA on the genetic array and return n_comp of it
@@ -17,13 +18,18 @@ def do_pca(g, n_comp):
     return pca
 
 
-def main(bfile, n_comps, cpus, mem):
+def main(bfile, n_comps, cpus, mem, extra_covs):
     (bim, fam, g) = read_geno(bfile, 0, cpus, max_memory=mem)
     cols = ['PC%d' % (x + 1) for x in range(n_comps)]
     pca = pd.DataFrame(do_pca(g, n_comps), columns=cols)
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
+    if extra_covs is not None:
+        extra = pd.read_table(extra_covs, delim_whitespace=True)
+        if 'FID' in extra.columns.tolist():
+            extra.rename(columns={'FID': 'fid', 'IID': 'iid'}, inplace=True)
+        pca = pca.merge(extra, on=['fid', 'iid'])
     ordered_cols = ['fid','iid'] + cols
     pca = pca.loc[:, ordered_cols]
     pca.to_csv('%s.pca' % bfile, sep=' ', header=False, index=False)
@@ -36,5 +42,6 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--cpus', type=int)
     parser.add_argument('-m', '--mem', type=int)
     parser.add_argument('-c', '--comps', type=int)
+    parser.add_argument('-e', '--extra_covs', default=None)
     args = parser.parse_args()
-    main(args.bfile, args.comps, args.cpus, args.mem)
+    main(args.bfile, args.comps, args.cpus, args.mem, args.extra_covs)

@@ -1,18 +1,21 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
-from utilities4cotagging import prune_it
-import argparse, pickle, os
+from utilities4cotagging import prune_it, read_geno
+import argparse, pickle
+import numpy as np
+import os
+
 plt.style.use('ggplot')
 
+
 def main(args):
-    fp = 'run*/%s{1..100}.tsv' % args.run
+    fp = 'run*/%s*.tsv' % args.run
     allf = glob(fp)
     files = [x for x in allf if '_' not in x]
     filesall = [x for x in allf if '_' in x]
     df = pd.concat(pd.read_table(f, sep='\t') for f in files)
-    ndf = df.rename(columns={c:'$%s$' % c for c in df.columns})
-
+    ndf = df.rename(columns={c: '$%s$' % c for c in df.columns})
     # plot Pvalue vs eses
     f, ax = plt.subplots()
     ndf.plot.scatter(x=r'$R^{2}_{pvalue}$', y=r'$R^{2}_{ese}$', c='b', ax=ax,
@@ -20,31 +23,39 @@ def main(args):
     ndf.plot.scatter(x=r'$R^{2}_{pvalue}$', y=r'$R^{2}_{locus ese}$', c='r',
                      ax=ax, label=r'$R^{2}_{locus ese}$')
     ax.plot(ax.get_xlim(), ax.get_ylim(), ls="--", c=".3")
+    plt.ylabel(r'$R^2_{target}$')
+    plt.tight_layout()
     plt.savefig('%s.pdf' % args.prefix)
 
     # process and plot the full tsvs
-    pheno = pd.read_table(args.pheno, delim_whitespace=True)
     picklefile = 'locusese.pickle'
     if os.path.isfile(picklefile):
         with open(picklefile, 'wb') as F:
             x, concat = pickle.load(F)
         loaded = True
     else:
-        x, concat  = 0, []
+        x, concat = 0, []
+    (bim, fam, geno) = read_geno(args.bfile, 0.01, 8, check=True)
+    concat = []
     for i, fn in enumerate(filesall[x:]):
+        print('Processing %s' % fn)
         i = x + i
+        folder = os.path.split(fn)[0]
+        pheno = pd.read_table(os.path.join(folder, args.pheno), header=None,
+                              delim_whitespace=True, names=['fid', 'iid',
+                                                            'PHENO'])
         alldf = pd.read_table(fn, sep='\t')
         # process by pvalue
         pval = alldf.sort_values('pvalue')
-        p_res = prune_it(pval, args.bfile, pheno, 'pvalue')
+        p_res = prune_it(pval, geno, pheno, 'pvalue')
         p_res['run'] = fn
         # process by clumped ese
         ese = alldf.sort_values('ese', ascending=False)
-        e_res = prune_it(ese, args.bfile, pheno, 'ese')
+        e_res = prune_it(ese, geno, pheno, 'ese')
         e_res['run'] = fn
         # process by locus ese
         ese_locus = alldf.sort_values('locus_ese', ascending=False)
-        le_res = prune_it(ese_locus, args.bfile, pheno, 'ese')
+        le_res = prune_it(ese_locus, geno, pheno, 'ese')
         le_res['run'] = fn
         concat.append(pd.concat([p_res, e_res, le_res]))
         with open(picklefile, 'wb') as F:
