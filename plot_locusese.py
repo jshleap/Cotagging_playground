@@ -35,10 +35,13 @@ def main(args):
         loaded = True
     else:
         x, concat = 0, []
-    (bim, fam, geno) = read_geno(args.bfile, 0.01, 8, check=True)
+    (bim, fam, geno) = read_geno(args.bfile, args.maf, 8, check=args.check)
     concat = []
+
     for i, fn in enumerate(filesall[x:]):
-        print('Processing %s' % fn)
+        line = '* Processing %s *' % fn
+        asters = '*' * len(line)
+        print('\n\n%s\n%s\n%s' % (asters, line, asters))
         i = x + i
         folder = os.path.split(fn)[0]
         pheno = pd.read_table(os.path.join(folder, args.pheno), header=None,
@@ -66,6 +69,7 @@ def main(args):
     for typ, gr in grouped.groupby('type'):
         gr.plot(x='Number of SNPs', y='R2', label=typ, ax=ax, marker='.')
     plt.ylabel(r'$\bar{R^{2}}$')
+    plt.tight_layout()
     plt.savefig('average_transferability_plot.pdf')
 
 
@@ -93,7 +97,8 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--pheno', required=True, help='phenotype file')
     parser.add_argument('-b', '--bfile', required=True,
                         help='prefix of the bed fileset of the target')
-
+    parser.add_argument('--check', default=True, action='store_false')
+    parser.add_argument('--maf', default=None, type=float)
     parser.add_argument('-T', '--threads', default=1, type=int)
     parser.add_argument('-M', '--maxmem', default=None, type=int)
     parser.add_argument('-q', '--qrange', default=None,
