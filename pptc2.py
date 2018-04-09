@@ -147,7 +147,7 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
 
 
 def run_optimization_by(by_range, by, loci, h2, m, n, threads, cache, sum_stats,
-                        available_memory,test_geno, test_pheno, tpheno, tgeno,
+                        available_memory, test_geno, test_pheno, tpheno, tgeno,
                         prefix, select_by='pvalue', clump_with='d_reference',
                         do_locus_ese=False):
     avh2 = h2 / m
@@ -165,7 +165,8 @@ def run_optimization_by(by_range, by, loci, h2, m, n, threads, cache, sum_stats,
         by, ascending=ascending)
     pos = sum_stats[~sum_stats.snp.isin(r2_tuple[0])].sort_values(
         by, ascending=ascending)
-    pre.append(pos).to_csv('%s_full.tsv' % prefix, index=False, sep='\t')
+    pre.append(pos, ignore_index=True).to_csv('%s_full.tsv' % prefix,
+                                              index=False, sep='\t')
     return pre, pos, r2
 
 
@@ -238,16 +239,16 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         # run ese
         ese = run_optimization_by(by_range, 'ese', loci, h2, m, n, threads,
                                   cache, sum_stats, available_memory, X_test,
-                                  y_test, tpheno, tgeno, '%s_pval' % prefix,
+                                  y_test, tpheno, tgeno, '%s_ese' % prefix,
                                   'ese', clump_with)
         # run ese + locus ese
         l_ese = run_optimization_by(by_range, 'ese', loci, h2, m, n, threads,
                                     cache, sum_stats, available_memory, X_test,
-                                    y_test, tpheno, tgeno, '%s_pval' % prefix,
-                                  'ese', clump_with, do_locus_ese=True)
+                                    y_test, tpheno, tgeno, '%s_l_ese' % prefix,
+                                    'ese', clump_with, do_locus_ese=True)
         pd.DataFrame([{r'R^{2}_{ese}': ese[-1], r'R^{2}_{pvalue}': pvalue[-1],
-                       r'R^{2}_{locus ese}': l_ese[-1], 'prefix': prefix}]).to_csv(
-            '%s.tsv' % prefix, sep='\t', index=False)
+                       r'R^{2}_{locus ese}': l_ese[-1], 'prefix': prefix}]
+                     ).to_csv('%s.tsv' % prefix, sep='\t', index=False)
     else:
         index, tagged, r2 = run_optimization_by(
             by_range, by, loci, h2, m, n, threads, cache, sum_stats,
