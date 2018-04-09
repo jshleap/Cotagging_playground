@@ -147,7 +147,7 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
 
 
 def run_optimization_by(by_range, by, loci, h2, m, n, threads, cache, sum_stats,
-                        available_memory,test_geno, test_pheno, tpheno, tgeno,
+                        available_memory, test_geno, test_pheno, tpheno, tgeno,
                         prefix, select_by='pvalue', clump_with='d_reference',
                         do_locus_ese=False):
     avh2 = h2 / m
@@ -165,7 +165,8 @@ def run_optimization_by(by_range, by, loci, h2, m, n, threads, cache, sum_stats,
         by, ascending=ascending)
     pos = sum_stats[~sum_stats.snp.isin(r2_tuple[0])].sort_values(
         by, ascending=ascending)
-    pre.append(pos).to_csv('%s_full.tsv' % prefix, index=False, sep='\t')
+    pre.append(pos, ignore_index=True).to_csv('%s_full.tsv' % prefix,
+                                              index=False, sep='\t')
     return pre, pos, r2
 
 
