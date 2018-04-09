@@ -11,15 +11,31 @@ from utilities4cotagging_old import executeLine
 plt.style.use('ggplot')
 
 
-def make_plink(vcf_filename, plink_exe, threads=1):
+def make_plink(vcf_filename, plink_exe, threads=1, split=False,
+               pops=['AFR', 'EUR']):
     sed = "sed s'/_//'g %s > temp; mv temp %s" % (vcf_filename, vcf_filename)
     executeLine(sed)
     prefix = vcf_filename[: vcf_filename.rfind('.')]
-    line = '%s --vcf %s --make-bed --out %s --threads %d'
+    line = ('%s --vcf %s --keep-allele-order --allow-no sex --make-bed --out %s'
+            ' --threads %d')
     executeLine(line % (plink_exe, vcf_filename, prefix, threads))
     df = pd.read_table('%s.bim' % prefix, delim_whitespace=True, header=None)
     df.loc[:, 1] = ['SNP%d' % x for x in range(1, df.shape[0] + 1)]
     df.to_csv('%s.bim' % prefix, sep='\t', index=False, header=False)
+    if split:
+        split_line = ('%s --bfile %s --keep %s.keep --keep-allele-order '
+                      '--allow-no sex --make-bed --out %s --threads %d')
+        x = 0
+        for label, nhaps in split:
+            if label in pops:
+                diploid = nhaps/2
+                col = ['msp%d' % i for i in range(x, diploid)]
+                x += diploid
+                options = {'path_or_buf': '%s.keep' % label, 'sep': ' ',
+                           'header': False, 'index': False}
+                pd.DataFrame({'fid': col, 'iid': col}).to_csv(**options)
+                exec = split_line % (plink_exe, prefix, label, prefix, threads)
+                executeLine(exec)
 
 
 def strip_singletons(ts, maf):
@@ -50,17 +66,13 @@ def strip_singletons(ts, maf):
     )
     return new_ts
 
-
-def main(args):
-    if args.nhaps is None:
+def main(nhaps=None, nvars=None, rec_map=None, maf=None, to_bed=False,
+         threads=1, labels=['AFR', 'EUR', 'ASN', 'MX', 'AD'], split_out=False,
+         plot_pca=True, focus_pops=['AFR', 'EUR']):
+    if nhaps is None:
         nhaps = [45000] * 5
-    else:
-        nhaps = args.nhaps
-
-    if args.nvars is None:
+    if nvars is None:
         nvars = int(1e6)
-    else:
-        nvars = args.nvars
     # First we set out the maximum likelihood values of the various parameters
     # given in Table 1.
     N_A = 11273
@@ -187,15 +199,15 @@ def main(args):
     # dp.print_history()
     # with open('demography.txt', 'w') as fn:
     #     dp.print_history(output=fn)
-    if args.rec_map is not None:
-        rmap = msprime.RecombinationMap.read_hapmap(args.rec_map)
+    if rec_map is not None:
+        rmap = msprime.RecombinationMap.read_hapmap(rec_map)
         nvars = None
         rr = None
     else:
         rmap = None
         rr = 2e-8
     settings = {
-        'model': msprime.DiscreteTimeWrightFisher(0.25),
+        #'model': msprime.DiscreteTimeWrightFisher(0.25),
         'population_configurations': population_configurations,
         'migration_matrix': migration_matrix,
         'recombination_rate': rr,
@@ -206,26 +218,30 @@ def main(args):
     }
     ts = msprime.simulate(**settings)
     print("Original file contains ", ts.get_num_mutations(), "mutations")
-    ts = strip_singletons(ts, args.maf)
+    if maf is not None:
+        ts = strip_singletons(ts, maf)
     print("New file contains ", ts.get_num_mutations(), "mutations")
     ts.dump('Latino.hdf5', True)
     vcf_filename = "OOA_Latino.vcf.gz"
     with open(vcf_filename, "w") as vcf_file:
         ts.write_vcf(vcf_file, 2)
-    if args.to_bed is not None:
-        make_plink(vcf_filename, args.to_bed, args.threads)
-        pca = skpca(vcf_filename[: vcf_filename.rfind('.')], 2, args.threads,
-                    None)
-        count = 0
-        for i, haps in enumerate(args.nhaps):
-            haps = haps // 2
-            pca.loc[count:(count + haps - 1), 'continent'] = args.labels[i]
-            count += haps
-        colors = iter(['k', 'b', 'y', 'r', 'g', 'c'])
-        fig, ax = plt.subplots()
-        for c, df in pca.groupby('continent'):
-            df.plot.scatter(x='PC1', y='PC2', c=next(colors), ax=ax, label=c)
-        plt.savefig('simulationPCA.pdf')
+    if to_bed is not None:
+        if split_out:
+            split = zip(labels, nhaps)
+        make_plink(vcf_filename, to_bed, threads, split, focus_pops)
+        if plot_pca:
+            pca = skpca(vcf_filename[: vcf_filename.rfind('.')], 2, threads,
+                        None)
+            count = 0
+            for i, haps in enumerate(nhaps):
+                haps = haps // 2
+                pca.loc[count:(count + haps - 1), 'continent'] = labels[i]
+                count += haps
+            colors = iter(['k', 'b', 'y', 'r', 'g', 'c'])
+            fig, ax = plt.subplots()
+            for c, df in pca.groupby('continent'):
+                df.plot.scatter(x='PC1', y='PC2', c=next(colors), ax=ax, label=c)
+            plt.savefig('simulationPCA.pdf')
 
 
 if __name__ == '__main__':
@@ -242,6 +258,12 @@ if __name__ == '__main__':
         ' plink here'))
     parser.add_argument('--threads', default=1, type=int)
     parser.add_argument('--maf', default=0.01, type=int)
+    parser.add_argument('--split_output', default=False, action='store_true')
+    parser.add_argument('--plot_pca', default=False, action='store_true')
+    parser.add_argument('--focus_pops', help='labels of population to focus on',
+                        nargs='+')
     args = parser.parse_args()
-    main(args)
+    main(nhaps=args.nhaps, nvars=args.nvars, maf=args.maf, to_bed=args.to_bed,
+         threads=args.threads, labels=args.labels, split_out=args.split_output,
+         plot_pca=args.plot_pca, focus_pops=args.focus_pops)
 

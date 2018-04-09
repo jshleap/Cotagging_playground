@@ -28,6 +28,7 @@ def main(args):
     plt.savefig('%s.pdf' % args.prefix)
 
     # process and plot the full tsvs
+    pheno = pd.read_table(args.pheno, delim_whitespace=True)
     picklefile = 'locusese.pickle'
     if os.path.isfile(picklefile):
         with open(picklefile, 'wb') as F:
@@ -38,7 +39,6 @@ def main(args):
     (bim, fam, geno) = read_geno(args.bfile, 0.01, 8, check=True)
     concat = []
     for i, fn in enumerate(filesall[x:]):
-        print('Processing %s' % fn)
         i = x + i
         folder = os.path.split(fn)[0]
         pheno = pd.read_table(os.path.join(folder, args.pheno), header=None,
