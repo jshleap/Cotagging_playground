@@ -315,11 +315,6 @@ def main(args):
                         args.split, seed, memory, pvals=args.p_thresh,
                         lds=args.r_range)
         ppt_df, _, _, x_test, y_test = out
-        # ppt, _ = smartcotagsort('%s_ppt' % args.prefix, ppt_df, column='index',
-        #                         ascending=True, title=scs_title)
-        # ppt = sortbylocus('%s_ppt' % args.prefix, ppt_df, column='index',
-        #                   title=r'$\hat{\beta}^2$; %s' % scs_title,
-        #                   ascending=True)
         assert ppt_df.shape[0] == sumstats.shape[0]
         ppt = prune_it(ppt_df, tgeno, tpheno, 'P + T', step=prunestep,
                        threads=args.threads, max_memory=memory)

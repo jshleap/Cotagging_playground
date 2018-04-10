@@ -19,7 +19,7 @@ def integral_b(vs, mu, snps):
     :param mu: mean
     :param snps: names of snps in order
     """
-    exp = (vs * vs)/ (4 * mu)  # Compute the exponent of RHS of eq. 12
+    exp = (vs * vs) / (4 * mu)  # Compute the exponent of RHS of eq. 12
     # Get the maximum of the exponent to apply the log strategy
     k = exp.max()
     e = np.exp(exp - k)
@@ -48,9 +48,12 @@ def per_locus(locus, sumstats, avh2, h2, n, l_number, within=False,
     :return: Dataframe with the weighted expected squared effect
     """
     snps, D_r, D_t = locus
+    # make sure snps is a list
+    if isinstance(snps, pd.core.series.Series):
+        snps = snps.tolist()
     locus = sumstats[sumstats.snp.isin(snps)].reindex(columns=['snp', 'slope'])
     if sumstats.shape[0] < len(snps):
-        snps = locus.snp
+        snps = locus.snp.tolist()
         D_r = D_r.loc[snps, snps]
         D_t = D_t.loc[snps, snps]
     try:
