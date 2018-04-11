@@ -132,6 +132,9 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
         else:
             snp_index = 4
     curr_best = ([], 0)
+    # Optimize with one split, return reference score with the second
+    out = train_test_split(test_geno, test_pheno, test_size=0.5)
+    train_g, test_g, train_p, test_p = out
     for ld_threshold in ld_range:
         all_clumps = compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n,
                                     threads, cache, memory, select_index_by,
@@ -141,10 +144,11 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
                 np.arange(.0, 1, .1))
         index_snps = [k[snp_index] for by_threshold in by_range for k in
                       all_clumps.keys() if rank(k[snp_index + 1], by_threshold)]
-        r2 = just_score(index_snps, sum_stats, test_pheno, test_geno)
+        r2 = just_score(index_snps, sum_stats, train_p, train_g)
         if r2 > curr_best[1]:
             curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
-    return curr_best
+    r2 = just_score(curr_best[0], sum_stats, test_p, test_g)
+    return curr_best[0], r2, curr_best[-1]
 
 
 def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache, sum_stats,
@@ -291,7 +295,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     select_index_by='locus_ese', by_range=None)
         l_ese_a = run_optimization_by(**opts)
 
-        cols = [r'R^{2}_{pvalue}', r'R^{2}_{pvalue} ref',
+        cols = [r'$R^{2}_{pvalue}$', r'$R^{2}_{pvalue}$ ref',
                 r'$R^{2}_{ese within}$', r'$R^{2}_{ese within}$ ref',
                 r'$R^{2}_{ese across}$', r'$R^{2}_{ese across}$ ref',
                 r'$R^{2}_{locus ese clump}$', r'R^{2}_{locus ese clump} ref',
