@@ -150,7 +150,7 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     return est, (index, tag, l, p)
 
 
-@jit
+#@jit
 def just_score(index_snp, sumstats, pheno, geno):
     clump = sumstats[sumstats.snp.isin(index_snp)]
     idx = clump.i.values.astype(int)

@@ -144,7 +144,12 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
                 np.arange(.0, 1, .1))
         index_snps = [k[snp_index] for by_threshold in by_range for k in
                       all_clumps.keys() if rank(k[snp_index + 1], by_threshold)]
-        r2 = just_score(index_snps, sum_stats, train_p, train_g)
+        try:
+            r2 = just_score(index_snps, sum_stats, train_p, train_g)
+        except:
+            with open('failed.pickle', 'wb') as F:
+                pickle.dump((index_snps, sum_stats, train_p, train_g), F)
+                raise 
         if r2 > curr_best[1]:
             curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
     r2 = just_score(curr_best[0], sum_stats, test_p, test_g)
