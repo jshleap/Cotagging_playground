@@ -4,6 +4,7 @@ import gzip
 import matplotlib.pylab as plt
 import msprime
 import pandas as pd
+import os
 
 from skpca import main as skpca
 from utilities4cotagging_old import executeLine
@@ -16,7 +17,7 @@ def make_plink(vcf_filename, plink_exe, threads=1, split=False,
     sed = "sed s'/_//'g %s > temp; mv temp %s" % (vcf_filename, vcf_filename)
     executeLine(sed)
     prefix = vcf_filename[: vcf_filename.rfind('.')]
-    line = ('%s --vcf %s --keep-allele-order --allow-no sex --make-bed --out %s'
+    line = ('%s --vcf %s --keep-allele-order --allow-no-sex --make-bed --out %s'
             ' --threads %d')
     executeLine(line % (plink_exe, vcf_filename, prefix, threads))
     df = pd.read_table('%s.bim' % prefix, delim_whitespace=True, header=None)
@@ -216,22 +217,28 @@ def main(nhaps=None, nvars=None, rec_map=None, maf=None, to_bed=False,
         'recombination_map': rmap,
         'length': nvars
     }
-    ts = msprime.simulate(**settings)
-    print("Original file contains ", ts.get_num_mutations(), "mutations")
-    if maf is not None:
-        ts = strip_singletons(ts, maf)
-    print("New file contains ", ts.get_num_mutations(), "mutations")
-    ts.dump('Latino.hdf5', True)
     vcf_filename = "OOA_Latino.vcf.gz"
-    with open(vcf_filename, "w") as vcf_file:
-        ts.write_vcf(vcf_file, 2)
+    if not os.path.isfile('Latino.hdf5'):
+        ts = msprime.simulate(**settings)
+        print("Original file contains ", ts.get_num_mutations(), "mutations")
+        if maf is not None:
+            ts = strip_singletons(ts, maf)
+        print("New file contains ", ts.get_num_mutations(), "mutations")
+        ts.dump('Latino.hdf5', True)
+        with open(vcf_filename, "w") as vcf_file:
+            ts.write_vcf(vcf_file, 2)
+    else:
+        ts = msprime.load('Latino.hdf5')
+
     if to_bed is not None:
         if split_out:
             split = zip(labels, nhaps)
+        else:
+            split = False
         make_plink(vcf_filename, to_bed, threads, split, focus_pops)
         if plot_pca:
             pca = skpca(vcf_filename[: vcf_filename.rfind('.')], 2, threads,
-                        None)
+                        None, None)
             count = 0
             for i, haps in enumerate(nhaps):
                 haps = haps // 2
