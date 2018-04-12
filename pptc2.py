@@ -149,7 +149,7 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
         except:
             with open('failed.pickle', 'wb') as F:
                 pickle.dump((index_snps, sum_stats, train_p, train_g), F)
-                raise 
+                raise
         if r2 > curr_best[1]:
             curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
     r2 = just_score(curr_best[0], sum_stats, test_p, test_g)
@@ -291,6 +291,17 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         opts.update(sort_by='pvalue', prefix='%s_l_ese_clump' % prefix,
                     select_index_by='ese', do_locus_ese=True)
         l_ese_clump = run_optimization_by(**opts)
+
+        # Clump locus ese, index with ese within; optimize ese across
+        opts.update(sort_by='ese', prefix='%s_all_ese' % prefix,
+                    select_index_by='ese', do_locus_ese=True)
+        all_ese = run_optimization_by(**opts)
+
+        # Clump locus ese, index with pvalue within; optimize pvalue across
+        opts.update(sort_by='ese', prefix='%s_ese_pval_ese' % prefix,
+                    select_index_by='pvalue', do_locus_ese=True)
+        ese_pval_ese = run_optimization_by(**opts)
+
         # Select index with locus ese within; optimize pvalue across
         opts.update(sort_by='pvalue', prefix='%s_l_ese_within' % prefix,
                     select_index_by='locus_ese', do_locus_ese=False)
@@ -303,15 +314,19 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         cols = [r'$R^{2}_{pvalue}$', r'$R^{2}_{pvalue}$ ref',
                 r'$R^{2}_{ese within}$', r'$R^{2}_{ese within}$ ref',
                 r'$R^{2}_{ese across}$', r'$R^{2}_{ese across}$ ref',
-                r'$R^{2}_{locus ese clump}$', r'R^{2}_{locus ese clump} ref',
+                r'$R^{2}_{locus ese clump}$', r'$R^{2}_{locus ese clump}$ ref',
                 r'$R^{2}_{locus ese within}$',r'$R^{2}_{locus ese within}$ ref',
                 r'$R^{2}_{locus ese across}$',r'$R^{2}_{locus ese across}$ ref',
+                r'$R^{2}_{all ese}$', r'$R^{2}_{all ese}$ ref',
+                r'$R^{2}_{ese pval ese}$', r'$R^{2}_{ese pval ese}$ ref',
                 'prefix']
 
         vals = [pvalue['R2'], pvalue['R2_ref'], ese_w['R2'], ese_w['R2_ref'],
                 ese_a['R2'], ese_a['R2_ref'], l_ese_clump['R2'],
                 l_ese_clump['R2_ref'], l_ese_w['R2'], l_ese_w['R2_ref'],
-                l_ese_a['R2'], l_ese_a['R2_ref'], prefix]
+                l_ese_a['R2'], l_ese_a['R2_ref'], all_ese['R2'],
+                all_ese['R2_ref'], ese_pval_ese['R2'], ese_pval_ese['R2_ref'],
+                prefix]
         pd.DataFrame([dict(zip(cols, vals))]).to_csv('%s.tsv' % prefix,
                                                      sep='\t', index=False)
     else:
