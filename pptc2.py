@@ -53,12 +53,6 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
             max_l_ese = ss.nlargest(1, 'locus_ese')
         else:
             max_l_ese = pd.DataFrame([{'snp': 'None', 'locus_ese': 'None'}])
-        # Store the results in clump dictionary
-        # try:
-        #     key = (index.snp.iloc[0], index.pvalue.iloc[0], max_ese.snp.iloc[0],
-        #            max_ese.ese.iloc[0], max_l_ese.snp.iloc[0],
-        #            max_l_ese.locus_ese.iloc[0])
-        # except (AttributeError, IndexError):
         try:
             key = (index.snp, index.pvalue, max_ese.snp.iloc[0],
                    max_ese.ese.iloc[0], max_l_ese.snp.iloc[0],
@@ -103,7 +97,7 @@ def compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n, threads, cache,
 
 def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
                 sum_stats, test_geno, test_pheno, select_index_by='pvalue',
-                clump_with='d_reference', do_locus_ese=False):
+                clump_with='d_reference', do_locus_ese=False, normalize=True):
     """
     Optimize the R2 based on summary statistics
 
@@ -135,6 +129,11 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
     # Optimize with one split, return reference score with the second
     out = train_test_split(test_geno, test_pheno, test_size=0.5)
     train_g, test_g, train_p, test_p = out
+    if normalize:
+        # re-normalize the genotypes
+        train_g = (train_g - train_g.mean(axis=0)) / train_g.std(axis=0)
+        test_g = (test_g - test_g.mean(axis=0)) / test_g.std(axis=0)
+
     for ld_threshold in ld_range:
         all_clumps = compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n,
                                     threads, cache, memory, select_index_by,
@@ -158,7 +157,7 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
 
 def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache, sum_stats,
                         available_memory, test_geno, test_pheno, tpheno, tgeno,
-                        prefix, select_index_by='pvalue',
+                        prefix, select_index_by='pvalue', normalize=True,
                         clump_with='d_reference', do_locus_ese=False):
     """
     Run the optimzation of byrange and select by ranges
@@ -191,7 +190,7 @@ def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache, sum_s
                memory=available_memory, sum_stats=sum_stats,
                test_geno=test_geno, test_pheno=test_pheno,
                select_index_by=select_index_by, clump_with=clump_with,
-               do_locus_ese=False)
+               do_locus_ese=do_locus_ese, normalize=normalize)
     r2_tuple = optimize_it(**opt)
     index_snps, r2_ref, sum_stats = r2_tuple
     with open('%s.index_snps' % select_index_by, 'w') as F:
@@ -276,7 +275,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     available_memory=available_memory, test_geno=X_test,
                     test_pheno=y_test, tpheno=tpheno, tgeno=tgeno,
                     prefix='%s_pval' % prefix, select_index_by='pvalue',
-                    clump_with=clump_with, do_locus_ese=False)
+                    clump_with=clump_with, do_locus_ese=False,
+                    normalize=kwargs['normalize'])
         # run standard P + T
         pvalue = run_optimization_by(**opts)
         # Select index ese within optimize ese across
@@ -311,14 +311,22 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     select_index_by='locus_ese', by_range=None)
         l_ese_a = run_optimization_by(**opts)
 
-        cols = [r'$R^{2}_{pvalue}$', r'$R^{2}_{pvalue}$ ref',
-                r'$R^{2}_{ese within}$', r'$R^{2}_{ese within}$ ref',
-                r'$R^{2}_{ese across}$', r'$R^{2}_{ese across}$ ref',
-                r'$R^{2}_{locus ese clump}$', r'$R^{2}_{locus ese clump}$ ref',
-                r'$R^{2}_{locus ese within}$',r'$R^{2}_{locus ese within}$ ref',
-                r'$R^{2}_{locus ese across}$',r'$R^{2}_{locus ese across}$ ref',
-                r'$R^{2}_{all ese}$', r'$R^{2}_{all ese}$ ref',
-                r'$R^{2}_{ese pval ese}$', r'$R^{2}_{ese pval ese}$ ref',
+        cols = [r'$R^{2}_{pvalue}$',
+                r'$R^{2}_{pvalue}$ ref',
+                r'$R^{2}_{ese within}$',
+                r'$R^{2}_{ese within}$ ref',
+                r'$R^{2}_{ese across}$',
+                r'$R^{2}_{ese across}$ ref',
+                r'$R^{2}_{locus ese clump}$',
+                r'$R^{2}_{locus ese clump}$ ref',
+                r'$R^{2}_{locus ese within}$',
+                r'$R^{2}_{locus ese within}$ ref',
+                r'$R^{2}_{locus ese across}$',
+                r'$R^{2}_{locus ese across}$ ref',
+                r'$R^{2}_{all ese}$',
+                r'$R^{2}_{all ese}$ ref',
+                r'$R^{2}_{ese pval ese}$',
+                r'$R^{2}_{ese pval ese}$ ref',
                 'prefix']
 
         vals = [pvalue['R2'], pvalue['R2_ref'], ese_w['R2'], ese_w['R2_ref'],
