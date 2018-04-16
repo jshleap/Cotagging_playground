@@ -1,7 +1,7 @@
+from utilities4cotagging import prune_it, read_geno
 import pandas as pd
 import matplotlib.pyplot as plt
 from glob import glob
-from utilities4cotagging import prune_it, read_geno
 import argparse, pickle
 import numpy as np
 import os
