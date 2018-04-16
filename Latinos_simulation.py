@@ -16,7 +16,7 @@ def make_plink(vcf_filename, plink_exe, threads=1, split=False,
                pops=['AFR', 'EUR']):
     sed = "sed s'/_//'g %s > temp; mv temp %s" % (vcf_filename, vcf_filename)
     executeLine(sed)
-    prefix = vcf_filename[: vcf_filename.rfind('.')]
+    prefix = vcf_filename[: vcf_filename.rfind('.vcf')]
     line = ('%s --vcf %s --keep-allele-order --allow-no-sex --make-bed --out %s'
             ' --threads %d')
     executeLine(line % (plink_exe, vcf_filename, prefix, threads))
@@ -25,24 +25,26 @@ def make_plink(vcf_filename, plink_exe, threads=1, split=False,
     df.to_csv('%s.bim' % prefix, sep='\t', index=False, header=False)
     if split:
         split_line = ('%s --bfile %s --keep %s.keep --keep-allele-order '
-                      '--allow-no sex --make-bed --out %s --threads %d')
+                      '--allow-no-sex --make-bed --out %s --threads %d')
         x = 0
         for label, nhaps in split:
+            diploid = nhaps // 2
             if label in pops:
-                diploid = nhaps/2
-                col = ['msp%d' % i for i in range(x, diploid)]
-                x += diploid
+                col = ['msp%d' % i for i in range(x, diploid + x)]
+
                 options = {'path_or_buf': '%s.keep' % label, 'sep': ' ',
                            'header': False, 'index': False}
                 pd.DataFrame({'fid': col, 'iid': col}).to_csv(**options)
-                exec = split_line % (plink_exe, prefix, label, prefix, threads)
+                exec = split_line % (plink_exe, prefix, label, label, threads)
                 executeLine(exec)
+            x += diploid
 
 
 def strip_singletons(ts, maf):
     """
     TODO: include maf filtering... done??
     modified from Jerome's
+    :param maf:
     :param ts:
     :return:
     """
@@ -237,7 +239,7 @@ def main(nhaps=None, nvars=None, rec_map=None, maf=None, to_bed=False,
             split = False
         make_plink(vcf_filename, to_bed, threads, split, focus_pops)
         if plot_pca:
-            pca = skpca(vcf_filename[: vcf_filename.rfind('.')], 2, threads,
+            pca = skpca(vcf_filename[: vcf_filename.rfind('.vcf')], 2, threads,
                         None, None)
             count = 0
             for i, haps in enumerate(nhaps):
