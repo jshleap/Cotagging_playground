@@ -297,7 +297,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     select_index_by='ese', do_locus_ese=True)
         all_ese = run_optimization_by(**opts)
 
-        # Clump locus ese, index with pvalue within; optimize pvalue across
+        # Clump locus ese, index with pvalue within; optimize ese across
         opts.update(sort_by='ese', prefix='%s_ese_pval_ese' % prefix,
                     select_index_by='pvalue', do_locus_ese=True)
         ese_pval_ese = run_optimization_by(**opts)
@@ -307,7 +307,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     select_index_by='locus_ese', do_locus_ese=False)
         l_ese_w = run_optimization_by(**opts)
         # Select index with locus ese within and optimize Locusese quant. across
-        opts.update(sort_by='locus_ese', prefix='%s_l_ese_within' % prefix,
+        opts.update(sort_by='locus_ese', prefix='%s_l_ese_across' % prefix,
                     select_index_by='locus_ese', by_range=None)
         l_ese_a = run_optimization_by(**opts)
 
