@@ -274,67 +274,136 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     threads=threads, cache=cache, sum_stats=sum_stats,
                     available_memory=available_memory, test_geno=X_test,
                     test_pheno=y_test, tpheno=tpheno, tgeno=tgeno,
-                    prefix='%s_pval' % prefix, select_index_by='pvalue',
+                    prefix='%s_pval_all' % prefix, select_index_by='pvalue',
                     clump_with=clump_with, do_locus_ese=False,
                     normalize=kwargs['normalize'])
         # run standard P + T
         pvalue = run_optimization_by(**opts)
-        # Select index ese within optimize ese across
-        opts.update(sort_by='ese', prefix='%s_ese_across' % prefix,
+
+        # Clump pval, select index with pval, select across with ese
+        opts.update(sort_by='ese', prefix='%s_pval_pval_ese' % prefix,
+                    select_index_by='pvalue')
+        pval_pval_ese = run_optimization_by(**opts)
+
+        # Clump pval, select index with pval, select across with ese
+        opts.update(sort_by='locus_ese', prefix='%s_pval_pval_lese' % prefix,
+                    select_index_by='pvalue')
+        pval_pval_lese = run_optimization_by(**opts)
+
+        # Clump pval, select index with ese, select across with ese
+        opts.update(sort_by='pvalue', prefix='%s_pval_ese_pval' % prefix,
                     select_index_by='ese')
-        ese_a = run_optimization_by(**opts)
-        # Select index ese within optimize pvalue across
-        opts.update(sort_by='pvalue', prefix='%s_ese_within' % prefix,
-                    select_index_by='ese', by_range=pval_thresh)
-        ese_w = run_optimization_by(**opts)
-        # Clump locus ese, index with ese within; optimize pvalue across
-        opts.update(sort_by='pvalue', prefix='%s_l_ese_clump' % prefix,
-                    select_index_by='ese', do_locus_ese=True)
-        l_ese_clump = run_optimization_by(**opts)
+        pval_ese_pval = run_optimization_by(**opts)
 
-        # Clump locus ese, index with ese within; optimize ese across
-        opts.update(sort_by='ese', prefix='%s_all_ese' % prefix,
-                    select_index_by='ese', do_locus_ese=True)
-        all_ese = run_optimization_by(**opts)
+        # Clump pval, select index with pval, select across with ese
+        opts.update(sort_by='ese', prefix='%s_pval_ese_ese' % prefix,
+                    select_index_by='ese')
+        pval_ese_ese = run_optimization_by(**opts)
 
-        # Clump locus ese, index with pvalue within; optimize ese across
-        opts.update(sort_by='ese', prefix='%s_ese_pval_ese' % prefix,
+        # Clump pval, select index with pval, select across with ese
+        opts.update(sort_by='locus_ese', prefix='%s_pval_ese_lese' % prefix,
+                    select_index_by='ese')
+        pval_ese_lese = run_optimization_by(**opts)
+
+        # Clump pval, select index with lese, select across with pval
+        opts.update(sort_by='pvalue', prefix='%s_pval_lese_pval' % prefix,
+                    select_index_by='locus_ese')
+        pval_lese_pval = run_optimization_by(**opts)
+
+        # Clump pval, select index with lese, select across with ese
+        opts.update(sort_by='ese', prefix='%s_pval_lese_ese' % prefix,
+                    select_index_by='locus_ese')
+        pval_lese_ese = run_optimization_by(**opts)
+
+        # Clump pval, select index with lese, select across with lese
+        opts.update(sort_by='locus_ese', prefix='%s_pval_lese_lese' % prefix,
+                    select_index_by='locus_ese')
+        pval_lese_lese = run_optimization_by(**opts)
+
+        # Clump lese, select index with pval, select across with pval
+        opts.update(sort_by='pvalue', prefix='%s_lese_pval_pval' % prefix,
                     select_index_by='pvalue', do_locus_ese=True)
-        ese_pval_ese = run_optimization_by(**opts)
+        lese_pval_pval = run_optimization_by(**opts)
 
-        # Select index with locus ese within; optimize pvalue across
-        opts.update(sort_by='pvalue', prefix='%s_l_ese_within' % prefix,
-                    select_index_by='locus_ese', do_locus_ese=False)
-        l_ese_w = run_optimization_by(**opts)
-        # Select index with locus ese within and optimize Locusese quant. across
-        opts.update(sort_by='locus_ese', prefix='%s_l_ese_across' % prefix,
-                    select_index_by='locus_ese', by_range=None)
-        l_ese_a = run_optimization_by(**opts)
+        # Clump lese, select index with pval, select across with ese
+        opts.update(sort_by='ese', prefix='%s_lese_pval_ese' % prefix,
+                    select_index_by='pvalue', do_locus_ese=True)
+        lese_pval_ese = run_optimization_by(**opts)
 
-        cols = [r'$R^{2}_{pvalue}$',
-                r'$R^{2}_{pvalue}$ ref',
-                r'$R^{2}_{ese within}$',
-                r'$R^{2}_{ese within}$ ref',
-                r'$R^{2}_{ese across}$',
-                r'$R^{2}_{ese across}$ ref',
-                r'$R^{2}_{locus ese clump}$',
-                r'$R^{2}_{locus ese clump}$ ref',
-                r'$R^{2}_{locus ese within}$',
-                r'$R^{2}_{locus ese within}$ ref',
-                r'$R^{2}_{locus ese across}$',
-                r'$R^{2}_{locus ese across}$ ref',
-                r'$R^{2}_{all ese}$',
-                r'$R^{2}_{all ese}$ ref',
-                r'$R^{2}_{ese pval ese}$',
-                r'$R^{2}_{ese pval ese}$ ref',
+        # Clump lese, select index with pval, select across with lese
+        opts.update(sort_by='locus_ese', prefix='%s_lese_pval_lese' % prefix,
+                    select_index_by='pvalue', do_locus_ese=True)
+        lese_pval_lese = run_optimization_by(**opts)
+
+        # Clump lese, select index with ese, select across with pval
+        opts.update(sort_by='pvalue', prefix='%s_lese_ese_pval' % prefix,
+                    select_index_by='ese', do_locus_ese=True)
+        lese_ese_pval = run_optimization_by(**opts)
+
+        # Clump lese, select index with ese, select across with ese
+        opts.update(sort_by='ese', prefix='%s_lese_ese_ese' % prefix,
+                    select_index_by='ese', do_locus_ese=True)
+        lese_ese_ese = run_optimization_by(**opts)
+
+        # Clump lese, select index with ese, select across with lese
+        opts.update(sort_by='locus_ese', prefix='%s_lese_ese_lese' % prefix,
+                    select_index_by='ese', do_locus_ese=True)
+        lese_ese_lese = run_optimization_by(**opts)
+
+        # Clump lese, select index with lese, select across with pval
+        opts.update(sort_by='pvalue', prefix='%s_lese_lese_pval' % prefix,
+                    select_index_by='locus_ese', do_locus_ese=True)
+        lese_lese_pval = run_optimization_by(**opts)
+
+        # Clump lese, select index with lese, select across with ese
+        opts.update(sort_by='ese', prefix='%s_lese_lese_ese' % prefix,
+                    select_index_by='locus_ese', do_locus_ese=True)
+        lese_lese_ese = run_optimization_by(**opts)
+
+        # Clump lese, select index with lese, select across with lese
+        opts.update(sort_by='locus_ese', prefix='%s_lese_lese_lese' % prefix,
+                    select_index_by='locus_ese', do_locus_ese=True)
+        lese_lese_lese = run_optimization_by(**opts)
+
+        cols = [r'$R^{2}_{pvalue}$', r'$R^{2}_{pvalue}$ ref',
+                r'$R^{2}_{pval pval ese}$', r'$R^{2}_{pval pval ese}$ ref',
+                r'$R^{2}_{pval pval lese}$', r'$R^{2}_{pval pval lese}$ ref',
+                r'$R^{2}_{pval ese pval}$', r'$R^{2}_{pval ese pval}$ ref',
+                r'$R^{2}_{pval ese ese}$', r'$R^{2}_{pval ese ese}$ ref',
+                r'$R^{2}_{pval ese lese}$', r'$R^{2}_{pval ese lese}$ ref',
+                r'$R^{2}_{pval lese pval}$', r'$R^{2}_{pval lese pval}$ ref',
+                r'$R^{2}_{pval lese ese}$', r'$R^{2}_{pval lese ese}$ ref',
+                r'$R^{2}_{pval lese lese}$', r'$R^{2}_{pval lese lese}$ ref',
+                r'$R^{2}_{lese pval ese}$', r'$R^{2}_{lese pval ese}$ ref',
+                r'$R^{2}_{lese pval ese}$', r'$R^{2}_{lese pval ese}$ ref',
+                r'$R^{2}_{lese pval lese}$', r'$R^{2}_{lese pval lese}$ ref',
+                r'$R^{2}_{lese ese pval}$', r'$R^{2}_{lese ese pval}$ ref',
+                r'$R^{2}_{lese ese ese}$', r'$R^{2}_{lese ese ese}$ ref',
+                r'$R^{2}_{lese ese lese}$', r'$R^{2}_{lese ese lese}$ ref',
+                r'$R^{2}_{lese lese pval}$', r'$R^{2}_{lese lese pval}$ ref',
+                r'$R^{2}_{lese lese ese}$', r'$R^{2}_{lese lese ese}$ ref',
+                r'$R^{2}_{lese lese lese}$', r'$R^{2}_{lese lese lese}$ ref',
                 'prefix']
 
-        vals = [pvalue['R2'], pvalue['R2_ref'], ese_w['R2'], ese_w['R2_ref'],
-                ese_a['R2'], ese_a['R2_ref'], l_ese_clump['R2'],
-                l_ese_clump['R2_ref'], l_ese_w['R2'], l_ese_w['R2_ref'],
-                l_ese_a['R2'], l_ese_a['R2_ref'], all_ese['R2'],
-                all_ese['R2_ref'], ese_pval_ese['R2'], ese_pval_ese['R2_ref'],
-                prefix]
+        vals = [pvalue['R2'], pvalue['R2_ref'],
+                pval_pval_ese['R2'], pval_pval_ese['R2_ref'],
+                pval_pval_lese['R2'], pval_pval_lese['R2_ref'],
+                pval_ese_pval['R2'], pval_ese_pval['R2_ref'],
+                pval_ese_ese['R2'],  pval_ese_ese['R2_ref'],
+                pval_ese_lese['R2'], pval_ese_lese['R2_ref'],
+                pval_lese_pval['R2'], pval_lese_pval['R2_ref'],
+                pval_lese_ese['R2'], pval_lese_ese['R2_ref'],
+                pval_lese_lese['R2'], pval_lese_lese['R2_ref'],
+                lese_pval_pval['R2'], lese_pval_pval['R2_ref'],
+                lese_pval_ese['R2'], lese_pval_ese['R2_ref'],
+                lese_pval_lese['R2'], lese_pval_lese['R2_ref'],
+                lese_ese_pval['R2'], lese_ese_pval['R2_ref'],
+                lese_ese_ese['R2'], lese_ese_ese['R2_ref'],
+                lese_ese_lese['R2'], lese_ese_lese['R2_ref'],
+                lese_lese_pval['R2'], lese_lese_pval['R2_ref'],
+                lese_lese_ese['R2'], lese_lese_ese['R2_ref'],
+                lese_lese_lese['R2'], lese_lese_lese['R2_ref']]
+
         pd.DataFrame([dict(zip(cols, vals))]).to_csv('%s.tsv' % prefix,
                                                      sep='\t', index=False)
     else:

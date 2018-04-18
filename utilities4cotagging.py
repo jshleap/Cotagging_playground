@@ -26,6 +26,8 @@ from joblib import Parallel, delayed
 from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
+from functools import partial
+import json
 
 # Numbafy linregress (makes it a bit faster)
 lr = jit(linregress)
@@ -133,7 +135,8 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         available_memory = max_memory
     else:
         available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory)
+    cache = Chest(available_memory=available_memory, dump=json.dumps,
+                  load=json.loads)
     (bim, fam, g) = read_plink(bfile)   # read the files using pandas_plink
     m, n = g.shape                      # get the dimensions of the genotype
     # remove invariant sites
@@ -329,7 +332,8 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
         available_memory = max_memory
     else:
         available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory)
+    cache = Chest(available_memory=available_memory, dump=json.dumps,
+                  load=json.loads)
     print('Prunning %s...' % label)
     # Process the first 200 snps at one step regardless of the step passed.
     # This is done to have a finer grain in the first part of the prunning
@@ -355,16 +359,16 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
 
 
 # ----------------------------------------------------------------------
-@jit(parallel=True)
-def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
+#@jit(parallel=True)
+def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None, justd=False,
                   extend=False):
     """
     Helper function to compute the correlation between variants from a genotype
     array
 
     :param df: Merged dataframe with the mapping of the positions in the genotypes
-    :param rgeno: Genotype array of the reference population
-    :param tgeno: Genotype array of the target population
+    :param rg: slice of Genotype array of the reference population
+    :param tg: slice of Genotype array of the target population
     :param threads: Number of threads to estimate memory use
     :param max_memory: Memory limit
     :param justd: Return the raw LD matrices insted of its dot product
@@ -376,11 +380,12 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
         available_memory = max_memory
     else:
         available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory)
-    # Get the mapping indices
-    ridx, tidx = df.i_ref.values, df.i_tar.values
-    # Subset the genotype arrays
-    rg, tg = rgeno[:, ridx], tgeno[:, tidx]
+    cache = Chest(available_memory=available_memory, dump=json.dumps,
+                  load=json.loads)
+    # # Get the mapping indices
+    # ridx, tidx = df.i_ref.values, df.i_tar.values
+    # # Subset the genotype arrays
+    # rg, tg = rgeno[:, ridx], tgeno[:, tidx]
     # extend the Genotpe at both end to avoid edge effects
     if extend:
         # get the indices of the subsetted genotype array
@@ -421,6 +426,17 @@ def single_window(df, rgeno, tgeno, threads=1, max_memory=None, justd=False,
 
 
 # ----------------------------------------------------------------------
+def window_yielder(rgeno, tgeno, mbim):
+    for window, df in mbim.groupby('windows'):
+        if not df.snp.empty:
+            # Get the mapping indices
+            ridx, tidx = df.i_ref.values, df.i_tar.values
+            # Subset the genotype arrays
+            rg, tg = rgeno[:, ridx], tgeno[:, tidx]
+            yield rg, tg, ridx, tidx, df
+
+
+# ----------------------------------------------------------------------
 def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
            justd=False, extend=False):
     """
@@ -449,31 +465,38 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     else:
         available_memory = psutil.virtual_memory().available
     cache = Chest(available_memory=available_memory)
-    print('Computing LD score per window')
-    # Get the overlapping snps and their info
-    shared = ['chrom', 'snp', 'pos']
-    mbim = rbim.merge(tbim, on=shared, suffixes=['_ref', '_tar'])
-    # Get the number of bins or loci to be computed
-    nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
-    # Get the limits of the loci
-    bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True, dtype=int
-                       )
-    if bins.shape[0] == 1:
-        # Fix the special case in which the window is much bigger than the range
-        bins = np.append(bins, kbwindow * 1000)
-    # Get the proper intervals into the dataframe
-    mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
-    # Compute each locus in parallel
-    delayed_results = [
-        dask.delayed(single_window)(df, rgeno, tgeno, threads, max_memory,
-                                    justd, extend) for window, df in
-        mbim.groupby('windows') if not df.snp.empty]
-    with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
-                                         pool=ThreadPool(threads)):
-        r = tuple(dask.compute(*delayed_results))
-    if justd:
-        return r
-    r = pd.concat(r)
+    if os.path.isfile('ld.matrix'):
+        print('Loading precomputed LD matrix')
+        dd.read_parquet('ld.matrix')
+    else:
+        print('Computing LD score per window')
+        # Get the overlapping snps and their info
+        shared = ['chrom', 'snp', 'pos']
+        mbim = rbim.merge(tbim, on=shared, suffixes=['_ref', '_tar'])
+        # Get the number of bins or loci to be computed
+        nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+        # Get the limits of the loci
+        bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True,
+                           dtype=int)
+        if bins.shape[0] == 1:
+            # Fix the special case in which the window is much bigger than the
+            # range
+            bins = np.append(bins, kbwindow * 1000)
+        # Get the proper intervals into the dataframe
+        mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
+        # Compute each locus in parallel
+        delayed_results = [
+            dask.delayed(single_window)(df, rg, tg, ridx, tidx, threads,
+                                        max_memory, justd, extend)
+            for rg, tg, ridx, tidx, df in window_yielder(rgeno, tgeno, mbim)]
+
+        with ProgressBar(), dask.set_options(num_workers=threads, #cache=cache,
+                                             pool=ThreadPool(threads)):
+            r = tuple(dask.compute(*delayed_results))
+        if justd:
+            return r
+        r = pd.concat(r)
+        dd.to_parquet(r, 'ld.matrix')
     return r
 
 
