@@ -262,7 +262,9 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         sum_stats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
     print("Reference bim's shape: %d, %d" % (rbim.shape[0], rbim.shape[1]))
     print("Target bim's shape: %d, %d" % (tbim.shape[0], tbim.shape[1]))
-    sum_snps = sum_stats.snp.tolist()
+    # process causals
+    causal_snps = tvec.snp
+    r2_causal = just_score(causal_snps, sum_stats, tpheno, tgeno)
     # Compute Ds
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow, justd=True,
                   threads=threads, max_memory=max_memory)
@@ -383,7 +385,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                 r'$R^{2}_{lese lese pval}$', r'$R^{2}_{lese lese pval}$ ref',
                 r'$R^{2}_{lese lese ese}$', r'$R^{2}_{lese lese ese}$ ref',
                 r'$R^{2}_{lese lese lese}$', r'$R^{2}_{lese lese lese}$ ref',
-                'prefix']
+                r'$R^{2}_{causals}']
 
         vals = [pvalue['R2'], pvalue['R2_ref'],
                 pval_pval_ese['R2'], pval_pval_ese['R2_ref'],
@@ -402,7 +404,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                 lese_ese_lese['R2'], lese_ese_lese['R2_ref'],
                 lese_lese_pval['R2'], lese_lese_pval['R2_ref'],
                 lese_lese_ese['R2'], lese_lese_ese['R2_ref'],
-                lese_lese_lese['R2'], lese_lese_lese['R2_ref']]
+                lese_lese_lese['R2'], lese_lese_lese['R2_ref'],
+                r2_causal]
 
         pd.DataFrame([dict(zip(cols, vals))]).to_csv('%s.tsv' % prefix,
                                                      sep='\t', index=False)
