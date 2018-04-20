@@ -19,7 +19,8 @@ plt.style.use('ggplot')
 # ----------------------------------------------------------------------
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.01, seed=None, causaleff=None, uniform=False, usepi=False,
-             snps=None, threads=1, flip=False, check=False, max_memory=None):
+             snps=None, threads=1, flip=False, check=False, max_memory=None,
+             **kwargs):
     """
     Generate TRUE causal effects and the genetic effect equal to the h2 (a.k.a
     setting Vp = 1)
@@ -46,25 +47,28 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     seed = np.random.randint(10000) if seed is None else seed
     print('using seed %d' % seed)
     np.random.seed(seed=seed)
-    # read the genotype files of the reference population
-    (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check,
-                              max_memory=max_memory)
-    # get indices of second pop if needed
-    if bfile2 is not None:
-        # merge the bim files of tw populations to use common snps
-        (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check,
-                                     max_memory=max_memory)
-        snps2 = bim2.snp
-        # Save some memory
-        del bim2, fam2, G2
-        print('Filtering current population with second set:')
-        print('    Genotype matrix shape before', g.shape)
-        # subset the genotype file
-        indices = bim[bim.snp.isin(snps2)].i
-        g = g[:, indices.tolist()]
-        bim = bim[bim.i.isin(indices)].reset_index(drop=True)
-        bim['i'] = bim.index.tolist()
-        print('    Genotype matrix shape after', g.shape)
+    if isinstance(bfile, str):
+        # read the genotype files of the reference population
+        (bim, fam, g) = read_geno(bfile, f_thr, threads, flip=flip, check=check,
+                                  max_memory=max_memory)
+        # get indices of second pop if needed
+        if bfile2 is not None:
+            # merge the bim files of tw populations to use common snps
+            (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check,
+                                         max_memory=max_memory)
+            snps2 = bim2.snp
+            # Save some memory
+            del bim2, fam2, G2
+            print('Filtering current population with second set:')
+            print('    Genotype matrix shape before', g.shape)
+            # subset the genotype file
+            indices = bim[bim.snp.isin(snps2)].i
+            g = g[:, indices.tolist()]
+            bim = bim[bim.i.isin(indices)].reset_index(drop=True)
+            bim['i_tar'] = bim.index.tolist()
+            print('    Genotype matrix shape after', g.shape)
+    else:
+        bim, fam, g = kwargs['bim'], kwargs['fam'], bfile
     # Define pi as 1 or as the mean variance to weight on the ncausals for the
     # computation of the h2 per locus
     pi = g.var(axis=0).mean() if usepi else 1
@@ -257,7 +261,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                     causaleff=causaleff, uniform=uniform, f_thr=freq_thresh,
                     flip=flip, check=check, threads=threads,
                     max_memory=available_memory)
-
+        opts.update(kwargs)
         g, bim, truebeta, vec = true_prs(**opts)  # Get true PRS
         with open(picklefile, 'wb') as F:
             pickle.dump((g, bim, truebeta, vec), F)

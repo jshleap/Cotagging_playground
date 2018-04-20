@@ -308,7 +308,7 @@ def single_score(subdf, geno, pheno, label, beta='slope'):
 
 # ----------------------------------------------------------------------
 def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
-             max_memory=None):
+             max_memory=None, n=None):
     """
     Prune and score a dataframe of sorted snps
 
@@ -335,26 +335,32 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     cache = Chest(available_memory=available_memory, dump=json.dumps,
                   load=json.loads)
     print('Prunning %s...' % label)
-    # Process the first 200 snps at one step regardless of the step passed.
-    # This is done to have a finer grain in the first part of the prunning
-    # where most of the causals should be captured
-    print('First 200')
-    # Create a generator with the subset and the arguments for the single func
-    gen = ((df.iloc[:i], geno, pheno, label, beta) for i in
-           range(1, min(201, df.shape[0] + 1), 1))
-    # Run the scoring in parallel threads
-    delayed_results = [dask.delayed(single_score)(*i) for i in gen]
-    with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
-                                         pool=ThreadPool(threads)):
-        res = list(dask.compute(*delayed_results))
-    print('Processing the rest of variants')
-    if df.shape[0] > 200:
-        ngen = ((df.iloc[: i], geno, pheno, label) for i in
-                range(201, df.shape[0] + 1, int(step)))
-        delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
-        with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
-                                             pool=ThreadPool(threads)):
-            res += list(dask.compute(*delayed_results))
+    opts = dict(num_workers=threads, cache=cache, pool=ThreadPool(threads))
+    if n is not None:
+        print('Just prunning', n)
+        tup = (df.iloc[: n], geno, pheno, label, beta)
+        delayed_results = [dask.delayed(single_score)(*tup)]
+        with ProgressBar(), dask.set_options(**opts):
+            res = list(dask.compute(*delayed_results))
+    else:
+        # Process the first 200 snps at one step regardless of the step passed.
+        # This is done to have a finer grain in the first part of the prunning
+        # where most of the causals should be captured
+        print('First 200')
+        # Create a generator with the subset and the arguments for the single func
+        gen = ((df.iloc[:i], geno, pheno, label, beta) for i in
+               range(1, min(201, df.shape[0] + 1), 1))
+        # Run the scoring in parallel threads
+        delayed_results = [dask.delayed(single_score)(*i) for i in gen]
+        with ProgressBar(), dask.set_options(**opts):
+            res = list(dask.compute(*delayed_results))
+        print('Processing the rest of variants')
+        if df.shape[0] > 200:
+            ngen = ((df.iloc[: i], geno, pheno, label) for i in
+                    range(201, df.shape[0] + 1, int(step)))
+            delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
+            with ProgressBar(), dask.set_options(**opts):
+                res += list(dask.compute(*delayed_results))
     return pd.DataFrame(res)
 
 

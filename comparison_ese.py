@@ -68,7 +68,7 @@ def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
 
 
 def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
-                   tbim, prefix, memory, pedestrian=False):
+                   tbim, prefix, memory, pedestrian=False, prune_n=None):
     cache = Chest(available_memory=memory)
     # if pedestrian:
     #     func_per_locus = per_locus
@@ -100,7 +100,7 @@ def individual_ese(sumstats, avh2, h2, n, within, loci, tgeno, tpheno, threads,
                            title=r'Realized $h^2$: %f' % h2)
         prod.to_csv('df' + resfile, index=False, sep='\t')
         prod = prune_it(prod, tgeno, tpheno, within_str, step=prunestep,
-                        threads=threads, max_memory=memory)
+                        threads=threads, max_memory=memory, n=prune_n)
         prod.to_csv(resfile, index=False, sep='\t')
     else:
         prod = pd.read_csv(resfile, sep='\t')
@@ -177,7 +177,6 @@ def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
                                                             random_state=seed)
     else:
         x_train, x_test, y_train, y_test = geno, geno, pheno, pheno
-    pre = []
     pos =[]
     for r, locus in enumerate(loci):
         snps, D_r, D_t = locus

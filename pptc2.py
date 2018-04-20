@@ -155,12 +155,14 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
     return curr_best[0], r2, curr_best[-1]
 
 
-def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache, sum_stats,
-                        available_memory, test_geno, test_pheno, tpheno, tgeno,
-                        prefix, select_index_by='pvalue', normalize=True,
-                        clump_with='d_reference', do_locus_ese=False):
+def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache,
+                        sum_stats, available_memory, test_geno, test_pheno,
+                        tpheno, tgeno, prefix, select_index_by='pvalue',
+                        normalize=True, clump_with='d_reference',
+                        do_locus_ese=False):
     """
     Run the optimzation of byrange and select by ranges
+
     :param by_range:
     :param sort_by: Across clumps sorting by
     :param loci:
