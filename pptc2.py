@@ -263,7 +263,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     print("Reference bim's shape: %d, %d" % (rbim.shape[0], rbim.shape[1]))
     print("Target bim's shape: %d, %d" % (tbim.shape[0], tbim.shape[1]))
     # process causals
-    causal_snps = tvec.snp
+    causal_snps = tvec.snp.tolist()
     r2_causal = just_score(causal_snps, sum_stats, tpheno, tgeno)
     # Compute Ds
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow, justd=True,
