@@ -141,17 +141,18 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
         if by_range is None:
             by_range = pd.concat(all_clumps.values()).ese.quantile(
                 np.arange(.0, 1, .1))
-        index_snps = [k[snp_index] for by_threshold in by_range for k in
-                      all_clumps.keys() if rank(k[snp_index + 1], by_threshold)]
-        try:
-            r2 = just_score(index_snps, sum_stats, train_p, train_g)
-        except:
-            with open('failed.pickle', 'wb') as F:
-                pickle.dump((index_snps, sum_stats, train_p, train_g), F)
-                raise
-        opt_dic[ld_threshold] = (r2, index_snps)
-        if r2 > curr_best[1]:
-            curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
+        for by_threshold in by_range:
+            index_snps = [k[snp_index] for k in all_clumps.keys() if
+                          rank(k[snp_index + 1], by_threshold)]
+            try:
+                r2 = just_score(index_snps, sum_stats, train_p, train_g)
+            except:
+                with open('failed.pickle', 'wb') as F:
+                    pickle.dump((index_snps, sum_stats, train_p, train_g), F)
+                    raise
+            opt_dic[ld_threshold] = (r2, index_snps)
+            if r2 > curr_best[1]:
+                curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
     r2 = just_score(curr_best[0], sum_stats, test_p, test_g)
     return curr_best[0], r2, curr_best[-1]
 
@@ -185,7 +186,7 @@ def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache,
     :return:
     """
     avh2 = h2 / m
-    ld_range = np.arange(.2, .8, .2)
+    ld_range = np.concatenate([np.array([0.1]), np.arange(.2,.8,.2)])
     if by_range is None and (sort_by == 'pvalue'):
             by_range = [1, 0.5, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
     opt = dict(loci=loci, ld_range=ld_range, by_range=by_range, h2=h2,
