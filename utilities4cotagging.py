@@ -27,7 +27,7 @@ from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
 from functools import partial
-import json
+#import json
 
 # Numbafy linregress (makes it a bit faster)
 lr = jit(linregress)
@@ -135,8 +135,8 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         available_memory = max_memory
     else:
         available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory, dump=json.dumps,
-                  load=json.loads)
+    cache = Chest(available_memory=available_memory)
+    #, dump=json.dumps, load=json.loads)
     (bim, fam, g) = read_plink(bfile)   # read the files using pandas_plink
     m, n = g.shape                      # get the dimensions of the genotype
     # remove invariant sites
@@ -332,8 +332,8 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
         available_memory = max_memory
     else:
         available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory, dump=json.dumps,
-                  load=json.loads)
+    cache = Chest(available_memory=available_memory)
+    #, dump=json.dumps, load=json.loads)
     print('Prunning %s...' % label)
     opts = dict(num_workers=threads, cache=cache, pool=ThreadPool(threads))
     if n is not None:
@@ -386,8 +386,8 @@ def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None, justd=Fals
         available_memory = max_memory
     else:
         available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory, dump=json.dumps,
-                  load=json.loads)
+    cache = Chest(available_memory=available_memory)
+    #, dump=json.dumps, load=json.loads)
     # # Get the mapping indices
     # ridx, tidx = df.i_ref.values, df.i_tar.values
     # # Subset the genotype arrays

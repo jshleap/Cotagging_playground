@@ -32,7 +32,7 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
     clumps = {}
     while not sum_stats.empty:
         # get the index snp
-        if select_index_by == 'ese':
+        if do_locus_ese == 'ese':
             index = sum_stats.sort_values('locus_ese', ascending=ascend).iloc[0]
         else:
             index = sum_stats.sort_values(select_index_by, ascending=ascend
@@ -49,7 +49,7 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
         ss = sub_stats.merge(df_ese.reindex(columns=['snp', 'ese']), on='snp')
         # Get the highest ESE of the clump
         max_ese = ss.nlargest(1, 'ese')
-        if do_locus_ese or select_index_by == 'locus_ese':
+        if select_index_by == 'locus_ese':
             max_l_ese = ss.nlargest(1, 'locus_ese')
         else:
             max_l_ese = pd.DataFrame([{'snp': 'None', 'locus_ese': 'None'}])
@@ -133,7 +133,7 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
         # re-normalize the genotypes
         train_g = (train_g - train_g.mean(axis=0)) / train_g.std(axis=0)
         test_g = (test_g - test_g.mean(axis=0)) / test_g.std(axis=0)
-
+    opt_dic = {} # for debugging purposes
     for ld_threshold in ld_range:
         all_clumps = compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n,
                                     threads, cache, memory, select_index_by,
@@ -149,6 +149,7 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
             with open('failed.pickle', 'wb') as F:
                 pickle.dump((index_snps, sum_stats, train_p, train_g), F)
                 raise
+        opt_dic[ld_threshold] = (r2, index_snps)
         if r2 > curr_best[1]:
             curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
     r2 = just_score(curr_best[0], sum_stats, test_p, test_g)

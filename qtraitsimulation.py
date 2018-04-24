@@ -120,7 +120,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
             pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
         # Store them
         causals['beta'] = pre_beta
-        causals = causals.dropna()
+        causals = causals.dropna(subset=['beta'])
         # make sure we have the right causals
         assert np.allclose(sorted(causals.beta.values), sorted(pre_beta))
     nc = causals.reindex(columns=['snp', 'beta'])

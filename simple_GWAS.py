@@ -350,7 +350,8 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         except AttributeError:
             res = pd.DataFrame(r)
         assert res.shape[0] == bim.shape[0]  # Make sure no missing data
-        res = pd.concat((res, bim), axis=1)  # Combine mapping and gwas
+        # Combine mapping and gwas
+        res = pd.concat((res, bim.reset_index()), axis=1)
         # check precision issues and re-run the association
         zeros = res[res.pvalue == 0.0]
         if not zeros.empty and not stmd and high_precision_on_zero:
