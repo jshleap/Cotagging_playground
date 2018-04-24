@@ -54,6 +54,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         # get indices of second pop if needed
         if bfile2 is not None:
             # merge the bim files of tw populations to use common snps
+            #bim2 = pd.read_table('%s.bim' % bfile2, delim_whitespace=True)
             (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check,
                                          max_memory=max_memory)
             snps2 = bim2.snp
@@ -65,7 +66,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
             indices = bim[bim.snp.isin(snps2)].i
             g = g[:, indices.tolist()]
             bim = bim[bim.i.isin(indices)].reset_index(drop=True)
-            bim['i_tar'] = bim.index.tolist()
+            bim['i'] = bim.index.tolist()
             print('    Genotype matrix shape after', g.shape)
     else:
         bim, fam, g = kwargs['bim'], kwargs['fam'], bfile
