@@ -5,7 +5,7 @@ import numpy as np
 
 
 def main(args):
-    causals = pd.read_table('AFR.causaleff', delim_whitespace=True)
+    causals = pd.read_table('%s.causaleff' % args.label, delim_whitespace=True)
     (bim, fam, g) = read_geno(args.bfile, 0, args.cpus, max_memory=args.mem)
     clump = pd.read_table(args.clump, delim_whitespace=True)
     prop = int(args.clump.split('.')[0])
@@ -41,6 +41,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--pheno')
     parser.add_argument('-t', '--cpus', type=int)
     parser.add_argument('-m', '--mem', type=int, default=None)
+    parser.add_argument('-l', '--label', default='AFR')
 
     args = parser.parse_args()
     main(args)
