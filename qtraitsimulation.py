@@ -145,7 +145,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
 
 
 # ----------------------------------------------------------------------
-def create_pheno(prefix, h2, prs_true, noenv=False):
+def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
     """
     Generate phenotypes and real betas.
 
@@ -170,10 +170,22 @@ def create_pheno(prefix, h2, prs_true, noenv=False):
         va = prs_true.gen_eff.var()
         std = np.sqrt(max(1 - va, 0))
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
+
     # Include environmental effects into the dataframe
     prs_true['env_eff'] = env_effect
     # Generate the phenotype from the model Phenotype = genetics + environment
     prs_true['PHENO'] = prs_true.gen_eff + prs_true.env_eff
+    # check covariates
+    if covs is not None:
+        cov = pd.read_table(covs, delim_whitespace=True, header=None)
+        # change names for ease
+        columns = dict(zip(cov.columns, ['fid', 'iid'] + ['Cov%d' % x for x in
+                                                          range(len(cov.columns
+                                                                    ) - 2)]))
+        cov = cov.rename(columns=columns)
+        prs_true.merge(cov, on=['fid', 'iid'], how='left')
+        # just one for now
+        prs_true['PHENO'] = prs_true['PHENO'] + prs_true['Cov0']
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
     # Check that the estimated heritability matches the expected one
     realized_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
@@ -211,12 +223,11 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 
 
 # ----------------------------------------------------------------------
-# TODO: include covariates
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                        causaleff=None, plothist=False, bfile2=None, flip=False,
-                       freq_thresh=0.01, quality='png',check=False, seed=None,
+                       freq_thresh=0.01, quality='png', check=False, seed=None,
                        uniform=False, normalize=False, remove_causals=False,
-                       threads=1, max_memory=None, **kwargs):
+                       threads=1, max_memory=None, covs=None, **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and
     intermediate files with the dataframes produced
@@ -272,7 +283,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
         #     g, bim, truebeta, vec = pickle.load(F)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
         # Get phenotype
-        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv)
+        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv,
+                                          covs=covs)
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
@@ -324,6 +336,7 @@ if __name__ == '__main__':
     parser.add_argument('-a', '--avoid_causals', default=False,
                         action='store_true', help='Remove causals from set')
     parser.add_argument('--normalize', default=False, action='store_true')
+    parser.add_argument('--covs', default=None)
 
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal,
@@ -331,4 +344,4 @@ if __name__ == '__main__':
                        quality=args.quality, freq_thresh=args.freqthreshold,
                        bfile2=args.bfile2, seed=args.seed, uniform=args.uniform,
                        flip=args.flip, check=args.check, max_memory=args.maxmem,
-                       remove_causals=args.avoid_causals)
+                       remove_causals=args.avoid_causals, covs=args.covs)

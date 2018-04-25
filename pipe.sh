@@ -11,14 +11,18 @@ plink=$5	# path to plink exe
 cpus=$6 	# number of cpus to use
 mem=$7 		# max memory to use
 sample=$8 	# sample size to keep
- 
+covs=$9  # include covariates
 #pt=$7
 #lt=$8
 
 # for clumping clump-p1 default is 0.0001, clump-p2 0.01, clump-r2 0.5
-
-python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} -2 ${main_target} -t ${cpus} --normalize
-python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff --normalize
+if [ "$covs" == TRUE ]
+  then python3 ${code}/skpca.py -b ${genos}/EURnAD -t ${cpus} -m ${mem} -c 2
+  python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
+  cov='--covs EURnAD.pca'
+fi
+python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} -2 ${main_target} -t ${cpus} --normalize $cov
+python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff --normalize $cov
 cat EUR.pheno AD.pheno > train.pheno
 
 step=$(( sample/10 ))

@@ -30,7 +30,7 @@ def main(bfile, n_comps, cpus, mem, extra_covs):
         if 'FID' in extra.columns.tolist():
             extra.rename(columns={'FID': 'fid', 'IID': 'iid'}, inplace=True)
         pca = pca.merge(extra, on=['fid', 'iid'])
-    ordered_cols = ['fid','iid'] + cols
+    ordered_cols = ['fid', 'iid'] + cols
     pca = pca.loc[:, ordered_cols]
     pca.to_csv('%s.pca' % bfile, sep=' ', header=False, index=False)
     return pca
