@@ -170,8 +170,9 @@ def compute_all(prefix, index, locus, refl, tarl, seed, maxmem, avoid_causals,
         # run standard P + T
         ppt = run_optimization_by(**opts)
         snps = ppt['index_snps'].snp.tolist()
-        ppt = prune_it(sumstats[sumstats.snp.isin(snps)], tgeno, tpheno, 'P + T',
-                       step=1, n=1, threads=threads, max_memory=maxmem)
+        df = sumstats[sumstats.snp == snps[0]]
+        ppt = prune_it(df, tgeno, tpheno, 'P + T', step=1, n=1, threads=threads,
+                       max_memory=maxmem)
         #ppt.to_csv(pptfile, index=False, sep='\t')
     else:
         ppt = pd.read_csv(pptfile, sep='\t')
@@ -254,7 +255,7 @@ def plot(prefix, dfs):
 
 def main(args):
     now = time.time()
-    seed = np.random.randint(1e4) if args.seed is None else args.seed
+    #seed = np.random.randint(1e4) if args.seed is None else args.seed
     # set Cache to protect memory spilling
     if args.maxmem is not None:
         memory = args.maxmem
@@ -271,7 +272,7 @@ def main(args):
         if not os.path.isdir('run%d' % i):
             os.mkdir('run%d' % i)
         os.chdir('run%d' % i)
-        result = compute_all(args.prefix, i, next(locus), refl, tarl, seed,
+        result = compute_all(args.prefix, i, next(locus), refl, tarl, None,
                              memory, args.avoid_causals, args.threads,
                              args.window)
         result['run'] = i

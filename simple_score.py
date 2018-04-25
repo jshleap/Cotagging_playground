@@ -19,7 +19,7 @@ def main(args):
         fp = over_gwsig.shape[0] - tp
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
                                                                     'pheno'])
-    sub = sumstats.merge(clump, on=['CHR', 'SNP', 'BP', 'P'])
+    sub = sumstats.merge(clump, on=['CHR', 'SNP', 'BP'])
     sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(num_workers=args.cpus)
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)

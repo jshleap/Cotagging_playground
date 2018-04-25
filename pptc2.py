@@ -144,6 +144,8 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
         for by_threshold in by_range:
             index_snps = [k[snp_index] for k in all_clumps.keys() if
                           rank(k[snp_index + 1], by_threshold)]
+            if not index_snps:
+                continue
             try:
                 r2 = just_score(index_snps, sum_stats, train_p, train_g)
             except:
