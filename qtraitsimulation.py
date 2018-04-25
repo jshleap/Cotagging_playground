@@ -267,8 +267,9 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
         with open(picklefile, 'wb') as F:
             pickle.dump((g, bim, truebeta, vec), F)
     else:
-        with open(picklefile, 'rb') as F:
-            g, bim, truebeta, vec = pickle.load(F)
+        g, bim, truebeta, vec = pd.read_pickle(picklefile)
+        # with open(picklefile, 'rb') as F:
+        #     g, bim, truebeta, vec = pickle.load(F)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
         # Get phenotype
         pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv)

@@ -125,7 +125,7 @@ def compute_all(prefix, index, locus, refl, tarl, seed, maxmem, avoid_causals,
     opts = dict(outprefix='%s_%d' % (refl, index), bfile=rg, h2=0.05, ncausal=1,
                 normalize=True, uniform=False, snps=None, seed=seed, bfile2=tg,
                 flip=False, max_memory=maxmem, freq_thresh=0, bim=rbim,fam=rfam,
-                remove_causals=avoid_causals,)
+                remove_causals=avoid_causals)
     rpheno, h2, (rgeno, rbim, rtruebeta, rcausals) = qtraits_simulation(**opts)
     # make simulation for target
     opts.update(dict(outprefix='%s_%d' % (tarl, index), bfile=tg,  bfile2=rg,
@@ -275,7 +275,7 @@ def main(args):
         os.chdir('run%d' % i)
         file = glob('*_finaldf.tsv')
         if file:
-            result = pd.read(file[0], sep='\t')
+            result = pd.read_table(file[0], sep='\t')
         else:
             result = compute_all(args.prefix, i, next(locus), refl, tarl, None,
                                  memory, args.avoid_causals, args.threads,
