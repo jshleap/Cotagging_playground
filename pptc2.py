@@ -32,11 +32,12 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
     clumps = {}
     while not sum_stats.empty:
         # get the index snp
-        if do_locus_ese == 'ese':
+        if do_locus_ese:
+            #clump by locus ese
             index = sum_stats.sort_values('locus_ese', ascending=ascend).iloc[0]
         else:
-            index = sum_stats.sort_values(select_index_by, ascending=ascend
-                                          ).iloc[0]
+            # clump by locus pval
+            index = sum_stats.sort_values('pvalue', ascending=ascend).iloc[0]
         # get the clump around index for
         vec = (locals()[clump_with] ** 2).loc[index.snp, :]
         tag = vec[vec > ld_threshold].index.tolist()

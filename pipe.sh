@@ -26,7 +26,7 @@ for i in `seq 0 $step $sample`
 do 
     if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep;fi
     eur=$(( sample - i ))
-    if [[ ! $eur = 0  ]]; then head -n $eur ${genos}/EUR.train >> ${i}.keep;fi
+    if [[ ! $eur = 0  ]]; then head -n $eur ${genos}/EUR.train >> ${i}.keep; fi
     $plink --bfile ${genos}/EURnAD --pheno train.pheno --keep ${i}.keep --keep-allele-order --allow-no-sex --make-bed --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     #smartpca.perl -i ${i}.bed -a ${i}.bim -b ${i}.fam -k 1 -o ${i}.pca -p ${i}.plot -e ${i}.eval -l ${i}.log -m 0 -q YES
     python3 ${code}/skpca.py -b ${i} -t ${cpus} -m ${mem} -c 1
