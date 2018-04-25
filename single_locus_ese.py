@@ -7,6 +7,7 @@
 """
 from pptc2 import run_optimization_by
 from comparison_ese import *
+from glob import glob
 import random
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -267,14 +268,18 @@ def main(args):
     locus = random_locus_yielder(args.refgeno, args.targeno, args.window, 0.01,
                                  args.threads, False, False, memory)
     cwd = os.getcwd()
-    res=[]
+    res = []
     for i in range(args.n_runs):
         if not os.path.isdir('run%d' % i):
             os.mkdir('run%d' % i)
         os.chdir('run%d' % i)
-        result = compute_all(args.prefix, i, next(locus), refl, tarl, None,
-                             memory, args.avoid_causals, args.threads,
-                             args.window)
+        file = glob('*_finaldf.tsv')
+        if file:
+            result = pd.read(file[0], sep='\t')
+        else:
+            result = compute_all(args.prefix, i, next(locus), refl, tarl, None,
+                                 memory, args.avoid_causals, args.threads,
+                                 args.window)
         result['run'] = i
         res.append(result)
         os.chdir(cwd)
