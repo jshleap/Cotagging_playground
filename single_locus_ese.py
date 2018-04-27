@@ -271,10 +271,12 @@ def main(args):
     res = []
     for i in range(args.n_runs):
         if not os.path.isdir('run%d' % i):
+            print('Making Folder run%d' % i)
             os.mkdir('run%d' % i)
         os.chdir('run%d' % i)
         file = glob('*_finaldf.tsv')
         if file:
+            print('File found in folder run%d, loading...' % i)
             result = pd.read_table(file[0], sep='\t')
         else:
             result = compute_all(args.prefix, i, next(locus), refl, tarl, None,

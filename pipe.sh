@@ -38,5 +38,6 @@ do
     $plink --bfile ${i} --keep-allele-order --allow-no-sex --linear hide-covar standard-beta --covar ${i}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     $plink --bfile ${i} --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD
+    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR
 
 done
