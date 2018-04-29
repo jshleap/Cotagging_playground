@@ -5,13 +5,14 @@ set -e
 source ~/.bashrc
 main_source=$1  # main source genotypes path
 main_target=$2	# main target genotypes path
+main_target2=$9	# main second (untyped) target genotypes path
 genos=$3 	# path 2 train genotypes path
-code=$4 	# path to codes	
+code=$4 	# path to codes
 plink=$5	# path to plink exe
 cpus=$6 	# number of cpus to use
 mem=$7 		# max memory to use
 sample=$8 	# sample size to keep
-covs=$9  # include covariates
+covs=${10}  # include covariates
 #pt=$7
 #lt=$8
 
@@ -23,6 +24,7 @@ if [ "$covs" == TRUE ]
 fi
 python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} -2 ${main_target} -t ${cpus} --normalize $cov
 python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff --normalize $cov
+python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${main_target2} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff --normalize $cov
 cat EUR.pheno AD.pheno > train.pheno
 
 step=$(( sample/10 ))
@@ -39,5 +41,6 @@ do
     $plink --bfile ${i} --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD
     python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR
+    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR
 
 done

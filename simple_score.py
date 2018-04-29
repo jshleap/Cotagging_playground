@@ -26,8 +26,9 @@ def main(args):
     sub_pheno = pheno[pheno.iid.isin(fam.iid)]
     r2 = np.corrcoef(fam.prs.values, sub_pheno.pheno)[1, 0] ** 2
     with open('proportions.tsv', 'a') as F:
-        # output have | proportion | r2 | TP | FP | ncausal
-        F.write('%d\t%f\t%d\t%d\t%d\n' % (prop, r2, tp, fp, causals.shape[0]))
+        # output have | proportion | r2 | TP | FP | ncausal | label
+        F.write('%d\t%f\t%d\t%d\t%d\t%s\n' % (prop, r2, tp, fp, causals.shape[0],
+                                              args.label))
 
 
 
