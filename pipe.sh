@@ -23,8 +23,8 @@ if [ "$covs" == TRUE ]
   cov='--covs EURnAD.pca'
 fi
 python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} -2 ${main_target} -t ${cpus} --normalize $cov
-python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff --normalize $cov
-python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${main_target2} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff --normalize $cov
+python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
+python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${main_target2} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
 cat EUR.pheno AD.pheno > train.pheno
 
 step=$(( sample/10 ))
@@ -37,10 +37,10 @@ do
     #smartpca.perl -i ${i}.bed -a ${i}.bim -b ${i}.fam -k 1 -o ${i}.pca -p ${i}.plot -e ${i}.eval -l ${i}.log -m 0 -q YES
     python3 ${code}/skpca.py -b ${i} -t ${cpus} -m ${mem} -c 1
     #awk '{$1=$1};1' ${i}.pca.evec| tr '  :' '\t'| cut -d$'\t' -f1,2,3| tr '\t' ' '|sed '1d' > ${i}.eigvec
-    $plink --bfile ${i} --keep-allele-order --allow-no-sex --linear hide-covar standard-beta --covar ${i}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${i} --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     $plink --bfile ${i} --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
-    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -N
-    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -N
-    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -N
+    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD #-N
+    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR #-N
+    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR #-N
 
 done
