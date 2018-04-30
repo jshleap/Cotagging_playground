@@ -28,19 +28,30 @@ python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${main_target2}
 cat EUR.pheno AD.pheno > train.pheno
 
 step=$(( sample/10 ))
+cat ${genos}/EUR.train > constant.keep
 for i in `seq 0 $step $sample`
 do 
-    if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep;fi
+    if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep
+    head -n $i ${genos}/AD.train >> constant.keep
+    fi
     eur=$(( sample - i ))
     if [[ ! $eur = 0  ]]; then head -n $eur ${genos}/EUR.train >> ${i}.keep; fi
-    $plink --bfile ${genos}/EURnAD --pheno train.pheno --keep ${i}.keep --keep-allele-order --allow-no-sex --make-bed --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    #$plink --bfile ${genos}/EURnAD --pheno train.pheno --keep ${i}.keep --keep-allele-order --allow-no-sex --make-bed --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     #smartpca.perl -i ${i}.bed -a ${i}.bim -b ${i}.fam -k 1 -o ${i}.pca -p ${i}.plot -e ${i}.eval -l ${i}.log -m 0 -q YES
     python3 ${code}/skpca.py -b ${i} -t ${cpus} -m ${mem} -c 1
     #awk '{$1=$1};1' ${i}.pca.evec| tr '  :' '\t'| cut -d$'\t' -f1,2,3| tr '\t' ' '|sed '1d' > ${i}.eigvec
-    $plink --bfile ${i} --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
-    $plink --bfile ${i} --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
+    $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
+    # Do the constant estimations
+    $plink --bfile ${i} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${i} --keep constant.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out constant_${i}
+    # Score original
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD #-N
     python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR #-N
     python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR #-N
+    # Score constant
+    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant
+    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant
+    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant
 
 done

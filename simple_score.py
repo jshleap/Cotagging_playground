@@ -1,7 +1,9 @@
-import pandas as pd
-from utilities4cotagging import read_geno
 import argparse
+
 import numpy as np
+import pandas as pd
+
+from utilities4cotagging import read_geno
 
 
 def main(args):
@@ -27,7 +29,7 @@ def main(args):
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
     sub_pheno = pheno[pheno.iid.isin(fam.iid)]
     r2 = np.corrcoef(fam.prs.values, sub_pheno.pheno)[1, 0] ** 2
-    with open('proportions.tsv', 'a') as F:
+    with open('%s.tsv' % args.prefix, 'a') as F:
         # output have | proportion | r2 | TP | FP | ncausal | label
         F.write('%d\t%f\t%d\t%d\t%d\t%s\n' % (prop, r2, tp, fp, causals.shape[0],
                                               args.label))
@@ -38,6 +40,7 @@ def main(args):
 # ----------------------------------------------------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-P', '--prefix', default='proportions')
     parser.add_argument('-b', '--bfile')
     parser.add_argument('-c', '--clump')
     parser.add_argument('-s', '--sumstats')
