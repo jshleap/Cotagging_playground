@@ -29,6 +29,7 @@ cat EUR.pheno AD.pheno > train.pheno
 
 step=$(( sample/10 ))
 cat ${genos}/EUR.train > constant.keep
+python3 ${code}/skpca.py -b ${genos}/EURnAD -t ${cpus} -m ${mem} -c 1
 for i in `seq 0 $step $sample`
 do 
     if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep
@@ -38,9 +39,8 @@ do
     if [[ ! $eur = 0  ]]; then head -n $eur ${genos}/EUR.train >> ${i}.keep; fi
     #$plink --bfile ${genos}/EURnAD --pheno train.pheno --keep ${i}.keep --keep-allele-order --allow-no-sex --make-bed --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     #smartpca.perl -i ${i}.bed -a ${i}.bim -b ${i}.fam -k 1 -o ${i}.pca -p ${i}.plot -e ${i}.eval -l ${i}.log -m 0 -q YES
-    python3 ${code}/skpca.py -b ${i} -t ${cpus} -m ${mem} -c 1
     #awk '{$1=$1};1' ${i}.pca.evec| tr '  :' '\t'| cut -d$'\t' -f1,2,3| tr '\t' ' '|sed '1d' > ${i}.eigvec
-    $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${genos}/EURnAD.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
     # Do the constant estimations
     $plink --bfile ${i} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))

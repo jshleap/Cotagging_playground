@@ -29,6 +29,7 @@ def main(args):
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
     sub_pheno = pheno[pheno.iid.isin(fam.iid)]
     r2 = np.corrcoef(fam.prs.values, sub_pheno.pheno)[1, 0] ** 2
+    r2 = r2 * args.weight
     with open('%s.tsv' % args.prefix, 'a') as F:
         # output have | proportion | r2 | TP | FP | ncausal | label
         F.write('%d\t%f\t%d\t%d\t%d\t%s\n' % (prop, r2, tp, fp, causals.shape[0],
@@ -49,6 +50,8 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mem', type=int, default=None)
     parser.add_argument('-N', '--normalize',action='store_true', default=False)
     parser.add_argument('-l', '--label', default='AFR')
+    parser.add_argument('-w', '--weight', default=1, type=float)
+
 
     args = parser.parse_args()
     main(args)
