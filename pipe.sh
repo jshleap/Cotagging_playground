@@ -26,10 +26,11 @@ python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} 
 python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
 python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${main_target2} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
 cat EUR.pheno AD.pheno > train.pheno
-
+all=${genos}/EURnAD
 step=$(( sample/10 ))
 cat ${genos}/EUR.train > constant.keep
-python3 ${code}/skpca.py -b ${genos}/EURnAD -t ${cpus} -m ${mem} -c 1
+python3 ${code}/skpca.py -b $all -t ${cpus} -m ${mem} -c 1
+
 for i in `seq 0 $step $sample`
 do 
     if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep
@@ -40,11 +41,11 @@ do
     #$plink --bfile ${genos}/EURnAD --pheno train.pheno --keep ${i}.keep --keep-allele-order --allow-no-sex --make-bed --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     #smartpca.perl -i ${i}.bed -a ${i}.bim -b ${i}.fam -k 1 -o ${i}.pca -p ${i}.plot -e ${i}.eval -l ${i}.log -m 0 -q YES
     #awk '{$1=$1};1' ${i}.pca.evec| tr '  :' '\t'| cut -d$'\t' -f1,2,3| tr '\t' ' '|sed '1d' > ${i}.eigvec
-    $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${genos}/EURnAD.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
-    $plink --bfile ${i} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
+    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${genos}/EURnAD.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out ${i}
     # Do the constant estimations
-    $plink --bfile ${i} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
-    $plink --bfile ${i} --keep constant.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out constant_${i}
+    $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --covar ${i}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --out constant_${i}
     # Score original
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD #-N
     python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR #-N
