@@ -7,6 +7,8 @@ import numpy as np
 def main(args):
     causals = pd.read_table('%s.causaleff' % args.label, delim_whitespace=True)
     (bim, fam, g) = read_geno(args.bfile, 0, args.cpus, max_memory=args.mem)
+    if args.normalize:
+        g = (g - g.mean(axis=0)) / g.std(axis=0)
     clump = pd.read_table(args.clump, delim_whitespace=True)
     prop = int(args.clump.split('.')[0])
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
@@ -42,6 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--pheno')
     parser.add_argument('-t', '--cpus', type=int)
     parser.add_argument('-m', '--mem', type=int, default=None)
+    parser.add_argument('-N', '--normalize', type=bool, default=False)
     parser.add_argument('-l', '--label', default='AFR')
 
     args = parser.parse_args()

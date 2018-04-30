@@ -17,7 +17,7 @@ todas = []
 #t_r2s = []
 #max_r2s = []
 if sys.argv[1] == 'TRUE': # if done with plink
-    names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal']
+    names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop']
     read_opts = dict(delim_whitespace=True, header=None, names=names)
     time = 'EUR (%)'
     value = r"$R^2$"
@@ -49,8 +49,8 @@ plt.tight_layout()
 plt.close()
 
 f, ax = plt.subplots()
-sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,  ci=[25, 50, 75,
-                                                                    95])
+sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,  condition='Pop',
+           ci=[25, 50, 75, 95])
 plt.title('Sample size: %d' % df.number.max())
 plt.tight_layout()
 plt.savefig('Proportions_%sruns.pdf' % str(df.run.max() + 1))
