@@ -22,7 +22,7 @@ if [ "$covs" == TRUE ]
   python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
   cov='--covs EURnAD.pca'
 fi
-python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} -2 ${main_target} -t ${cpus} --normalize $cov
+python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${main_source} -2 ${main_target} -t ${cpus} #--normalize $cov
 python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${main_target} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
 python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${main_target2} -2 ${main_source} -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
 cat EUR.pheno AD.pheno > train.pheno
