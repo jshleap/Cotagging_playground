@@ -44,7 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--pheno')
     parser.add_argument('-t', '--cpus', type=int)
     parser.add_argument('-m', '--mem', type=int, default=None)
-    parser.add_argument('-N', '--normalize', type=bool, default=False)
+    parser.add_argument('-N', '--normalize',action='store_true', default=False)
     parser.add_argument('-l', '--label', default='AFR')
 
     args = parser.parse_args()
