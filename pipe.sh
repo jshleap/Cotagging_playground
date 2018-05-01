@@ -47,11 +47,11 @@ do
     $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
     $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out constant_${i}
     # Score original
-    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD #-N
-    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR #-N
-    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR #-N
+    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $mem
+    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $mem
+    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $mem
     # Score constant
-    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant
-    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant
-    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant
+    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $mem
+    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $mem
+    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant -m $mem
 done

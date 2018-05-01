@@ -1,12 +1,15 @@
 import argparse
-
-import numpy as np
-import pandas as pd
-
-from utilities4cotagging import read_geno
+from utilities4cotagging import *
 
 
 def main(args):
+    if args.maxmem is not None:
+        memory = args.maxmem
+    else:
+        memory = psutil.virtual_memory().available
+    cache = Chest(available_memory=memory)
+    dask_options = dict(num_workers=args.cpus, cache=cache,
+                        pool=ThreadPool(args.cpus))
     causals = pd.read_table('%s.causaleff' % args.label, delim_whitespace=True)
     (bim, fam, g) = read_geno(args.bfile, 0, args.cpus, max_memory=args.mem)
     if args.normalize:
@@ -25,7 +28,7 @@ def main(args):
                                                                     'pheno'])
     sub = sumstats.merge(clump, on=['CHR', 'SNP', 'BP'])
     sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
-    fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(num_workers=args.cpus)
+    fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
     sub_pheno = pheno[pheno.iid.isin(fam.iid)]
     r2 = np.corrcoef(fam.prs.values, sub_pheno.pheno)[1, 0] ** 2
