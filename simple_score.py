@@ -3,8 +3,8 @@ from utilities4cotagging import *
 
 
 def main(args):
-    if args.maxmem is not None:
-        memory = args.maxmem
+    if args.mem is not None:
+        memory = args.mem
     else:
         memory = psutil.virtual_memory().available
     cache = Chest(available_memory=memory)
