@@ -29,7 +29,10 @@ cat EUR.pheno AD.pheno > train.pheno
 all=${genos}/EURnAD
 step=$(( sample/10 ))
 cat ${genos}/EUR.train > constant.keep
-python3 ${code}/skpca.py -b $all -t ${cpus} -m ${mem} -c 1
+
+if [ ! -f ${all}.pca ]; then
+    python3 ${code}/skpca.py -b $all -t ${cpus} -m ${mem} -c 1
+fi
 
 for i in `seq 0 $step $sample`
 do 
