@@ -45,7 +45,7 @@ do
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i}
     # Do the constant estimations
     $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
-    $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out constant_${i}
+    $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i}
     # Score original
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $mem
     python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $mem
