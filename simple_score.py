@@ -15,7 +15,8 @@ def main(args):
     if args.normalize:
         g = (g - g.mean(axis=0)) / g.std(axis=0)
     clump = pd.read_table(args.clump, delim_whitespace=True)
-    prop = int(args.clump.split('.')[0])
+    spl = args.clump.split('.')[0]
+    prop = int(spl) if isinstance(spl, int) else int(spl.split('_')[1])
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
     over_gwsig = sumstats[sumstats.P <= 1E-8]
     if over_gwsig.empty:
