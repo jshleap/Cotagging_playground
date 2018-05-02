@@ -51,7 +51,7 @@ do
     python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $mem
     python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $mem
     # Score constant
-    python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $mem
-    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $mem
-    python3 ${code}/simple_score.py -b ${main_target2} -c ${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant -m $mem
+    python3 ${code}/simple_score.py -b ${genos}/AD_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $mem
+    python3 ${code}/simple_score.py -b ${genos}/EUR_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $mem
+    python3 ${code}/simple_score.py -b ${main_target2} -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant -m $mem
 done
