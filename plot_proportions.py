@@ -2,7 +2,6 @@
 PLot proportions
 """
 
-import os
 from glob import iglob
 
 import matplotlib
@@ -17,12 +16,17 @@ plt.style.use('ggplot')
 
 def get_dataframe(pattern, prefix):
     todas = []
+    names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop']
+    read_opts = dict(delim_whitespace=True, header=None, names=names)
+    time = r'$AFR_{frac}$' if 'constant' in pattern else 'EUR (%)'
+    value = r"$R^2$"
     files = iglob(pattern)
     for i, fn in enumerate(files):
-        path = os.path.split(fn)
         df = pd.read_table(fn, **read_opts)
         df['run'] = i
-        df['EUR (%)'] = (df.number.max() - df.number.values) / df.number.max()
+        df['EUR (%)'] = ((df.number.max() - df.number.values) * 100
+                         ) / df.number.max()
+        df[r'$AFR_{frac}$'] = 100 - df.loc[:, 'EUR (%)']
         todas.append(df)
     df = pd.concat(todas)
     f, ax = plt.subplots()
@@ -34,10 +38,5 @@ def get_dataframe(pattern, prefix):
     plt.close()
 
 
-todas = []
-names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop']
-read_opts = dict(delim_whitespace=True, header=None, names=names)
-time = 'EUR (%)'
-value = r"$R^2$"
 get_dataframe('run*/proportions.tsv', 'Proportions')
 get_dataframe('run*/constant.tsv', 'Constant')

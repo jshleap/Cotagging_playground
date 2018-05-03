@@ -1,4 +1,5 @@
 import argparse
+
 from utilities4cotagging import *
 
 
@@ -29,8 +30,11 @@ def main(args):
         fp = over_gwsig.shape[0] - tp
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
                                                                     'pheno'])
-    sub = sumstats.merge(clump, on=['CHR', 'SNP', 'BP'])
-    sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
+    cols = ['CHR', 'SNP', 'BP']
+    bim = bim.rename(colums=dict(zip(['chrom', 'snp', 'pos'], cols)))
+    sub = sumstats.merge(clump, on=cols, how='right')
+    sub = sub.merge(bim, on=cols, how='left')
+    # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
     sub_pheno = pheno[pheno.iid.isin(fam.iid)]

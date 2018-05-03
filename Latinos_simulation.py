@@ -1,10 +1,10 @@
 import argparse
 import math
-import gzip
+import os
+
 import matplotlib.pylab as plt
 import msprime
 import pandas as pd
-import os
 
 from skpca import main as skpca
 from utilities4cotagging_old import executeLine
@@ -266,7 +266,7 @@ if __name__ == '__main__':
         'Transform the vcf into plink binaries. You have to provide the path to'
         ' plink here'))
     parser.add_argument('--threads', default=1, type=int)
-    parser.add_argument('--maf', default=0.01, type=int)
+    parser.add_argument('--maf', default=0.01, type=float)
     parser.add_argument('--split_output', default=False, action='store_true')
     parser.add_argument('--plot_pca', default=False, action='store_true')
     parser.add_argument('--focus_pops', help='labels of population to focus on',

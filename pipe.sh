@@ -37,8 +37,8 @@ fi
 for i in `seq 0 $step $sample`
 do 
     if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep
-        head -n $i ${genos}/AD.train >> constant.keep
-        sort constant.keep | uniq > constant.keep
+        head -n $i ${genos}/AD.train >> constant${i}.keep
+        sort constant${i}.keep | uniq > constant${i}.keep
     fi
     eur=$(( sample - i ))
     if [[ ! $eur = 0  ]]; then head -n $eur ${genos}/EUR.train >> ${i}.keep; fi
@@ -48,8 +48,8 @@ do
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i}
     # Do the constant estimations
-    $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
-    $plink --bfile ${all} --keep constant.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i}
+    $plink --bfile ${all} --keep constant${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out constant_${i} --threads ${cpus} --memory $(( mem/1000000 ))
+    $plink --bfile ${all} --keep constant${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i}
     # Score original
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $mem
     python3 ${code}/simple_score.py -b ${genos}/EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $mem
