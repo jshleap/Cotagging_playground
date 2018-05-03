@@ -37,7 +37,8 @@ fi
 for i in `seq 0 $step $sample`
 do 
     if [[ ! $i = 0 ]]; then head -n $i ${genos}/AD.train > ${i}.keep
-    head -n $i ${genos}/AD.train >> constant.keep
+        head -n $i ${genos}/AD.train >> constant.keep
+        sort constant.keep | uniq > constant.keep
     fi
     eur=$(( sample - i ))
     if [[ ! $eur = 0  ]]; then head -n $eur ${genos}/EUR.train >> ${i}.keep; fi
