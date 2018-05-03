@@ -39,5 +39,5 @@ names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop']
 read_opts = dict(delim_whitespace=True, header=None, names=names)
 time = 'EUR (%)'
 value = r"$R^2$"
-get_dataframe('run*/proportions.tsv')
-get_dataframe('run*/constant.tsv')
+get_dataframe('run*/proportions.tsv', 'Proportions')
+get_dataframe('run*/constant.tsv', 'Constant')
