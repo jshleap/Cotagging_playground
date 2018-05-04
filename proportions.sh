@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh -xv
 set -e
 source ~/.bashrc
 cwd=$PWD
