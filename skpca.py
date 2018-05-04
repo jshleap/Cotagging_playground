@@ -21,7 +21,7 @@ def do_pca(g, n_comp, batch_size=None):
 def main(bfile, n_comps, cpus, mem, extra_covs):
     (bim, fam, g) = read_geno(bfile, 0, cpus, max_memory=mem)
     cols = ['PC%d' % (x + 1) for x in range(n_comps)]
-    pca = pd.DataFrame(do_pca(g, n_comps, g.shape[1]), columns=cols)
+    pca = pd.DataFrame(do_pca(g, n_comps, g.shape[1]/2), columns=cols)
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
