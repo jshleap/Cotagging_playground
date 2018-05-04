@@ -1,11 +1,11 @@
-from sklearn.decomposition import IncrementalPCA as PCA #PCA
+from sklearn.decomposition import IncrementalPCA as ipca #PCA
 from utilities4cotagging import read_geno
 import pandas as pd
-import sys
+import numpy as np
 import argparse
 
 
-def do_pca(g, n_comp, batch_size=None):
+def do_pca(g, n_comp, batch_size=None, chunk_size=1000):
     """
     Perform a PCA on the genetic array and return n_comp of it
 
@@ -13,15 +13,26 @@ def do_pca(g, n_comp, batch_size=None):
     :param n_comp: Number of components sought
     :return: components array
     """
-    pca = PCA(n_components=n_comp, batch_size=batch_size)
-    pca = pca.fit_transform(g)
-    return pca
+    #pca = PCA(n_components=n_comp)
+    pca = ipca(n_components=n_comp, batch_size=batch_size)
+    for i in range(0, g.shape[0] // chunk_size):
+        pca.partial_fit(g[i * chunk_size: (i + 1) * chunk_size, :])
+
+    Xtransformed = None
+    for i in range(0, g.shape[0] // chunk_size):
+        Xchunk = pca.transform(g[i * chunk_size: (i + 1) * chunk_size, :])
+        if Xtransformed == None:
+            Xtransformed = Xchunk
+        else:
+            Xtransformed = np.vstack((Xtransformed, Xchunk))
+    #pca = pca.fit_transform(g)
+    return Xtransformed
 
 
 def main(bfile, n_comps, cpus, mem, extra_covs):
     (bim, fam, g) = read_geno(bfile, 0, cpus, max_memory=mem)
     cols = ['PC%d' % (x + 1) for x in range(n_comps)]
-    pca = pd.DataFrame(do_pca(g, n_comps, 16), columns=cols)
+    pca = pd.DataFrame(do_pca(g, n_comps, None, 1000), columns=cols)
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
