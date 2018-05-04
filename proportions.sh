@@ -17,10 +17,10 @@ if [ "$covs" == TRUE ]
   python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
   cov='--covs EURnAD.pca'
 fi
-sort -R EUR.keep| head -n ${sample} > EUR.train
-comm -23 <(sort EUR.keep) <(sort EUR.train) > EUR.test
-sort -R AD.keep| head -n ${sample} > AD.train
-comm -23 <(sort AD.keep) <(sort AD.train) > EUR.test
+sort -R ${genos}/EUR.keep| head -n ${sample} > EUR.train
+comm -23 <(sort ${genos}/EUR.keep) <(sort EUR.train) > EUR.test
+sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
+comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > EUR.test
 
 python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus}
 python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
