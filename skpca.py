@@ -5,7 +5,7 @@ import sys
 import argparse
 
 
-def do_pca(g, n_comp):
+def do_pca(g, n_comp, batch_size=None):
     """
     Perform a PCA on the genetic array and return n_comp of it
 
@@ -13,7 +13,7 @@ def do_pca(g, n_comp):
     :param n_comp: Number of components sought
     :return: components array
     """
-    pca = PCA(n_components=n_comp)
+    pca = PCA(n_components=n_comp, batch_size=batch_size)
     pca = pca.fit_transform(g)
     return pca
 
@@ -21,7 +21,7 @@ def do_pca(g, n_comp):
 def main(bfile, n_comps, cpus, mem, extra_covs):
     (bim, fam, g) = read_geno(bfile, 0, cpus, max_memory=mem)
     cols = ['PC%d' % (x + 1) for x in range(n_comps)]
-    pca = pd.DataFrame(do_pca(g, n_comps), columns=cols)
+    pca = pd.DataFrame(do_pca(g, n_comps, g.shape[1]), columns=cols)
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
