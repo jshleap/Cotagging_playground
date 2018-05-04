@@ -1,4 +1,4 @@
-from sklearn.decomposition import PCA
+from sklearn.decomposition import IncrementalPCA as PCA #PCA
 from utilities4cotagging import read_geno
 import pandas as pd
 import sys
