@@ -1,4 +1,5 @@
 import argparse
+import gc
 import math
 import os
 
@@ -37,6 +38,7 @@ def make_plink(vcf_filename, plink_exe, threads=1, split=False,
                 pd.DataFrame({'fid': col, 'iid': col}).to_csv(**options)
                 exec = split_line % (plink_exe, prefix, label, label, threads)
                 executeLine(exec)
+                gc.collect()
             x += diploid
 
 
