@@ -1,4 +1,3 @@
-#!/bin/sh -xv
 set -e
 source ~/.bashrc
 cwd=$PWD
