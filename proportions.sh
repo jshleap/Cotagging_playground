@@ -4,7 +4,7 @@ cwd=$PWD
 cpus=16
 mem=37000
 membytes=3000000000
-genos=`readlink -e $PWD/..`
+genos=`readlink -e $cwd/..`
 # I will assume that this script is going to be launched in the genos folder.
 # For now, in only works with EUR, AD and AFR as Source, Target and untyped
 code=$1
@@ -19,7 +19,7 @@ fi
 sort -R ${genos}/EUR.keep| head -n ${sample} > EUR.train
 comm -23 <(sort ${genos}/EUR.keep) <(sort EUR.train) > EUR.test
 sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
-comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > EUR.test
+comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > AD.test
 
 python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus}
 python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
