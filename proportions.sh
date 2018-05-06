@@ -4,7 +4,7 @@ cwd=$PWD
 cpus=16
 mem=37000
 membytes=3000000000
-genos=`readlink -e $cwd/..`
+genos=`readlink -e $PWD/..`
 # I will assume that this script is going to be launched in the genos folder.
 # For now, in only works with EUR, AD and AFR as Source, Target and untyped
 code=$1
