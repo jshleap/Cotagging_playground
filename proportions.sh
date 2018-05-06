@@ -27,9 +27,9 @@ python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2
 cat EUR.pheno AD.pheno > train.pheno
 all=${genos}/EURnAD
 step=$(( sample/10 ))
-if [ ! -f ${all}.pca ]; then
-    python3 ${code}/skpca.py -b $all -t ${cpus} -m ${mem} -c 1
-fi
+#if [ ! -f ${all}.pca ]; then
+#    python3 ${code}/skpca.py -b $all -t ${cpus} -m ${mem} -c 1
+#fi
 
 for i in `seq 0 $step $sample`
 do
@@ -44,11 +44,13 @@ do
             cp EUR.train constant_${i}.keep
             head -n $i AD.train >> constant_${i}.keep
     fi
+    # compute pca for this subset
+    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
     # Compute sumstats and clump for proportions
-    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out ${i} --threads ${cpus} --memory $mem
+    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${i}.eigenvec --out ${i} --threads ${cpus} --memory $mem
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i}
     # Do the constant estimations
-    $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out constant_${i} --threads ${cpus} --memory $mem
+    $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar  ${i}.eigenvec --out constant_${i} --threads ${cpus} --memory $mem
     $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i}
     # Score original
     python3 ${code}/simple_score.py -b ${genos}/AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes
