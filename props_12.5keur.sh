@@ -20,7 +20,7 @@ if [ "$covs" == TRUE ]
 fi
 # get the initial 12.5k
 sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
-comm -23 <(sort ${genos}/EUR.keep) <(sort EUR.train) > EUR.rest
+comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
 # split train/test in EUR
 sort -R EUR.rest| head -n ${sample} > EUR.train
 comm -23 <(sort EUR.rest) <(sort EUR.train) > EUR.test
