@@ -34,8 +34,8 @@ def main(args):
                                                                     'pheno'])
     cols = ['CHR', 'SNP', 'BP']
     bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos'], cols)))
-    sub = sumstats.merge(clump, on=cols, how='right')
-    sub = sub.merge(bim, on=cols+['P'], how='left')
+    sub = sumstats.merge(clump, on=cols+['P'], how='right')
+    sub = sub.merge(bim, on=cols, how='left')
     print('sub\n', sub.head())
     # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
