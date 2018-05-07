@@ -22,7 +22,7 @@ def main(args):
         prop = int(args.clump.split('.')[0].split('_')[1])
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True).dropna(
         subset=['P'])
-    print('sumstats', sumstats.head())
+    print('sumstats\n', sumstats.head())
     over_gwsig = sumstats[sumstats.P <= 1E-8]
     if over_gwsig.empty:
         tp = 0
@@ -32,11 +32,11 @@ def main(args):
         fp = over_gwsig.shape[0] - tp
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
                                                                     'pheno'])
-    cols = ['CHR', 'SNP', 'BP']
-    bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos'], cols)))
+    cols = ['CHR', 'SNP', 'BP', 'P']
+    bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos', 'pvalue'], cols)))
     sub = sumstats.merge(clump, on=cols, how='right')
     sub = sub.merge(bim, on=cols, how='left')
-    print(sub.head())
+    print('sub\n', sub.head())
     # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
