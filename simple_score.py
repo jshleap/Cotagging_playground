@@ -20,7 +20,8 @@ def main(args):
         prop = int(args.clump.split('.')[0])
     except ValueError:
         prop = int(args.clump.split('.')[0].split('_')[1])
-    sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
+    sumstats = pd.read_table(args.sumstats, delim_whitespace=True).dropna(
+        subset=['P'])
     over_gwsig = sumstats[sumstats.P <= 1E-8]
     if over_gwsig.empty:
         tp = 0
