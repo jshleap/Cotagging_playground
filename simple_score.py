@@ -35,6 +35,7 @@ def main(args):
     bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos'], cols)))
     sub = sumstats.merge(clump, on=cols, how='right')
     sub = sub.merge(bim, on=cols, how='left').dropna(subset=['P'])
+    print(sub.head())
     # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
