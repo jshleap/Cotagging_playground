@@ -1,11 +1,12 @@
-from sklearn.decomposition import IncrementalPCA as ipca #PCA
+from sklearn.decomposition import IncrementalPCA as ipca
+from sklearn.decomposition import PCA
 from utilities4cotagging import read_geno
 import pandas as pd
 import numpy as np
 import argparse
 
 
-def do_pca(g, n_comp, batch_size=None, chunk_size=1000):
+def do_pca(g, n_comp, batch_size=None, chunk_size=None):
     """
     Perform a PCA on the genetic array and return n_comp of it
 
@@ -13,26 +14,28 @@ def do_pca(g, n_comp, batch_size=None, chunk_size=1000):
     :param n_comp: Number of components sought
     :return: components array
     """
-    #pca = PCA(n_components=n_comp)
-    pca = ipca(n_components=n_comp, batch_size=batch_size)
-    for i in range(0, g.shape[0] // chunk_size):
-        pca.partial_fit(g[i * chunk_size: (i + 1) * chunk_size, :])
+    if chunk_size is None:
+        pca = PCA(n_components=n_comp)
+        Xtransformed = pca.fit_transform(g)
+    else:
+        pca = ipca(n_components=n_comp, batch_size=batch_size)
+        for i in range(0, g.shape[0] // chunk_size):
+            pca.partial_fit(g[i * chunk_size: (i + 1) * chunk_size, :])
 
-    Xtransformed = None
-    for i in range(0, g.shape[0] // chunk_size):
-        Xchunk = pca.transform(g[i * chunk_size: (i + 1) * chunk_size, :])
-        if Xtransformed == None:
-            Xtransformed = Xchunk
-        else:
-            Xtransformed = np.vstack((Xtransformed, Xchunk))
-    #pca = pca.fit_transform(g)
+        Xtransformed = None
+        for i in range(0, g.shape[0] // chunk_size):
+            Xchunk = pca.transform(g[i * chunk_size: (i + 1) * chunk_size, :])
+            if Xtransformed == None:
+                Xtransformed = Xchunk
+            else:
+                Xtransformed = np.vstack((Xtransformed, Xchunk))
     return Xtransformed
 
 
-def main(bfile, n_comps, cpus, mem, extra_covs):
+def main(bfile, n_comps, cpus, mem, extra_covs, partial):
     (bim, fam, g) = read_geno(bfile, 0, cpus, max_memory=mem)
     cols = ['PC%d' % (x + 1) for x in range(n_comps)]
-    pca = pd.DataFrame(do_pca(g, n_comps, None, 1000), columns=cols)
+    pca = pd.DataFrame(do_pca(g, n_comps, None, partial), columns=cols)
     cols = pca.columns.tolist()
     pca['iid'] = fam.iid.tolist()
     pca['fid'] = fam.fid.tolist()
@@ -54,5 +57,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--mem', type=int)
     parser.add_argument('-c', '--comps', type=int)
     parser.add_argument('-e', '--extra_covs', default=None)
+    parser.add_argument('-p', '--partial', default=None, type=int)
     args = parser.parse_args()
-    main(args.bfile, args.comps, args.cpus, args.mem, args.extra_covs)
+    main(args.bfile, args.comps, args.cpus, args.mem, args.extra_covs,
+         args.partial)
