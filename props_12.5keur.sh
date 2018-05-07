@@ -29,8 +29,14 @@ sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
 comm -23 <(${genos}/AD.keep) <(sort AD.train) > AD.test
 $plink --bfile ${genos}/AD --keep AD.test --keep-allele-order --allow-no-sex --make-bed --out AD_test --threads ${cpus} --memory $mem
 $plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --make-bed --out EUR_test --threads ${cpus} --memory $mem
-
 all=${genos}/EURnAD
+#make train subset
+cat AD.train EUR.train > train.keep
+$plink --bfile ${all} --keep train.keep --keep-allele-order --allow-no-sex --make-bed --out train
+# compute pca for this subset
+python3 ${code}/skpca.py -b train -t ${cpus} -m ${mem} -c 1
+#$plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
+
 step=$(( sample/10 ))
 
 for i in `seq 0 $step $sample`
@@ -40,7 +46,7 @@ do
     eur=$(( sample - i ))
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> ${i}.keep; fi
     # compute pca for this subset
-    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
+    #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
     # Perform associations and clumping
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar ${all}.pca --out ${i} --threads ${cpus} --memory $(( mem/1000000 ))
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i}
