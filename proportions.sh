@@ -20,8 +20,8 @@ sort -R ${genos}/EUR.keep| head -n ${sample} > EUR.train
 comm -23 <(sort ${genos}/EUR.keep) <(sort EUR.train) > EUR.test
 sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
 comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > AD.test
-$plink --bfile ${genos}/AD --keep AD.test --keep-allele-order --allow-no-sex --out AD_test --threads ${cpus} --memory $mem
-$plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --out EUR_test --threads ${cpus} --memory $mem
+$plink --bfile ${genos}/AD --keep AD.test --keep-allele-order --allow-no-sex --make-bed --out AD_test --threads ${cpus} --memory $mem
+$plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --make-bed --out EUR_test --threads ${cpus} --memory $mem
 
 python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus}
 python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
