@@ -20,8 +20,9 @@ def main(args):
         prop = int(args.clump.split('.')[0])
     except ValueError:
         prop = int(args.clump.split('.')[0].split('_')[1])
-    sumstats = pd.read_table(args.sumstats, delim_whitespace=True).dropna(
-        subset=['P'])
+    cols = ['CHR', 'SNP', 'BP', 'BETA', 'P']
+    sumstats = pd.read_table(args.sumstats, delim_whitespace=True)
+    sumstats = sumstats.reindex(columns=cols).dropna(subset=['P'])
     over_gwsig = sumstats[sumstats.P <= 1E-8]
     if over_gwsig.empty:
         tp = 0
@@ -31,12 +32,11 @@ def main(args):
         fp = over_gwsig.shape[0] - tp
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
                                                                     'pheno'])
-    cols = ['CHR', 'SNP', 'BP']
-    bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos'], cols)))
-    print(bim.head())
-    sub = sumstats.merge(clump, on=cols+['P'], how='right')
-    sub = sub.merge(bim, on=cols, how='left')
-    print('sub\n', sub.head())
+    sub = sumstats[sumstats.SNP.isin(clump.SNP)]
+    # sub = sumstats.merge(clump.reindex(columns=cols+['P']), on=cols+['P'],
+    #                      how='right')
+    bim = bim.reindex(columns=['snp', 'i']).rename(columns={'snp':'SNP'})
+    sub = sub.merge(bim, on='SNP')#, how='left')
     # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
     fam.to_csv('%s.prs' % args.bfile, sep='\t', header=True, index=False)
