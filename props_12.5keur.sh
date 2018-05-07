@@ -26,7 +26,7 @@ sort -R EUR.rest| head -n ${sample} > EUR.train
 comm -23 <(sort EUR.rest) <(sort EUR.train) > EUR.test
 # split train/test in AD
 sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
-comm -23 <(${genos}/AD.keep) <(sort AD.train) > AD.test
+comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > AD.test
 $plink --bfile ${genos}/AD --keep AD.test --keep-allele-order --allow-no-sex --make-bed --out AD_test --threads ${cpus} --memory $mem
 $plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --make-bed --out EUR_test --threads ${cpus} --memory $mem
 all=${genos}/EURnAD
