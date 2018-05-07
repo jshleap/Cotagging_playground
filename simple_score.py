@@ -22,6 +22,7 @@ def main(args):
         prop = int(args.clump.split('.')[0].split('_')[1])
     sumstats = pd.read_table(args.sumstats, delim_whitespace=True).dropna(
         subset=['P'])
+    print('sumstats', sumstats.head())
     over_gwsig = sumstats[sumstats.P <= 1E-8]
     if over_gwsig.empty:
         tp = 0
@@ -34,7 +35,7 @@ def main(args):
     cols = ['CHR', 'SNP', 'BP']
     bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos'], cols)))
     sub = sumstats.merge(clump, on=cols, how='right')
-    sub = sub.merge(bim, on=cols, how='left').dropna(subset=['P'])
+    sub = sub.merge(bim, on=cols, how='left')
     print(sub.head())
     # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
     fam['prs'] = g[:, sub.i.values].dot(sub.BETA).compute(**dask_options)
