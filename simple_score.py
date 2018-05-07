@@ -31,7 +31,7 @@ def main(args):
     pheno = pd.read_table(args.pheno, delim_whitespace=True, names=['fid','iid',
                                                                     'pheno'])
     cols = ['CHR', 'SNP', 'BP']
-    bim = bim.rename(colums=dict(zip(['chrom', 'snp', 'pos'], cols)))
+    bim = bim.rename(columns=dict(zip(['chrom', 'snp', 'pos'], cols)))
     sub = sumstats.merge(clump, on=cols, how='right')
     sub = sub.merge(bim, on=cols, how='left')
     # sub['i'] = bim[bim.snp.isin(sub.SNP)].i.tolist()
