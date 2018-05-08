@@ -19,36 +19,58 @@ if [ "$covs" == TRUE ]
   python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
   cov='--covs EURnAD.pca'
 fi
+
 # generate the phenos
-python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus}
-python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
-python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
-cat EUR.pheno AD.pheno > train.pheno
-# get the initial 12.5k
-sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
-comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
-# split train/test in EUR
-sort -R EUR.rest| head -n ${sample} > EUR.train
-comm -23 <(sort EUR.rest) <(sort EUR.train) > EUR.test
-# split train/test in AD
-sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
-comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > AD.test
-$plink --bfile ${genos}/AD --keep AD.test --keep-allele-order --allow-no-sex --make-bed --out AD_test --threads ${cpus} --memory $mem
-$plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --make-bed --out EUR_test --threads ${cpus} --memory $mem
+if [ ! -f train.pheno ]; then
+    echo -e "\n\nGenerating phenotypes\n"
+    python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus}
+    python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
+    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
+    cat EUR.pheno AD.pheno > train.pheno
+fi
+
+if [ ! -f AD.test ]; then
+    echo -e "\nGenerating keep files"
+    # get the initial 12.5k
+    sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
+    comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
+    # split train/test in EUR
+    sort -R EUR.rest| head -n ${sample} > EUR.train
+    comm -23 <(sort EUR.rest) <(sort EUR.train) > EUR.test
+    # split train/test in AD
+    sort -R ${genos}/AD.keep| head -n ${sample} > AD.train
+    comm -23 <(sort ${genos}/AD.keep) <(sort AD.train) > AD.test
+fi
+
+if [ ! -f EUR_test.bed ]; then
+    echo -e "\n\nGenerating test filesets"
+    # create the test filesets
+    $plink --bfile ${genos}/AD --keep AD.test --keep-allele-order --allow-no-sex --make-bed --out AD_test --threads ${cpus} --memory $mem
+    $plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --make-bed --out EUR_test --threads ${cpus} --memory $mem
+fi
+
 all=${genos}/EURnAD
 #make train subset
 cat AD.train EUR.train > train.keep
+
+if [ ! -f train.bed  ]; then
 $plink --bfile ${all} --keep train.keep --keep-allele-order --allow-no-sex --make-bed --out train
+fi
+
 # compute pca for this subset
-python3 ${code}/skpca.py -b train -t ${cpus} -m ${mem} -c 1
+if [ ! -f train.pca  ]; then
+    python3 ${code}/skpca.py -b train -t ${cpus} -m ${mem} -c 1
+fi
 #$plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
 
 step=$(( sample/10 ))
 
 # do Original
+echo -e "\n\nStarting Original"
 for i in `seq 0 $step $sample`
 do
     eur=$(( sample - i ))
+    echo -e "\n\nProcesing $eur european and $i admixed"
     if [[ $eur = $sample ]]
         then
             cat EUR.train > ${i}.keep
@@ -79,11 +101,13 @@ done
 
 
 # constant initial source add mixing
+echo -e "\n\nStarting constant initial source add mixing"
 for i in `seq 0 $step $sample`
 do
     cat initial.keep > ${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i AD.train >> ${i}.keep; fi
     eur=$(( sample - i ))
+    echo -e "\n\nProcesing $eur european and $i admixed with start of $init"
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> ${i}.keep; fi
     # compute pca for this subset
     #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
@@ -97,6 +121,7 @@ do
 done
 
 # do the cost derived
+echo -e "\n\nStarting cost"
 for j in `seq 0 10`
 do
     eu=`bc <<< "scale = 1; $j/10"`
@@ -105,6 +130,7 @@ do
     n=`bc <<< "$n/1"`
     eu=`bc <<< "($n * $eu)/1"`
     ad=`bc <<< "($n * $ad)/1"`
+    echo -e "\n\nProcesing $eu european and $ad admixed"
     if [[ ! $ad = 0  ]]; then
         sort -R AD.train| head -n $ad > frac_${j}.keep
     fi
