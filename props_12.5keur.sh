@@ -13,7 +13,7 @@ plink=$2
 init=12500
 sample=$3
 covs=$4
-
+#TODO: make functions
 if [ "$covs" == TRUE ]
   then python3 ${code}/skpca.py -b ${genos}/EURnAD -t ${cpus} -m ${mem} -c 2
   python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
