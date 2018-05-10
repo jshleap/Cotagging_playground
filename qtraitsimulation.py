@@ -175,6 +175,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
     prs_true['env_eff'] = env_effect
     # Generate the phenotype from the model Phenotype = genetics + environment
     prs_true['PHENO'] = prs_true.gen_eff + prs_true.env_eff
+    dim1 = prs_true.shape[0]
     # check covariates
     if covs is not None:
         cov = pd.read_table(covs, delim_whitespace=True, header=None)
@@ -183,7 +184,8 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
                                                           range(len(cov.columns
                                                                     ) - 2)]))
         cov = cov.rename(columns=columns)
-        prs_true.merge(cov, on=['fid', 'iid'], how='left')
+        prs_true.merge(cov, on=['fid', 'iid'])
+        assert prs_true.shape[0] == dim1
         # just one for now
         prs_true['PHENO'] = prs_true['PHENO'] + prs_true['Cov0']
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
