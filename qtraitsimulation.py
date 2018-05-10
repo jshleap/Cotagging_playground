@@ -180,14 +180,13 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
     if covs is not None:
         cov = pd.read_table(covs, delim_whitespace=True, header=None)
         # change names for ease
-        columns = dict(zip(cov.columns, ['fid', 'iid'] + ['Cov%d' % x for x in
-                                                          range(len(cov.columns
-                                                                    ) - 2)]))
+        covs_names = ['Cov%d' % x for x in range(len(cov.columns) - 2)]
+        columns = dict(zip(cov.columns, ['fid', 'iid'] + covs_names))
         cov = cov.rename(columns=columns)
         prs_true.merge(cov, on=['fid', 'iid'])
         assert prs_true.shape[0] == dim1
         # just one for now
-        prs_true['PHENO'] = prs_true['PHENO'] + prs_true['Cov0']
+        prs_true['PHENO'] = prs_true[:, ['PHENO'] + covs_names].sum(axis=1)
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
     # Check that the estimated heritability matches the expected one
     realized_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()

@@ -5,14 +5,14 @@ cwd=$PWD
 cpus=16
 mem=27000
 membytes=2700000000
-genos=`readlink -e $cwd/..`
+genos=$1
 # I will assume that this script is going to be launched in the genos folder.
 # For now, in only works with EUR, AD and AFR as Source, Target and untyped
-code=$1
-plink=$2
+code=$2
+plink=$3
 init=12500
-sample=$3
-covs=$4
+sample=$4
+covs=$5
 #TODO: make functions
 if [ "$covs" == TRUE ]
   then
@@ -98,9 +98,9 @@ do
     python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes
     python3 ${code}/simple_score.py -b ${genos}/AFR -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes
     # Score constant
-    python3 ${code}/simple_score.py -b AD_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $mem
-    python3 ${code}/simple_score.py -b EUR_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $mem
-    python3 ${code}/simple_score.py -b ${genos}/AFR -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant -m $mem
+    python3 ${code}/simple_score.py -b AD_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $membytes
+    python3 ${code}/simple_score.py -b EUR_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $membytes
+    python3 ${code}/simple_score.py -b ${genos}/AFR -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -P constant -m $membytes
 done
 
 
