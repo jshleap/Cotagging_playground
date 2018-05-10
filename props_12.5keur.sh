@@ -28,8 +28,8 @@ fi
 if [ ! -f train.pheno ]; then
     echo -e "\n\nGenerating phenotypes\n"
     python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus} $covs
-    python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff $covs#--normalize $cov
-    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff #--normalize $cov
+    python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff $covs
+    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff
     cat EUR.pheno AD.pheno > train.pheno
 fi
 
@@ -88,7 +88,8 @@ do
     # compute pca for this subset
     #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
     # Compute sumstats and clump for proportions
-    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out ${i} --threads ${cpus} --memory $mem #${i}.eigenvec
+    #${i}.eigenvec
+    $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out ${i} --threads ${cpus} --memory $mem
     $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i} --memory $mem
     # Do the constant estimations
     $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar  train.pca --out constant_${i} --threads ${cpus} --memory $mem
