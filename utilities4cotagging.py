@@ -7,26 +7,29 @@
 """
 import os
 import pickle
+
+import dask
+import dask.array as da
+import dask.dataframe as dd
+import matplotlib
+import numpy as np
+import pandas as pd
+import psutil
+
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 from collections import ChainMap
 from collections import Counter
 from functools import reduce
 from multiprocessing.pool import ThreadPool
 from subprocess import Popen, PIPE
-import resource
-import dask
-import dask.array as da
-import dask.dataframe as dd
 from chest import Chest
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import psutil
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
 from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
-from functools import partial
+
 #import json
 
 # Numbafy linregress (makes it a bit faster)
