@@ -7,7 +7,7 @@
 """
 import argparse
 import time
-
+import gc
 from utilities4cotagging import *
 
 plt.style.use('ggplot')
@@ -40,6 +40,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     :param snps: list of snps to subset the casuals to
     :return: genetic matrix, bim and fam dataframes and the causal vector
     """
+    gc.collect()
+    cache = Chest(available_memory=max_memory)
     # set random seed
     seed = np.random.randint(10000) if seed is None else seed
     print('using seed %d' % seed)
@@ -57,6 +59,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
             snps2 = bim2.snp
             # Save some memory
             del bim2, fam2, G2
+            gc.collect()
             print('Filtering current population with second set:')
             print('    Genotype matrix shape before', g.shape)
             # subset the genotype file
@@ -129,15 +132,19 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print(bim.dropna(subset=['beta']).head())
     idx = bim.dropna(subset=['beta']).i.values
     # Score
-    g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads)
+    g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads, cache=cache
+                                                )
+    del g_eff
+    gc.collect()
     if causaleff is not None:
         assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
     fam['gen_eff'] = g_eff
     print('Variance in beta is', bim.beta.var())
-    print('Variance of genetic component', g_eff.var())
+    print('Variance of genetic component', fam.gen_eff.var())
     print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
+
     return g, bim, fam, causals.beta
 
 
@@ -155,6 +162,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
     :param noenv: whether or not environmental effect should be added
     :type noenv: bool
     """
+    gc.collect()
     # Deal with no environment
     if h2 == 1:
         noenv = True
@@ -182,8 +190,9 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
         cov = cov.rename(columns=columns)
         prs_true.merge(cov, on=['fid', 'iid'])
         assert prs_true.shape[0] == dim1
-        # just one for now
         prs_true['PHENO'] = prs_true[:, ['PHENO'] + covs_names].sum(axis=1)
+        del cov
+        gc.collect()
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
     # Check that the estimated heritability matches the expected one
     realized_h2 = prs_true.gen_eff.var() / prs_true.PHENO.var()
@@ -203,6 +212,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
     opts = dict(sep=' ', header=False, index=False)
     prs_true.reindex(columns=['fid', 'iid', 'PHENO']).to_csv(ofn, **opts)
     # return the dataframe
+    gc.collect()
     return prs_true, realized_h2
 
 
@@ -255,7 +265,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     else:
         available_memory = psutil.virtual_memory().available
     now = time.time()  # record time
-    line = "Performing simulation with h2=%.2f, and %d causal variants"
+    line = "Performing simulation of %s\n" % outprefix
+    line += "\tPerforming simulation with h2=%.2f, and %d causal variants"
     print(line % (h2, ncausal))
     # If causal effect, read it into pandas dataframe
     if causaleff is not None:
@@ -275,23 +286,28 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
         g, bim, truebeta, vec = true_prs(**opts)  # Get true PRS
         with open(picklefile, 'wb') as F:
             pickle.dump((g, bim, truebeta, vec), F)
+        gc.collect()
     else:
         g, bim, truebeta, vec = pd.read_pickle(picklefile)
+        gc.collect()
         # with open(picklefile, 'rb') as F:
         #     g, bim, truebeta, vec = pickle.load(F)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
         # Get phenotype
         pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv,
                                           covs=covs)
+        gc.collect()
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
+        gc.collect()
     if plothist:
         # Plot phenotype histogram
         plot_pheno(outprefix, pheno, quality=quality)
     # Write outfiles
     causals = bim.dropna(subset=['beta'])
     causals.to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
+    gc.collect()
     if remove_causals:
         print('Removing causals from files!!')
         bim = bim[~bim.snp.isin(causals.snp)]
@@ -299,6 +315,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
         bim.loc[:, 'i'] = list(range(g.shape[1]))
         bim.reset_index(drop=True, inplace=True)
     print('Simulation Done after %.2f seconds!!\n' % (time.time() - now))
+    gc.collect()
     return pheno, realized_h2, (g, bim, truebeta, causals)
 
 

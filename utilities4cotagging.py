@@ -7,7 +7,7 @@
 """
 import os
 import pickle
-
+import gc
 import dask
 import dask.array as da
 import dask.dataframe as dd
@@ -151,6 +151,8 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
                 idx = (g_std != 0).compute(cache=cache)
         g = g[idx, :]
         bim = bim[idx].copy()
+        del g_std, idx
+        gc.collect()
     # compute the mafs if required
     mafs = g.sum(axis=1) / (2 * n) if flip or freq_thresh > 0 else None
     if flip:
@@ -162,6 +164,8 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         vec[flips] = 2
         # perform the flipping
         g = abs(g.T - vec)
+        del flips
+        gc.collect()
     else:
         g = g.T
     # Filter MAF
@@ -177,11 +181,15 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         bim = bim[good]
         bim['mafs'] = mafs[good]
         print('    Genotype matrix shape after', g.shape)
+        del good
+        gc.collect()
     bim = bim.reset_index(drop=True)    # Get the indices in order
     # Fix the i such that it matches the genotype indices
     bim['i'] = bim.index.tolist()
     # Get chunks apropriate with the number of threads
     g = g.rechunk(estimate_chunks(g.shape, threads))
+    del mafs
+    gc.collect()
     return bim, fam, g
 
 
@@ -499,7 +507,7 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
                                         max_memory, justd, extend)
             for rg, tg, ridx, tidx, df in window_yielder(rgeno, tgeno, mbim)]
 
-        with ProgressBar(), dask.set_options(num_workers=threads, #cache=cache,
+        with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
                                              pool=ThreadPool(threads)):
             r = tuple(dask.compute(*delayed_results))
         if justd:
