@@ -8,11 +8,8 @@
 import argparse
 import time
 
-import matplotlib
-
 from utilities4cotagging import *
 
-matplotlib.use('Agg')
 plt.style.use('ggplot')
 
 
