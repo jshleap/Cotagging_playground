@@ -27,9 +27,9 @@ fi
 # generate the phenos
 if [ ! -f train.pheno ]; then
     echo -e "\n\nGenerating phenotypes\n"
-    python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus} $covs
-    python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff $covs
-    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff
+    python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/AD -t ${cpus} -M $membytes $covs
+    python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.8 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff -M $membytes $covs
+    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff -M $membytes
     cat EUR.pheno AD.pheno > train.pheno
 fi
 
