@@ -41,7 +41,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     :return: genetic matrix, bim and fam dataframes and the causal vector
     """
     gc.collect()
-    cache = Chest(available_memory=max_memory)
+    cache = Chest(available_memory=int(max_memory))
     # set random seed
     seed = np.random.randint(10000) if seed is None else seed
     print('using seed %d' % seed)
@@ -344,7 +344,8 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--uniform', default=False, action='store_true')
     parser.add_argument('-t', '--threads', default=False, action='store',
                         type=int)
-    parser.add_argument('-M', '--maxmem', default=None, action='store')
+    parser.add_argument('-M', '--maxmem', default=None, action='store', type=int
+                        )
     parser.add_argument('-s', '--seed', default=None, type=int)
     parser.add_argument('-F', '--flip', default=False, action='store_true')
     parser.add_argument('-C', '--check', default=False, action='store_true')
