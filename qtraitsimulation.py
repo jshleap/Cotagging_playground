@@ -190,7 +190,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
         cov = cov.rename(columns=columns)
         prs_true.merge(cov, on=['fid', 'iid'])
         assert prs_true.shape[0] == dim1
-        prs_true['PHENO'] = prs_true[:, ['PHENO'] + covs_names].sum(axis=1)
+        prs_true['PHENO'] = prs_true.loc[:, ['PHENO'] + covs_names].sum(axis=1)
         del cov
         gc.collect()
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
