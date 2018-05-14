@@ -18,7 +18,7 @@ if [ "$covs" == TRUE ]
   then
     cut -d' ' -f1,2 ${genos}/AD.fam|sed 's/$/ 1/' > Covs.txt
     cut -d' ' -f1,2 ${genos}/EUR.fam|sed 's/$/ 0/' >> Covs.txt
-    cov='--covs Covs.txt'
+    covs='--covs Covs.txt'
 #    python3 ${code}/skpca.py -b ${genos}/EURnAD -t ${cpus} -m ${mem} -c 2
 #    python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
 #    cov='--covs EURnAD.pca'

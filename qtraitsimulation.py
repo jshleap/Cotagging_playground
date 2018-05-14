@@ -14,6 +14,7 @@ plt.style.use('ggplot')
 
 
 # ----------------------------------------------------------------------
+#@profile
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.01, seed=None, causaleff=None, uniform=False, usepi=False,
              snps=None, threads=1, flip=False, check=False, max_memory=None,
@@ -134,17 +135,16 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # Score
     g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads, cache=cache
                                                 )
-    del g_eff
-    gc.collect()
     if causaleff is not None:
         assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
     fam['gen_eff'] = g_eff
+    del g_eff
+    gc.collect()
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', fam.gen_eff.var())
     print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
-
     return g, bim, fam, causals.beta
 
 
@@ -231,6 +231,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 
 
 # ----------------------------------------------------------------------
+#@profile
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                        causaleff=None, plothist=False, bfile2=None, flip=False,
                        freq_thresh=0.01, quality='png', check=False, seed=None,
