@@ -14,6 +14,7 @@ plt.style.use('ggplot')
 
 
 # ----------------------------------------------------------------------
+#@profile
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
              f_thr=0.01, seed=None, causaleff=None, uniform=False, usepi=False,
              snps=None, threads=1, flip=False, check=False, max_memory=None,
@@ -144,7 +145,6 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
-
     return g, bim, fam, causals.beta
 
 
@@ -190,7 +190,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
         cov = cov.rename(columns=columns)
         prs_true.merge(cov, on=['fid', 'iid'])
         assert prs_true.shape[0] == dim1
-        prs_true['PHENO'] = prs_true[:, ['PHENO'] + covs_names].sum(axis=1)
+        prs_true['PHENO'] = prs_true.loc[:, ['PHENO'] + covs_names].sum(axis=1)
         del cov
         gc.collect()
     print('Phenotype variance: %.3f' % prs_true.PHENO.var())
@@ -231,6 +231,7 @@ def plot_pheno(prefix, prs_true, quality='pdf'):
 
 
 # ----------------------------------------------------------------------
+#@profile
 def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                        causaleff=None, plothist=False, bfile2=None, flip=False,
                        freq_thresh=0.01, quality='png', check=False, seed=None,

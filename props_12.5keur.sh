@@ -18,7 +18,7 @@ if [ "$covs" == TRUE ]
   then
     cut -d' ' -f1,2 ${genos}/AD.fam|sed 's/$/ 1/' > Covs.txt
     cut -d' ' -f1,2 ${genos}/EUR.fam|sed 's/$/ 0/' >> Covs.txt
-    cov='--covs Covs.txt'
+    covs='--covs Covs.txt'
 #    python3 ${code}/skpca.py -b ${genos}/EURnAD -t ${cpus} -m ${mem} -c 2
 #    python3 -c "import pandas as pd; df=pd.read_table('EURnAD.pca', delim_whitespace=True, header=None).loc[:, [0,1,3]].to_csv('covariates.tsv', sep='\t')"
 #    cov='--covs EURnAD.pca'
@@ -70,6 +70,9 @@ fi
 step=$(( sample/10 ))
 
 # do Original
+prop=NONE
+const=NONE
+
 echo -e "\n\nStarting Original"
 if [ -f constant.tsv ]
     then
@@ -99,25 +102,25 @@ do
     #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
     # Compute sumstats and clump for proportions
     #${i}.eigenvec
-    if [ ! -f constant_${i}.clumped ]
+    if [ ! -f props_${i}.clumped ]
         then
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out ${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i} --memory $mem
+            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out props_${i} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump props_${i}.assoc.linear --pheno train.pheno --out props_${i} --memory $mem
             # Do the constant estimations
             $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar  train.pca --out constant_${i} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i} --memory $mem
     fi
     # Score original
-    if [ $prop -lt $i ]
+    if [[ $prop == None || $prop -lt $i ]]
         then
-            python3 ${code}/simple_score.py -b AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes
-            python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes
-            python3 ${code}/simple_score.py -b ${genos}/AFR -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes
+            python3 ${code}/simple_score.py -b AD_test -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes
+            python3 ${code}/simple_score.py -b EUR_test -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes
+            python3 ${code}/simple_score.py -b ${genos}/AFR -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes
         else
             echo "Original $i done with line $prop1"
     fi
     # Score constant
-    if [ $const -lt $i ]
+    if [[ $const == None || $const -lt $i ]]
         then
             python3 ${code}/simple_score.py -b AD_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $membytes
             python3 ${code}/simple_score.py -b EUR_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $membytes
@@ -129,47 +132,58 @@ done
 
 
 # constant initial source add mixing
-echo -e "\n\nStarting constant initial source add mixing"
-for i in `seq 0 $step $sample`
-do
-    cat initial.keep > ${i}.keep
-    if [[ ! $i = 0 ]]; then head -n $i AD.train >> ${i}.keep; fi
-    eur=$(( sample - i ))
-    echo -e "\n\nProcesing $eur european and $i admixed with start of $init"
-    if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> ${i}.keep; fi
-    # compute pca for this subset
-    #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
-    # Perform associations and clumping
-    $plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out ${i} --threads ${cpus} --memory $mem
-    $plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i} --memory $mem
-    # Score original
-    python3 ${code}/simple_score.py -b AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes -P init12k
-    python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P init12k
-    python3 ${code}/simple_score.py -b ${genos}/AFR -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes -P init12k
-done
-
+if [ -f init12k.tsv ]
+    then
+        lines=`wc -l init12k.tsv`
+        echo -e "\n\ninit12k has been done, wc is $lines"
+    else
+        echo -e "\n\nStarting constant initial source add mixing"
+        for i in `seq 0 $step $sample`
+        do
+            cat initial.keep > ${i}.keep
+            if [[ ! $i = 0 ]]; then head -n $i AD.train >> ${i}.keep; fi
+            eur=$(( sample - i ))
+            echo -e "\n\nProcesing $eur european and $i admixed with start of $init"
+            if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> ${i}.keep; fi
+            # compute pca for this subset
+            #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
+            # Perform associations and clumping
+            $plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out ${i} --threads ${cpus} --memory $mem
+            $plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i} --memory $mem
+            # Score original
+            python3 ${code}/simple_score.py -b AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes -P init12k
+            python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P init12k
+            python3 ${code}/simple_score.py -b ${genos}/AFR -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes -P init12k
+        done
+fi
 # do the cost derived
-echo -e "\n\nStarting cost"
-for j in `seq 0 10`
-do
-    eu=`bc <<< "scale = 1; $j/10"`
-    ad=`bc <<< "scale = 1; 1 - ($j/10)"`
-    n=`bc <<< "scale = 1; $sample / (($ad * 2) + $eu)"`
-    n=`bc <<< "$n/1"`
-    eu=`bc <<< "($n * $eu)/1"`
-    ad=`bc <<< "($n * $ad)/1"`
-    echo -e "\n\nProcesing $eu european and $ad admixed"
-    if [[ ! $ad = 0  ]]; then
-        sort -R AD.train| head -n $ad > frac_${j}.keep
-    fi
-    if [[ ! $eu = 0  ]]; then
-        sort -R EUR.train| head -n $eu >> frac_${j}.keep
-    fi
-        # Perform associations and clumping
-    $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out cost_${j} --threads ${cpus} --memory $mem
-    $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --clump cost_${j}.assoc.linear --pheno train.pheno --out cost_${j} --memory $mem
-    # Score original
-    python3 ${code}/simple_score.py -b AD_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes -P cost
-    python3 ${code}/simple_score.py -b EUR_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P cost
-    python3 ${code}/simple_score.py -b ${genos}/AFR -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes -P cost
-done
+if [ -f cost.tsv ]
+    then
+        lines2=`wc -l init12k.tsv`
+        echo -e "\n\nCost has been done, wc is $lines2"
+    else
+        echo -e "\n\nStarting cost"
+        for j in `seq 0 10`
+        do
+            eu=`bc <<< "scale = 1; $j/10"`
+            ad=`bc <<< "scale = 1; 1 - ($j/10)"`
+            n=`bc <<< "scale = 1; $sample / (($ad * 2) + $eu)"`
+            n=`bc <<< "$n/1"`
+            eu=`bc <<< "($n * $eu)/1"`
+            ad=`bc <<< "($n * $ad)/1"`
+            echo -e "\n\nProcesing $eu european and $ad admixed"
+            if [[ ! $ad = 0  ]]; then
+                sort -R AD.train| head -n $ad > frac_${j}.keep
+            fi
+            if [[ ! $eu = 0  ]]; then
+                sort -R EUR.train| head -n $eu >> frac_${j}.keep
+            fi
+                # Perform associations and clumping
+            $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out cost_${j} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --clump cost_${j}.assoc.linear --pheno train.pheno --out cost_${j} --memory $mem
+            # Score original
+            python3 ${code}/simple_score.py -b AD_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes -P cost
+            python3 ${code}/simple_score.py -b EUR_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P cost
+            python3 ${code}/simple_score.py -b ${genos}/AFR -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes -P cost
+        done
+fi
