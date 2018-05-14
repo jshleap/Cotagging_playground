@@ -102,7 +102,7 @@ do
     #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
     # Compute sumstats and clump for proportions
     #${i}.eigenvec
-    if [ ! -f constant_${i}.clumped ]
+    if [ ! -f props_${i}.clumped ]
         then
             $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out props_${i} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump props_${i}.assoc.linear --pheno train.pheno --out props_${i} --memory $mem
