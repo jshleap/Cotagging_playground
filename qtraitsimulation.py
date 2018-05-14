@@ -134,11 +134,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # Score
     g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads, cache=cache
                                                 )
-    del g_eff
-    gc.collect()
     if causaleff is not None:
         assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
     fam['gen_eff'] = g_eff
+    del g_eff
+    gc.collect()
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', fam.gen_eff.var())
     print(bim.head())
