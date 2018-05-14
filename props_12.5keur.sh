@@ -70,6 +70,9 @@ fi
 step=$(( sample/10 ))
 
 # do Original
+prop=NONE
+const=NONE
+
 echo -e "\n\nStarting Original"
 if [ -f constant.tsv ]
     then
@@ -108,7 +111,7 @@ do
             $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i} --memory $mem
     fi
     # Score original
-    if [ $prop -lt $i ]
+    if [[ $prop == None || $prop -lt $i ]]
         then
             python3 ${code}/simple_score.py -b AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes
             python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes
@@ -117,7 +120,7 @@ do
             echo "Original $i done with line $prop1"
     fi
     # Score constant
-    if [ $const -lt $i ]
+    if [[ $const == None || $const -lt $i ]]
         then
             python3 ${code}/simple_score.py -b AD_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -P constant -m $membytes
             python3 ${code}/simple_score.py -b EUR_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $membytes
