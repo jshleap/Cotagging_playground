@@ -71,6 +71,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
             print('    Genotype matrix shape after', g.shape)
     else:
         bim, fam, g = kwargs['bim'], kwargs['fam'], bfile
+    # make sure chunks are "right"
+    g = g.rechunk(estimate_chunks(g.shape, threads, max_memory))
     # Define pi as 1 or as the mean variance to weight on the ncausals for the
     # computation of the h2 per locus
     pi = g.var(axis=0).mean() if usepi else 1
@@ -132,12 +134,34 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     bim.loc[bidx, 'beta'] = nc.beta.values.tolist()
     #print(bim.dropna(subset=['beta']).head())
     idx = bim.dropna(subset=['beta']).i.values
+    causals = bim.dropna(subset=['beta'])
+    causalfn = '%s.causaleff' % prefix
+    causals.to_csv(causalfn, index=False, sep='\t')
     # Score
-    g_eff = g[:, idx].dot(causals.beta).compute(num_workers=threads, cache=cache
-                                                )
+    if 'plink' in os.environ:
+        print('using plink to score')
+        causals.snp.to_csv('%ssnp.extract' % prefix, index=False, header=False)
+        plink = os.environ["plink"]
+        p_line = '%s --bfile %s --score %s 2 5 10 header sum center --out %s ' \
+                 '--keep-allele-order --allow-no-sex --extract %ssnp.extract ' \
+                 '--threads %d --memory %d'
+        mem = max_memory/1000000
+        p_line = p_line % (plink, bfile, causalfn, prefix, prefix, threads, mem)
+        p = Popen(p_line, shell=True)
+        p.communicate()
+        gen_eff = pd.read_table('./run1/EUR_3200.profile', delim_whitespace=True
+                                )
+        cols = {'FID': 'fid', 'IID': 'iid', 'SCORESUM': 'gen_eff'}
+        gen_eff = gen_eff.rename(columns=cols)
+        gen_eff = gen_eff.reindex(columns=['fid', 'iid', 'gen_eff'])
+        fam = fam.merge(gen_eff, on=['fid', 'iid'])
+    else:
+        dask_options = dict(num_workers=threads, cache=cache, pool=ThreadPool(
+            threads))
+        with ProgressBar(), dask.set_options(**dask_options):
+            fam['gen_eff'] = g[:, idx].dot(causals.beta).compute()
     if causaleff is not None:
         assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
-    fam['gen_eff'] = g_eff
     # del g_eff
     # # gc.collect()
     print('Variance in beta is', bim.beta.var())
@@ -145,7 +169,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
-    return g, bim, fam, causals.beta
+    return g, bim, fam, causals
 
 
 # ----------------------------------------------------------------------
@@ -259,7 +283,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     :param bfile2: prefix of the plink bedfileset on a second population
     :param quality: quality of the plot (e.g. pdf, png, jpg)
     :param seed: random seed to use in sampling
-    :param uniform: pick uniformingly distributed causal variants
+    :param uniform: pick uniformingly distributed causal vector
     """
     if max_memory is not None:
         available_memory = max_memory
@@ -284,12 +308,12 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                     flip=flip, check=check, threads=threads,
                     max_memory=available_memory)
         opts.update(kwargs)
-        g, bim, truebeta, vec = true_prs(**opts)  # Get true PRS
+        g, bim, truebeta, causals = true_prs(**opts)  # Get true PRS
         with open(picklefile, 'wb') as F:
-            pickle.dump((g, bim, truebeta, vec), F)
+            pickle.dump((g, bim, truebeta, causals), F)
         # gc.collect()
     else:
-        g, bim, truebeta, vec = pd.read_pickle(picklefile)
+        g, bim, truebeta, causals = pd.read_pickle(picklefile)
         # gc.collect()
         # with open(picklefile, 'rb') as F:
         #     g, bim, truebeta, vec = pickle.load(F)
@@ -306,8 +330,9 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
         # Plot phenotype histogram
         plot_pheno(outprefix, pheno, quality=quality)
     # Write outfiles
-    causals = bim.dropna(subset=['beta'])
-    causals.to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
+    if not os.path.isfile('%s.causaleff' % outprefix):
+        causals = bim.dropna(subset=['beta'])
+        causals.to_csv('%s.causaleff' % outprefix, index=False, sep='\t')
     # gc.collect()
     if remove_causals:
         print('Removing causals from files!!')
@@ -361,4 +386,5 @@ if __name__ == '__main__':
                        quality=args.quality, freq_thresh=args.freqthreshold,
                        bfile2=args.bfile2, seed=args.seed, uniform=args.uniform,
                        flip=args.flip, check=args.check, max_memory=args.maxmem,
-                       remove_causals=args.avoid_causals, covs=args.covs)
+                       remove_causals=args.avoid_causals, covs=args.covs,
+                       threads=args.threads)
