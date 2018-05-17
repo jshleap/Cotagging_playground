@@ -129,7 +129,7 @@ do
     # Score original
     if [[ $prop == None || $prop -lt $i ]]
         then
-            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${i}.clumped)" ${i}.assoc.linear > props_${i}.myscore
+            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' props_${i}.clumped)" props_${i}.assoc.linear > props_${i}.myscore
             $plink --bfile AD_test --score props_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out AD_${i}_props --threads ${cpus} --memory $mem
             outp AD_${i}_props.profile AD proportions.tsv
             $plink --bfile EUR_test --score props_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_${i}_props --threads ${cpus} --memory $mem
@@ -145,7 +145,7 @@ do
     # Score constant
     if [[ $const == None || $const -lt $i ]]
         then
-            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${i}.clumped)" ${i}.assoc.linear > constant_${i}.myscore
+            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${i}.clumped)" constant_${i}.assoc.linear > constant_${i}.myscore
             $plink --bfile AD_test --score constant_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out AD_${i}_constant --threads ${cpus} --memory $mem
             outp AD_${i}_constant.profile AD constant.tsv
             $plink --bfile EUR_test --score constant_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_${i}_constant --threads ${cpus} --memory $mem
@@ -171,24 +171,24 @@ if [ -f init12k.tsv ]
         echo -e "\n\nStarting constant initial source add mixing"
         for i in `seq 0 $step $sample`
         do
-            cat initial.keep > ${i}.keep
-            if [[ ! $i = 0 ]]; then head -n $i AD.train >> ${i}.keep; fi
+            cat initial.keep > init_${i}.keep
+            if [[ ! $i = 0 ]]; then head -n $i AD.train >> init_${i}.keep; fi
             eur=$(( sample - i ))
             echo -e "\n\nProcesing $eur european and $i admixed with start of $init"
-            if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> ${i}.keep; fi
+            if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
             # compute pca for this subset
             #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
             # Perform associations and clumping
-            $plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out ${i} --threads ${cpus} --memory $mem
-            $plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --clump ${i}.assoc.linear --pheno train.pheno --out ${i} --memory $mem
-            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${i}.clumped)" ${i}.assoc.linear > ${i}.myscore
+            $plink --bfile train --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out init_${i} --threads ${cpus} --memory $mem
+            $plink --bfile train --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --pheno train.pheno --out init_${i} --memory $mem
+            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' init_${i}.clumped)" init_${i}.assoc.linear > init_${i}.myscore
             # Score original
-            $plink --bfile AD_test --score ${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out AD_${i} --threads ${cpus} --memory $mem
-            outp AD_${i}.profile AD init12k.tsv
-            $plink --bfile EUR_test --score ${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_${i} --threads ${cpus} --memory $mem
-            outp EUR_${i}.profile EUR init12k.tsv
-            $plink --bfile ${genos}/AFR --score ${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${i} --threads ${cpus} --memory $mem
-            outp AFR_${i}.profile AFR init12k.tsv
+            $plink --bfile AD_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out AD_init_${i} --threads ${cpus} --memory $mem
+            outp AD_init_${i}.profile AD init12k.tsv
+            $plink --bfile EUR_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_init_${i} --threads ${cpus} --memory $mem
+            outp EUR_init_${i}.profile EUR init12k.tsv
+            $plink --bfile ${genos}/AFR --score init_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_init_${i} --threads ${cpus} --memory $mem
+            outp AFR_init_${i}.profile AFR init12k.tsv
 
             # python3 ${code}/simple_score.py -b AD_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes -P init12k
             # python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P init12k
@@ -221,13 +221,13 @@ if [ -f cost.tsv ]
             $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out cost_${j} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --clump cost_${j}.assoc.linear --pheno train.pheno --out cost_${j} --memory $mem
             # Score cost
-            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${i}.clumped)" ${i}.assoc.linear > cost_${i}.myscore
-            $plink --bfile AD_test --score cost_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out AD_${i}_cost --threads ${cpus} --memory $mem
-            outp AD_${i}_cost.profile AD cost.tsv
-            $plink --bfile EUR_test --score cost_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_${i}_cost --threads ${cpus} --memory $mem
-            outp EUR_${i}_cost.profile EUR cost.tsv
-            $plink --bfile ${genos}/AFR --score cost_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${i}_cost --threads ${cpus} --memory $mem
-            outp AFR_${i}_cost.profile AFR cost.tsv
+            grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' cost_${j}.clumped)" cost_${j}.assoc.linear > cost_${j}.myscore
+            $plink --bfile AD_test --score cost_${j}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out AD_${j}_cost --threads ${cpus} --memory $mem
+            outp AD_${j}_cost.profile AD cost.tsv
+            $plink --bfile EUR_test --score cost_${j}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_${j}_cost --threads ${cpus} --memory $mem
+            outp EUR_${j}_cost.profile EUR cost.tsv
+            $plink --bfile ${genos}/AFR --score cost_${j}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${j}_cost --threads ${cpus} --memory $mem
+            outp AFR_${j}_cost.profile AFR cost.tsv
 #            python3 ${code}/simple_score.py -b AD_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l AD -m $membytes -P cost
 #            python3 ${code}/simple_score.py -b EUR_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P cost
 #            python3 ${code}/simple_score.py -b ${genos}/AFR -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes -P cost
