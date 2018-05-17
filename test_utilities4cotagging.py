@@ -4,6 +4,7 @@ Unit testing for utilities4cotagging
 import pytest
 import filecmp
 from utilities4cotagging import *
+from pptc2 import compute_clumps
 
 
 # Global Variables
@@ -31,7 +32,7 @@ pheno = f.copy()
 pheno['PHENO'] = g[:,idx].dot(sumstats_subset.BETA.values.astype(float)
                               ).compute()
 (EUR_bim, EUR_fam, EUR_g) = read_geno(bed, 0.01, 1, False, False)
-(AFR_bim, AFR_fam, AFR_g) = read_geno(bed+'2', 0.01, 1, False, False)
+(AFR_bim, AFR_fam, AFR_g) = read_geno(bed + '2', 0.01, 1, False, False)
 EUR_g = (EUR_g - EUR_g.mean(axis=0)) / EUR_g.std(axis=0)
 AFR_g = (AFR_g - AFR_g.mean(axis=0)) / AFR_g.std(axis=0)
 toy_sumstats = pd.read_table(os.path.join(test_folder, 'toy_test.gwas'),
@@ -151,7 +152,7 @@ def test_prune_it(df, geno, pheno, step, threads, expected):
     assert a.to_dict() == expected
 
 
-@pytest.mark.parametrize("df,rgeno,tgeno,threads,max_memory,justd,extend,exp",[
+@pytest.mark.parametrize("df,rgeno,tgeno,threads,max_memory,justd,extend,exp", [
     (mbim, EUR_g, AFR_g, 1, None, True, False, 'toy_test_ds.pickle'),
     (mbim, EUR_g, AFR_g, 1, None, False, False, 'toy_test_cotd.pickle'),
     (mbim, EUR_g, AFR_g, 4, None, True, False, 'toy_test_ds.pickle'),
@@ -165,7 +166,9 @@ def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
     os.chdir(test_folder)
     with open(exp, 'rb') as F:
         expected = pickle.load(F)
-    out = single_window(df, rgeno, tgeno, threads, max_memory, justd, extend)
+    ridx, tidx = df.i_ref.values, df.i_tar.values
+    out = single_window(df, rgeno[:, ridx], tgeno[:, tidx], ridx, tidx, threads,
+                        max_memory, justd, extend)
     if isinstance(out, tuple):
         assert (out[0] == expected[0]).all()
         np.testing.assert_allclose(out[1].compute(), expected[1].compute())
@@ -192,6 +195,8 @@ def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
 ])
 def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
                 extend, exp):
+    print('rg', rgeno.shape, 'tg', tgeno.shape, 'rbim', rbim.shape,
+          'tbim', tbim.shape)
     cwd=os.getcwd()
     os.chdir(test_folder)
     with open(exp, 'rb') as F:
