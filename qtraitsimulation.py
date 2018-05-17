@@ -150,7 +150,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         p_line = p_line % (plink, bfile, causalfn, prefix, prefix, threads, mem)
         p = Popen(p_line, shell=True)
         p.communicate()
-        gen_eff = pd.read_table('./run1/EUR_3200.profile', delim_whitespace=True
+        gen_eff = pd.read_table('%s.profile' % prefix, delim_whitespace=True
                                 )
         cols = {'FID': 'fid', 'IID': 'iid', 'SCORESUM': 'gen_eff'}
         gen_eff = gen_eff.rename(columns=cols)
