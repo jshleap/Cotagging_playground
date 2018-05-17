@@ -21,8 +21,6 @@ corr()
   ssdx+=($3-mx)*($3-mx); ssdy+=($6-my)*($6-my);} END {
   print (cov / ( sqrt(ssdx) * sqrt(ssdy)) )^2 }' pass=1 $1 pass=2 $1
 }
-
-'number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop', 'run'
 outp()
 {
   infn=$1
