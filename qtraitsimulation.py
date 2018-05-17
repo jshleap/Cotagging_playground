@@ -36,7 +36,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     :param normalize: Whether or not to normalize the genotype
     :param bfile2: Second population (optional)
     :param seed: Random seed
-    :param causaleff: Dataframe with previos causal effects
+    :param causaleff: Dataframe with previous causal effects
     :param uniform: Whether to sample causal snps uniformingly or randomly
     :param snps: list of snps to subset the casuals to
     :return: genetic matrix, bim and fam dataframes and the causal vector
@@ -102,8 +102,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
         bim = bim.merge(causaleff, on='snp', how='outer')
-        #print(bim.head())
-        # print(causals.head())
+        print(bim.head())
+        print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.iloc[idx].copy()
@@ -297,7 +297,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     # If causal effect, read it into pandas dataframe
     if causaleff is not None:
         if isinstance(causaleff, str):
-            causaleff = pd.read_table('%s' % causaleff, sep='\t')
+            causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
         causaleff = causaleff.reindex(columns=['snp', 'beta'])
         assert causaleff.shape[0] == ncausal
     # If another run has been performed, load it if not compute it
