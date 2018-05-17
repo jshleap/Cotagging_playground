@@ -136,13 +136,14 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     idx = bim.dropna(subset=['beta']).i.values
     causals = bim.dropna(subset=['beta'])
     causalfn = '%s.causaleff' % prefix
-    causals.to_csv(causalfn, index=False, sep='\t')
+    causals.reindex(columns=['snp', 'pos', 'a0', 'beta']).to_csv(
+        causalfn, index=False, sep=' ')
     # Score
     if 'plink' in os.environ:
         print('using plink to score')
         causals.snp.to_csv('%ssnp.extract' % prefix, index=False, header=False)
         plink = os.environ["plink"]
-        p_line = '%s --bfile %s --score %s 2 5 10 header sum center --out %s ' \
+        p_line = '%s --bfile %s --score %s 1 3 4 header sum center --out %s ' \
                  '--keep-allele-order --allow-no-sex --extract %ssnp.extract ' \
                  '--threads %d --memory %d'
         mem = max_memory/1000000
