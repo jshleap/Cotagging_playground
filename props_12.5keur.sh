@@ -3,7 +3,7 @@ set -e
 source ~/.bashrc
 cwd=$PWD
 cpus=16
-mem=27000
+mem=37000
 membytes=$(( mem * 1000000 ))
 genos=$1
 # I will assume that this script is going to be launched in the genos folder.
