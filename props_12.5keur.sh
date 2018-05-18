@@ -71,7 +71,7 @@ if [ ! -f EUR_test.bed ]; then
     $plink --bfile ${genos}/EUR --keep EUR.test --keep-allele-order --allow-no-sex --make-bed --out EUR_test --threads ${cpus} --memory $mem
 fi
 
-if [ ! -f ${genos}/EURn${target} ]
+if [ ! -f ${genos}/EURn${target}.bed ]
     then
         $plink --bfile ${genos}/EUR --bmerge ${genos}/${target} --keep-allele-order --allow-no-sex --make-bed --out ${genos}/EURn${target} --threads ${cpus} --memory $mem
 fi
