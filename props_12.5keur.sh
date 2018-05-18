@@ -28,7 +28,7 @@ outp()
   n="${infn//[!0-9]/}"
   Pop=$2
   outfn=$3
-  echo -e "$n\t`corr $infn`\t$Pop\t$run" >> $outfn
+  echo -e "$n\t`corr $infn`\t$Pop" >> $outfn
 }
 
 if [ "$covs" == TRUE ]
@@ -79,13 +79,13 @@ all=${genos}/EURn${target}
 #make train subset
 cat ${target}.train EUR.train > train.keep
 
-if [ ! -f train.bed  ]; then
-$plink --bfile ${all} --keep train.keep --keep-allele-order --allow-no-sex --make-bed --out train --memory $mem
-fi
+#if [ ! -f train.bed  ]; then
+#$plink --bfile ${all}  --keep-allele-order --allow-no-sex --make-bed --out train --memory $mem
+#fi
 
 # compute pca for this subset
 if [ ! -f train.pca  ]; then
-    python3 ${code}/skpca.py -b train -t ${cpus} -m ${mem} -c 4
+    python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4
 fi
 #$plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
 
@@ -109,13 +109,13 @@ fi
 for i in `seq 0 $step $sample`
 do
     eur=$(( sample - i ))
-    echo -e "\n\nProcesing $eur european and $i admixed"
+    echo -e "\n\nProcesing $eur european and $i $target"
     if [[ $eur = $sample ]]
         then
             cat EUR.train > ${i}.keep
             cp EUR.train constant_${i}.keep
         else
-            head -n $eur EUR.train> ${i}.keep
+            head -n $eur EUR.train > ${i}.keep
             head -n $i ${target}.train >> ${i}.keep
             cp EUR.train constant_${i}.keep
             head -n $i ${target}.train >> constant_${i}.keep
@@ -177,16 +177,16 @@ if [ -f init12k.tsv ]
         echo -e "\n\nStarting constant initial source add mixing"
         for i in `seq 0 $step $sample`
         do
+            eur=$(( sample - i ))
+            echo -e "\n\nProcesing $eur european and $i $target with start of $init"
             cat initial.keep > init_${i}.keep
             if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
-            eur=$(( sample - i ))
-            echo -e "\n\nProcesing $eur european and $i admixed with start of $init"
             if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
             # compute pca for this subset
             #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
             # Perform associations and clumping
-            $plink --bfile train --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out init_${i} --threads ${cpus} --memory $mem
-            $plink --bfile train --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --pheno train.pheno --out init_${i} --memory $mem
+            $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.pca --out init_${i} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --pheno train.pheno --out init_${i} --memory $mem
             grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' init_${i}.clumped)" init_${i}.assoc.linear > init_${i}.myscore
             # Score original
             $plink --bfile ${target}_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out ${target}_init_${i} --threads ${cpus} --memory $mem

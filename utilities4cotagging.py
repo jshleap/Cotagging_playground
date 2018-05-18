@@ -1,36 +1,40 @@
 #!/usr/bin/env python
 # coding:utf-8
 """
+  Utilitarian function for most of the cotagging work
   Author:  Jose Sergio Hleap --<2017>
   Purpose: Utilities for cottagging
   Created: 09/30/17
 """
+import gc
+import operator
 import os
 import pickle
-import gc
-import dask
-import dask.array as da
-import dask.dataframe as dd
-import matplotlib
-import numpy as np
-import pandas as pd
-import psutil
-
-matplotlib.use('Agg')
-from matplotlib import pyplot as plt
 from collections import ChainMap
 from collections import Counter
 from functools import reduce
 from multiprocessing.pool import ThreadPool
 from subprocess import Popen, PIPE
+
+import dask
+import dask.array as da
+import dask.dataframe as dd
+import matplotlib
+matplotlib.use('Agg')
+import numpy as np
+import pandas as pd
+import psutil
 from chest import Chest
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
+from matplotlib import pyplot as plt
 from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
+from sklearn.model_selection import train_test_split
 
-#import json
+
+
 
 # Numbafy linregress (makes it a bit faster)
 lr = jit(linregress)
@@ -139,7 +143,6 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
     else:
         available_memory = psutil.virtual_memory().available
     cache = Chest(available_memory=available_memory)
-    #, dump=json.dumps, load=json.loads)
     (bim, fam, g) = read_plink(bfile)   # read the files using pandas_plink
     m, n = g.shape                      # get the dimensions of the genotype
     # remove invariant sites
@@ -243,9 +246,10 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
 
     except KeyError:
         causals = pd.DataFrame([])
+        idx = []
     size = df.m_size
     # Plot the scheme with position in x and rank (a.k.a Index) in y
-    gwascotag.loc[:,position] = gwascotag.loc[:,position].astype(int)
+    gwascotag.loc[:, position] = gwascotag.loc[:, position].astype(int)
     f, ax = plt.subplots()
     df.plot.scatter(x=position, y='index', ax=ax, label=column)
     if not causals.empty:
@@ -288,7 +292,7 @@ def estimate_chunks(shape, threads, memory=None):
     # Determine number of chunks given usage and available memory
     n_chunks = np.ceil(usage / avail_mem).astype(int)
     # Mute divided by zero error only for this block of code
-    with np.errstate(divide='ignore',invalid='ignore'):
+    with np.errstate(divide='ignore', invalid='ignore'):
         estimated = tuple(np.array(shape) / n_chunks)  # Get chunk estimation
     chunks = min(shape, tuple(estimated))            # Fix if n_chunks is 0
     return tuple(int(i) for i in chunks)  # Assure chunks is a tuple of integers
@@ -323,6 +327,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     """
     Prune and score a dataframe of sorted snps
 
+    :param n: Max number of records to prune
     :param max_memory: Maximum available memory
     :param str beta: Column with the effect size
     :param int threads: Number of threads to use
@@ -344,7 +349,6 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
     else:
         available_memory = psutil.virtual_memory().available
     cache = Chest(available_memory=available_memory)
-    #, dump=json.dumps, load=json.loads)
     print('Prunning %s...' % label)
     opts = dict(num_workers=threads, cache=cache, pool=ThreadPool(threads))
     if n is not None:
@@ -358,7 +362,8 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
         # This is done to have a finer grain in the first part of the prunning
         # where most of the causals should be captured
         print('First 200')
-        # Create a generator with the subset and the arguments for the single func
+        # Create a generator with the subset and the arguments for the single
+        # function
         gen = ((df.iloc[:i], geno, pheno, label, beta) for i in
                range(1, min(201, df.shape[0] + 1), 1))
         # Run the scoring in parallel threads
@@ -376,14 +381,16 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
 
 
 # ----------------------------------------------------------------------
-#@jit(parallel=True)
-def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None, justd=False,
-                  extend=False):
+#@jit()#parallel=True)
+def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None,
+                  justd=False, extend=False):
     """
     Helper function to compute the correlation between variants from a genotype
     array
 
-    :param df: Merged dataframe with the mapping of the positions in the genotypes
+    :param ridx: Indices of the reference genotype to be used
+    :param tidx: Indices of the target genotype to be used
+    :param df: Merged dataframe mapping of the positions in the genotypes
     :param rg: slice of Genotype array of the reference population
     :param tg: slice of Genotype array of the target population
     :param threads: Number of threads to estimate memory use
@@ -398,14 +405,15 @@ def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None, justd=Fals
     else:
         available_memory = psutil.virtual_memory().available
     cache = Chest(available_memory=available_memory)
-    #, dump=json.dumps, load=json.loads)
-    # # Get the mapping indices
-    # ridx, tidx = df.i_ref.values, df.i_tar.values
-    # # Subset the genotype arrays
-    # rg, tg = rgeno[:, ridx], tgeno[:, tidx]
-    # extend the Genotpe at both end to avoid edge effects
+    # Make sure chunks make sense
+    chunk_opts = dict(threads=threads, memory=available_memory)
+    #rg = rg[:, ridx]
+    rg = rg.rechunk(estimate_chunks(shape=rg.shape, **chunk_opts))
+    #tg = tg[:, tidx]
+    tg = tg.rechunk(estimate_chunks(shape=tg.shape, **chunk_opts))
+    # extend the genotype at both end to avoid edge effects
     if extend:
-        # get the indices of the subsetted genotype array
+        # get the indices of the subset genotype array
         nidx = np.arange(rg.shape[1])
         # Split the array in half (approximately)
         idx_a, idx_b = np.array_split(nidx, 2)
@@ -413,13 +421,14 @@ def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None, justd=Fals
         i = np.concatenate([idx_a[::-1][:-1], nidx, idx_b[::-1][1:]])
         # Re-subset the genotype arrays with the extensions
         rg, tg = rg[:, i], tg[:, i]
+        assert rg.shape[1] == tg.shape[1]
         # Compute the correltion as X'X/N
         rho_r = da.dot(rg.T, rg) / rg.shape[0]
         rho_t = da.dot(tg.T, tg) / tg.shape[0]
         # remove the extras
-        idx =  np.arange(i.shape[0])[idx_a.shape[0]-1: (nidx.shape[0] +
+        idx = np.arange(i.shape[0])[idx_a.shape[0]-1: (nidx.shape[0] +
                                                         idx_b.shape[0])]
-        rho_r, rho_t = rho_r[idx,:], rho_t[idx,:]
+        rho_r, rho_t = rho_r[idx, :], rho_t[idx, :]
         rho_r, rho_t = rho_r[:, idx], rho_t[:, idx]
         # Make sure the shape match
         assert rho_r.shape[1] == ridx.shape[0] == rho_r.shape[0]
@@ -444,10 +453,18 @@ def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None, justd=Fals
 
 # ----------------------------------------------------------------------
 def window_yielder(rgeno, tgeno, mbim):
+    """
+    TODO: include in pytest
+    :param rgeno: Genotype for reference
+    :param tgeno: Genotype from target
+    :param mbim: Merged bim files from reference and target
+    :return: subsets of genotypes, their indices and subset dataframe
+    """
     for window, df in mbim.groupby('windows'):
         if not df.snp.empty:
             # Get the mapping indices
             ridx, tidx = df.i_ref.values, df.i_tar.values
+            assert ridx.shape == tidx.shape
             # Subset the genotype arrays
             rg, tg = rgeno[:, ridx], tgeno[:, tidx]
             yield rg, tg, ridx, tidx, df
@@ -484,12 +501,13 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     cache = Chest(available_memory=available_memory)
     if os.path.isfile('ld.matrix'):
         print('Loading precomputed LD matrix')
-        dd.read_parquet('ld.matrix')
+        r = dd.read_parquet('ld.matrix')
     else:
         print('Computing LD score per window')
         # Get the overlapping snps and their info
         shared = ['chrom', 'snp', 'pos']
         mbim = rbim.merge(tbim, on=shared, suffixes=['_ref', '_tar'])
+        assert mbim.i_ref.values.shape == mbim.i_tar.values.shape
         # Get the number of bins or loci to be computed
         nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
         # Get the limits of the loci
@@ -526,3 +544,145 @@ def compute_maf(column, keep_allele_order=False):
     else:
         maf = sum(sorted(c.values(), reverse=False)[:2]) / (sum(c.values()) * 2)
     return maf
+
+
+# ----------------------------------------------------------------------
+def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
+                sum_stats, test_geno, test_pheno, clump_function,
+                select_index_by='pvalue', clump_with='d_reference',
+                do_locus_ese=False, normalize=True):
+    """
+    Optimize the R2 based on summary statistics
+
+    :param normalize: Whether to normalize the genotype or not
+    :param do_locus_ese: Clump with ESE strategy instead of pvalue
+    :param clump_with: LD matrix to clump with (d_reference, t_reference)
+    :param clump_function: Function to clump with.
+    :param loci: List of tuples with the LDs and snps per locus
+    :param ld_range: Range of ld thresholds
+    :param by_range: Range of the ranking strategy (pvalue or ese)
+    :param h2: Heritability of the trait
+    :param avh2: Average heritability per snp
+    :param n: Sample size
+    :param threads: Number of threads to use in multithread computations
+    :param cache: A dictionary that spills to disk. chest instance
+    :param memory: Maximum memory to use
+    :param sum_stats: Dataframe with the sumary statistics of an association
+    :param test_geno: Test set genotype array
+    :param test_pheno: Test set genotype vector (or series)
+    :param select_index_by: Ranking strategy (ESE or Pvalue)
+    :return: Tuple with the list of index snps and their R2
+    """
+    if select_index_by == 'pvalue':
+        rank = getattr(operator, 'lt')
+        snp_index = 0
+    else:
+        rank = getattr(operator, 'gt')
+        if select_index_by == 'ese':
+            snp_index = 2
+        else:
+            snp_index = 4
+    curr_best = ([], 0)
+    # Optimize with one split, return reference score with the second
+    out = train_test_split(test_geno, test_pheno, test_size=0.5)
+    train_g, test_g, train_p, test_p = out
+    if normalize:
+        # re-normalize the genotypes
+        train_g = (train_g - train_g.mean(axis=0)) / train_g.std(axis=0)
+        test_g = (test_g - test_g.mean(axis=0)) / test_g.std(axis=0)
+    opt_dic = {}  # for debugging purposes
+    for ld_threshold in ld_range:
+        all_clumps = clump_function(loci, sum_stats, ld_threshold, h2, avh2, n,
+                                    threads, cache, memory, select_index_by,
+                                    clump_with, do_locus_ese)
+        if by_range is None:
+            by_range = pd.concat(all_clumps.values()).ese.quantile(
+                np.arange(.0, 1, .1))
+        for by_threshold in by_range:
+            index_snps = [k[snp_index] for k in all_clumps.keys() if
+                          rank(k[snp_index + 1], by_threshold)]
+            if not index_snps:
+                continue
+            try:
+                r2 = just_score(index_snps, sum_stats, train_p, train_g)
+            except Exception:
+                with open('failed.pickle', 'wb') as F:
+                    pickle.dump((index_snps, sum_stats, train_p, train_g), F)
+                    raise
+            opt_dic[ld_threshold] = (r2, index_snps)
+            if r2 > curr_best[1]:
+                curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
+    r2 = just_score(curr_best[0], sum_stats, test_p, test_g)
+    return curr_best[0], r2, curr_best[-1]
+
+
+# ----------------------------------------------------------------------
+# noinspection PyUnresolvedReferences
+def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache,
+                        sum_stats, available_memory, test_geno, test_pheno,
+                        tpheno, tgeno, prefix, clump_function,
+                        select_index_by='pvalue', normalize=True,
+                        clump_with='d_reference', do_locus_ese=False):
+    """
+    Run the optimzation of byrange and select by ranges
+
+    :param normalize: Whether to normalize the genotype or not
+    :param clump_function: Function to clump with.
+    :param by_range: Range to optimize the R2 during P+T strategy
+    :param sort_by: Name of variable to sort SNPs between clumps (set of index)
+    :param loci: List of tuples with the LDs and snps per locus
+    :param h2: Heritability of the trait
+    :param m: Number of snps
+    :param n: Number of individuals
+    :param threads: Number of threads to use in parallelization
+    :param cache: A chest dictionary to spill to disk if not enough memory
+    :param sum_stats: Dataframe with sumary statistics of the association
+    :param available_memory: Max available memory for the program
+    :param test_geno: Dask array with test subset genotype of the reference
+    :param test_pheno: Dataframe with test subset phenotype of the reference
+    :param tpheno: Dask array with target genotype
+    :param tgeno: Dataframe with target phenotype
+    :param prefix: Prefix for the outputs
+    :param select_index_by: Name of variable (column) to do index snp selection
+    :param clump_with: LD matrix to clump with (d_reference, t_reference)
+    :param do_locus_ese: Clump with ESE strategy instead of pvalue
+    :return: Dictionary with index snps, tagged_snpsand the R2 for target and
+    reference
+    """
+    avh2 = h2 / m
+    ld_range = np.concatenate([np.array([0.1]), np.arange(.2, .8, .2)])
+    if by_range is None and (sort_by == 'pvalue'):
+            by_range = [1, 0.5, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
+    opt = dict(loci=loci, ld_range=ld_range, by_range=by_range, h2=h2,
+               avh2=avh2, n=n, threads=threads, cache=cache,
+               memory=available_memory, sum_stats=sum_stats,
+               test_geno=test_geno, test_pheno=test_pheno,
+               select_index_by=select_index_by, clump_with=clump_with,
+               do_locus_ese=do_locus_ese, normalize=normalize,
+               clump_function=clump_function)
+    r2_tuple = optimize_it(**opt)
+    index_snps, r2_ref, sum_stats = r2_tuple
+    with open('%s.index_snps' % select_index_by, 'w') as F:
+        F.write('\n'.join(index_snps))
+    # score in target
+    r2 = just_score(index_snps, sum_stats, tpheno, tgeno)
+    ascending = True if sort_by == 'pvalue' else False
+    pre = sum_stats[sum_stats.snp.isin(index_snps)].sort_values(
+        sort_by, ascending=ascending)
+    pos = sum_stats[~sum_stats.snp.isin(index_snps)].sort_values(
+        sort_by, ascending=ascending)
+    pd.concat([pre, pos]).to_csv('%s_full.tsv' % prefix, index=False, sep='\t')
+    result = dict(index_snps=pre, tagged_snps=pos, R2=r2, R2_ref=r2_ref)
+    with open('result_%s.pickle' % sort_by, 'wb') as P:
+        pickle.dump(result, P)
+    return result
+
+
+# ----------------------------------------------------------------------
+def just_score(index_snp, sumstats, pheno, geno):
+    clump = sumstats[sumstats.snp.isin(index_snp)]
+    idx = clump.i.values.astype(int)
+    prs = geno[:, idx].dot(clump.slope)
+    est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
+    return est
+

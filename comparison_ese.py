@@ -149,16 +149,6 @@ def loop_pairs(snp_list, D_r, l, p, sumstats, pheno, geno):
     est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
     return est, (index, tag, l, p)
 
-
-#@jit
-def just_score(index_snp, sumstats, pheno, geno):
-    clump = sumstats[sumstats.snp.isin(index_snp)]
-    idx = clump.i.values.astype(int)
-    prs = geno[:, idx].dot(clump.slope)
-    est = np.corrcoef(prs, pheno.PHENO)[1, 0] ** 2
-    return est
-
-
 def dirty_ppt(loci, sumstats, geno, pheno, threads, split, seed, memory,
               pvals=None, lds=None):
     cache = Chest(available_memory=memory)

@@ -11,12 +11,13 @@ import seaborn as sns
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.style.use('ggplot')
-files = glob('run*/proportions.tsv')
+pref = sys.argv[1]
+files = glob('run*/%s.tsv' % pref)
 
 todas = []
 #t_r2s = []
 #max_r2s = []
-if sys.argv[1] == 'TRUE': # if done with plink
+if sys.argv[2] == 'TRUE': # if done with plink
     names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop']
     read_opts = dict(delim_whitespace=True, header=None, names=names)
     time = 'EUR (%)'
@@ -39,29 +40,30 @@ df = pd.concat(todas)
 #t_r2 = np.mean(t_r2s)
 #max_r2 = np.mean(max_r2s)
 f, ax = plt.subplots()
-sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,  ci="sd")
+sns.tsplot(time=time, value=value, unit="run", condition='Pop', data=df, ax=ax,
+           ci="sd")
 df.plot.scatter(x=time, y=value, marker='.', s=3, ax=ax)
 #ax.axhline(t_r2, ls='-.', color='r', label=r'$\bar{AFR_{P + T}}$')
 #ax.axhline(max_r2, ls='-.', color='0.5', label='Causals in AFR')
 plt.title('Sample size: %d' % df.number.max())
-plt.savefig('Proportions_%sruns_withdots.pdf' % str(df.run.max() + 1))
+plt.savefig('%s_%sruns_withdots.pdf' % (pref, (df.run.max() + 1)))
 plt.tight_layout()
 plt.close()
 
 f, ax = plt.subplots()
-sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,  condition='Pop',
+sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax, condition='Pop',
            ci=[25, 50, 75, 95])
 plt.title('Sample size: %d' % df.number.max())
 plt.tight_layout()
-plt.savefig('Proportions_%sruns.pdf' % str(df.run.max() + 1))
+plt.savefig('%s_%sruns.pdf' % (pref, str(df.run.max() + 1)))
 plt.close()
 
 f, ax = plt.subplots()
-sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
+sns.tsplot(time=time, value=value, unit="run", data=df, condition='Pop', ax=ax,
            err_style="unit_traces")
 plt.title('Sample size: %d' % df.number.max())
 plt.tight_layout()
-plt.savefig('Proportions_%sruns_traces.pdf' % str(df.run.max() + 1))
+plt.savefig('%s_%sruns_traces.pdf' % (pref, str(df.run.max() + 1)))
 plt.close()
 
 # plot number of true and false positives SNPs found
@@ -82,4 +84,4 @@ sns.barplot(x="EUR (%)", y="# Discovered SNPS", hue="Type", data=ndf, ax=ax,
 ax.axhline(ncausal, ls='-.', color='0.5', label='Causals in AFR')
 plt.title('Sample size: %d' % df.number.max())
 plt.tight_layout()
-plt.savefig('Proportions_%sruns_discovered_snps.pdf' % str(df.run.max() + 1))
+plt.savefig('%s_%sruns_discovered_snps.pdf' % (pref, str(df.run.max() + 1)))
