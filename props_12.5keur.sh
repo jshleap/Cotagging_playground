@@ -82,14 +82,15 @@ all=${genos}/EURn${target}
 cat ${target}.train EUR.train > train.keep
 
 #if [ ! -f train.bed  ]; then
-#$plink --bfile ${all}  --keep-allele-order --allow-no-sex --make-bed --out train --memory $mem
+#    $plink --bfile ${all}  --keep train.keep --keep-allele-order --allow-no-sex --make-bed --out train --memory $mem
 #fi
 
 # compute pca for this subset
 #if [ ! -f train.pca  ]; then
 #    python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4
 #fi
-#$plink --bfile train --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 1 --out ${i} --threads ${cpus} --memory $mem
+cat train.keep initial.keep | sort | uniq > train.txt
+$plink --bfile ${all} --keep train.keep --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
 
 step=$(( sample/10 ))
 
@@ -126,13 +127,13 @@ do
     #${i}.eigenvec
     if [ ! -f props_${i}.clumped ]
         then
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out props_${i} --threads ${cpus} --memory $mem
+            #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out props_${i} --threads ${cpus} --memory $mem
             #python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4 --keep ${i}.keep -p 3
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar props_${i}.eigenvec --out props_${i} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out props_${i} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump props_${i}.assoc.linear --pheno train.pheno --out props_${i} --memory $mem
             # Do the constant estimations
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out constant_${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar constant_${i}.eigenvec --out constant_${i} --threads ${cpus} --memory $mem
+            #$plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out constant_${i} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out constant_${i} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i} --memory $mem
     fi
     # Score original
@@ -186,9 +187,9 @@ if [ -f init12k.tsv ]
             if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
             if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
             # compute pca for this subset
-            $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out init_${i} --threads ${cpus} --memory $mem
+            #$plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out init_${i} --threads ${cpus} --memory $mem
             # Perform associations and clumping
-            $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar init_${i}.eigenvec --out init_${i} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out init_${i} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --pheno train.pheno --out init_${i} --memory $mem
             grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' init_${i}.clumped)" init_${i}.assoc.linear > init_${i}.myscore
             # Score original
@@ -227,8 +228,8 @@ if [ -f cost.tsv ]
                 sort -R EUR.train| head -n $eu >> frac_${j}.keep
             fi
                 # Perform associations and clumping
-            $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --pca 4 --out frac_${j} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar frac_${j}.eigenvec --out cost_${j} --threads ${cpus} --memory $mem
+            #$plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --pca 4 --out frac_${j} --threads ${cpus} --memory $mem
+            $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out cost_${j} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --clump cost_${j}.assoc.linear --pheno train.pheno --out cost_${j} --memory $mem
             # Score cost
             grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' cost_${j}.clumped)" cost_${j}.assoc.linear > cost_${j}.myscore
