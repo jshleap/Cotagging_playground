@@ -90,7 +90,7 @@ cat ${target}.train EUR.train > train.keep
 #    python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4
 #fi
 cat train.keep initial.keep | sort | uniq > train.txt
-$plink --bfile ${all} --keep train.keep --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
+$plink --bfile ${all} --keep train.txt --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
 
 step=$(( sample/10 ))
 
