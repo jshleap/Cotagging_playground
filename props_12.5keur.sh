@@ -93,7 +93,7 @@ if [ ! -f train.txt ]
         cat train.keep initial.keep | sort | uniq > train.txt
 fi
 
-if [ ! -f train.pca  ]
+if [ ! -f train.eigenvec  ]
     then
         $plink --bfile ${all} --keep train.txt --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
 fi
