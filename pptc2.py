@@ -1,8 +1,6 @@
-from itertools import product
-import operator
 from ese import *
-from comparison_ese import just_score
-
+from comparison_ese import sortbylocus
+from utilities4cotagging import *
 
 np.seterr(all='raise')  # Debugging
 
@@ -34,10 +32,14 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
         # get the index snp
         if do_locus_ese:
             #clump by locus ese
-            index = sum_stats.sort_values('locus_ese', ascending=ascend).iloc[0]
+            #index = sum_stats.sort_values('locus_ese', ascending=ascend).iloc[0]
+            index = sortbylocus('locus_ese', sum_stats, column='locus_ese',
+                                ascending=ascend).iloc[0]
         else:
             # clump by locus pval
-            index = sum_stats.sort_values('pvalue', ascending=ascend).iloc[0]
+            #index = sum_stats.sort_values('pvalue', ascending=ascend).iloc[0]
+            index = sortbylocus('pvalue', sum_stats, column='pvalue',
+                                ascending=ascend).iloc[0]
         # get the clump around index for
         vec = (locals()[clump_with] ** 2).loc[index.snp, :]
         tag = vec[vec > ld_threshold].index.tolist()
@@ -94,126 +96,6 @@ def compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n, threads, cache,
                               memory_limit=memory, cache=cache,
                               pool=ThreadPool(threads)))
     return dict(pair for d in l for pair in d.items())
-
-
-def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
-                sum_stats, test_geno, test_pheno, select_index_by='pvalue',
-                clump_with='d_reference', do_locus_ese=False, normalize=True):
-    """
-    Optimize the R2 based on summary statistics
-
-    :param loci: List of tuples with the LDs and snps per locus
-    :param ld_range: Range of ld thresholds
-    :param by_range: Range of the ranking strategy (pvalue or ese)
-    :param h2: Heritability of the trait
-    :param avh2: Average heritability per snp
-    :param n: Sample size
-    :param threads: Number of threads to use in multithread computations
-    :param cache: A dictionary that spills to disk. chest instance
-    :param memory: Maximum memory to use
-    :param sum_stats: Dataframe with the sumary statistics of an association
-    :param test_geno: Test set genotype array
-    :param test_pheno: Test set genotype vector (or series)
-    :param select_index_by: Ranking strategy (ESE or Pvalue)
-    :return: Tuple with the list of index snps and their R2
-    """
-    if select_index_by == 'pvalue':
-        rank = getattr(operator, 'lt')
-        snp_index = 0
-    else:
-        rank = getattr(operator, 'gt')
-        if select_index_by == 'ese':
-            snp_index = 2
-        else:
-            snp_index = 4
-    curr_best = ([], 0)
-    # Optimize with one split, return reference score with the second
-    out = train_test_split(test_geno, test_pheno, test_size=0.5)
-    train_g, test_g, train_p, test_p = out
-    if normalize:
-        # re-normalize the genotypes
-        train_g = (train_g - train_g.mean(axis=0)) / train_g.std(axis=0)
-        test_g = (test_g - test_g.mean(axis=0)) / test_g.std(axis=0)
-    opt_dic = {} # for debugging purposes
-    for ld_threshold in ld_range:
-        all_clumps = compute_clumps(loci, sum_stats, ld_threshold, h2, avh2, n,
-                                    threads, cache, memory, select_index_by,
-                                    clump_with, do_locus_ese)
-        if by_range is None:
-            by_range = pd.concat(all_clumps.values()).ese.quantile(
-                np.arange(.0, 1, .1))
-        for by_threshold in by_range:
-            index_snps = [k[snp_index] for k in all_clumps.keys() if
-                          rank(k[snp_index + 1], by_threshold)]
-            if not index_snps:
-                continue
-            try:
-                r2 = just_score(index_snps, sum_stats, train_p, train_g)
-            except:
-                with open('failed.pickle', 'wb') as F:
-                    pickle.dump((index_snps, sum_stats, train_p, train_g), F)
-                    raise
-            opt_dic[ld_threshold] = (r2, index_snps)
-            if r2 > curr_best[1]:
-                curr_best = (index_snps, r2, pd.concat(all_clumps.values()))
-    r2 = just_score(curr_best[0], sum_stats, test_p, test_g)
-    return curr_best[0], r2, curr_best[-1]
-
-
-def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache,
-                        sum_stats, available_memory, test_geno, test_pheno,
-                        tpheno, tgeno, prefix, select_index_by='pvalue',
-                        normalize=True, clump_with='d_reference',
-                        do_locus_ese=False):
-    """
-    Run the optimzation of byrange and select by ranges
-
-    :param by_range:
-    :param sort_by: Across clumps sorting by
-    :param loci:
-    :param h2:
-    :param m:
-    :param n:
-    :param threads:
-    :param cache:
-    :param sum_stats:
-    :param available_memory:
-    :param test_geno:
-    :param test_pheno:
-    :param tpheno:
-    :param tgeno:
-    :param prefix:
-    :param select_index_by: index snp selection
-    :param clump_with:
-    :param do_locus_ese:
-    :return:
-    """
-    avh2 = h2 / m
-    ld_range = np.concatenate([np.array([0.1]), np.arange(.2,.8,.2)])
-    if by_range is None and (sort_by == 'pvalue'):
-            by_range = [1, 0.5, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
-    opt = dict(loci=loci, ld_range=ld_range, by_range=by_range, h2=h2,
-               avh2=avh2, n=n, threads=threads, cache=cache,
-               memory=available_memory, sum_stats=sum_stats,
-               test_geno=test_geno, test_pheno=test_pheno,
-               select_index_by=select_index_by, clump_with=clump_with,
-               do_locus_ese=do_locus_ese, normalize=normalize)
-    r2_tuple = optimize_it(**opt)
-    index_snps, r2_ref, sum_stats = r2_tuple
-    with open('%s.index_snps' % select_index_by, 'w') as F:
-        F.write('\n'.join(index_snps))
-    # score in target
-    r2 = just_score(index_snps, sum_stats, tpheno, tgeno)
-    ascending = True if sort_by == 'pvalue' else False
-    pre = sum_stats[sum_stats.snp.isin(index_snps)].sort_values(
-        sort_by, ascending=ascending)
-    pos = sum_stats[~sum_stats.snp.isin(index_snps)].sort_values(
-        sort_by, ascending=ascending)
-    pd.concat([pre, pos]).to_csv('%s_full.tsv' % prefix, index=False, sep='\t')
-    result = dict(index_snps=pre, tagged_snps=pos, R2=r2, R2_ref=r2_ref)
-    with open('result_%s.pickle' % sort_by, 'wb') as P:
-        pickle.dump(result, P)
-    return result
 
 
 def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
@@ -285,7 +167,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     test_pheno=y_test, tpheno=tpheno, tgeno=tgeno,
                     prefix='%s_pval_all' % prefix, select_index_by='pvalue',
                     clump_with=clump_with, do_locus_ese=False,
-                    normalize=kwargs['normalize'])
+                    normalize=kwargs['normalize'], clump_function=compute_clumps
+                    )
         # run standard P + T
         pvalue = run_optimization_by(**opts)
 

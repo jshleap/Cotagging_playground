@@ -18,7 +18,7 @@ import mpmath as mp
 import statsmodels.formula.api as smf
 from dask.array.core import Array
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
+
 
 from qtraitsimulation import qtraits_simulation
 from utilities4cotagging import *
