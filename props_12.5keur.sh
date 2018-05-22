@@ -120,7 +120,7 @@ fi
 #        prop=${prop1[0]}
 # fi
 
-for i in sequ
+for i in ${sequ}
 do
     eur=$(( sample - i ))
     echo -e "\n\nProcesing $eur european and $i $target"
@@ -192,7 +192,7 @@ if [ -f init12k.tsv ]
         sequ=${sequence}
 fi
 echo -e "\n\nStarting constant initial source add mixing"
-for i in sequ
+for i in ${sequ}
 do
     eur=$(( sample - i ))
     echo -e "\n\nProcesing $eur european and $i $target with start of $init"
@@ -228,7 +228,7 @@ if [ -f cost.tsv ]
         sequ=${sequence}
 fi
 echo -e "\n\nStarting cost"
-for j in sequ
+for j in ${sequ}
 do
     eu=`bc <<< "scale = 1; $j/10"`
     ad=`bc <<< "scale = 1; 1 - ($j/10)"`
