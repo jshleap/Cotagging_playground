@@ -7,7 +7,6 @@
 """
 import argparse
 import time
-import gc
 from utilities4cotagging import *
 
 plt.style.use('ggplot')

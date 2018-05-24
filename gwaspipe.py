@@ -22,19 +22,19 @@ except:
 
 ################################################################################
 ## Functions ###################################################################
-#----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
 def execline(line):
     """
     execute a line with system
     """
-    exe = Popen(line, shell=True)#, stderr=PIPE, stdout=PIPE)
-    #o, e = exe.communicate()
+    exe = Popen(line, shell=True)
     exe.communicate()
     time.sleep(5)
-    #o = ('\t%s'%(o)).split('\n')
-    #return '\n\t'.join(o).decode('utf-8') + '\n'   
-    
-#----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
 def norm(array, a, b):
     '''
     normalize an array between a and b
@@ -46,7 +46,8 @@ def norm(array, a, b):
     range2 = b - a
     return (A * range2) + a    
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def processFAM(famfile, phefile):
     """
     Write a new fam file including the information in <phefile> in the phenotype
@@ -67,7 +68,8 @@ def processFAM(famfile, phefile):
     merged.to_csv(newname, header=False, index=False, sep=' ')
     return newname
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def ExeEIGEN(bedfile, prefix, executable, pcs, verbose=False):
     """
     Execute Eigenstrat
@@ -102,7 +104,8 @@ def ExeEIGEN(bedfile, prefix, executable, pcs, verbose=False):
         print('%s\n\n'%(sep))      
     return readEIGvecs('%s.pca'%(prefix), pcs)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def PlinkGWAS(plinkexe, bedprefix, covarnames, outprefix, nosex=False,
               verbose=False, threads=False, maxmem=False):
     """
@@ -143,13 +146,10 @@ def PlinkGWAS(plinkexe, bedprefix, covarnames, outprefix, nosex=False,
         covar = '%s.covs'%(bedprefix)
         plinkgwas = plinkgwas%(plinkexe, bedprefix, covar, covarnames, outprefix)
         print(plinkgwas)
-        #out = execline(plinkgwas)
-        out = execline(plinkgwas)
-        #if verbose:
-            #print(out)
-            #print('%s\n\n'%(sep))      
+        execline(plinkgwas)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def ReadFAMnBIM(famfile, bimfile):
     """
     Read the FAM and BIM files
@@ -162,8 +162,9 @@ def ReadFAMnBIM(famfile, bimfile):
     bim = pd.read_table(bimfile, delim_whitespace=True, header=None, names=[
         'CHR', 'Var ID', 'Pos', 'BP', 'A1', 'A2']) 
     return fam, bim
-        
-#----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
 def SetupEIG(bedprefix, prefix, plinkexe, nosex=False, verbose=False):
     """
     Create the .ind and .snp files for eigenstrat
@@ -215,7 +216,8 @@ def SetupEIG(bedprefix, prefix, plinkexe, nosex=False, verbose=False):
     touch = open('%s.pca.evec'%(prefix),'w')
     touch.close()
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def readEIGvecs(eigvec, npcs):
     """
     Read the eigenvector from eigenstrat
@@ -229,7 +231,8 @@ def readEIGvecs(eigvec, npcs):
                             delim_whitespace=True)
     return evecDat
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def QCnPHE(plinkexe, bedprefix, prefix, pheno, chromosome, relatedness=True,
            verbose=False, nosex=False, threads=False, maxmem=False, 
            parallel=False):
@@ -286,9 +289,6 @@ def QCnPHE(plinkexe, bedprefix, prefix, pheno, chromosome, relatedness=True,
         if maxmem:
             plinkpheno += ' --memory %s'%(maxmem)    
         execline(plinkpheno)
-#        out = execline(plinkpheno)
-        #if verbose:
-            #print(out + '\n')
         with open(logfile, 'a') as L:
             L.write('plinkpheno done ...\n')
         #
@@ -343,9 +343,6 @@ def QCnPHE(plinkexe, bedprefix, prefix, pheno, chromosome, relatedness=True,
                 else:
                     plinkIBD = plinkIBD + extra
                     execline(plinkIBD)
-                    #out = execline(plinkIBD)
-                    #if verbose:
-                        #print(out)
     
             processGenome('%s.genome'%(prefix), plinkexe, prefix, prefix, 
                           nosex=nosex, verbose=verbose, threads=threads)
@@ -354,7 +351,8 @@ def QCnPHE(plinkexe, bedprefix, prefix, pheno, chromosome, relatedness=True,
         if verbose:
             print('%s\n\n'%(sep))    
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def prcgenthreads(chunk):
     """
     process the genome file by chunks and return a sub dataframe
@@ -364,7 +362,8 @@ def prcgenthreads(chunk):
     rels = rels[(rels.IID1.isin(IIDs) | rels.IID2.isin(IIDs))]
     return rels.loc[:, ['FID2', 'IID2']]
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def processGenome(genomefile, plinkexe, bedprefix, prefix, nosex=False, 
                   verbose=False, threads=-1):
     """
@@ -378,14 +377,10 @@ def processGenome(genomefile, plinkexe, bedprefix, prefix, nosex=False,
     """
     if not threads:
         threads= - 1
-    #colnames='FID1	IID1 FID2 IID2 RT EZ IBD Z0 Z1 Z2 PI_HAT PHE DST IBSd PPC \
-    #IBS_bino RATIO_HETHET'
-    #colnames = colnames.split()
     if verbose:
         print('    Processing %s file'%(genomefile))     
     gen = pd.read_table(genomefile, delim_whitespace=True, iterator=True,
                         chunksize=10000)
-                        #names=colnames, header=False,)
     rels = Parallel(n_jobs=int(threads))(delayed(prcgenthreads)(ch) for ch in 
                                          gen)
     rels = pd.concat(rels)    
@@ -403,11 +398,9 @@ def processGenome(genomefile, plinkexe, bedprefix, prefix, nosex=False,
     if verbose:
         print('    Removing individuals from file %s'%(excludefile))     
     execline(plremov)
-    #out = execline(plremov)
-    #if verbose:
-        #print(out)
 
-#----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
 def processCovariates(prefix, pca, covs, verbose=False):
     """
     Read all covariates and pooled them in a single covariate file. Covariate 
@@ -443,7 +436,7 @@ def processCovariates(prefix, pca, covs, verbose=False):
     return ' '.join(cols)
     
 
-#----------------------------------------------------------------------
+# ----------------------------------------------------------------------
 def renameVars(bedprefix, conversionfile, plinkexe, prefix, chromosome,
                nosex=False, verbose=False, threads=False, maxmem=False):
     """
@@ -480,6 +473,7 @@ def renameVars(bedprefix, conversionfile, plinkexe, prefix, chromosome,
         R.write('Rename has been done')
     if verbose:
             print('%s\n\n'%(sep))   
+
 
 #----------------------------------------------------------------------
 def ManhattanPlot(df, prefix, grayscale=False, save=True, chromosome='All'):
@@ -533,7 +527,8 @@ def ManhattanPlot(df, prefix, grayscale=False, save=True, chromosome='All'):
         plt.savefig('%s_manhattan.pdf'%(prefix))
     else:
         return ax, df, x_labels_pos, x_labels
-    
+
+
 #----------------------------------------------------------------------
 def plinkEIGEN(bedprefix, prefix, plinkexe, npc, verbose=False, threads=False, 
                nosex=False, maxmem=False):
@@ -575,7 +570,9 @@ def plinkEIGEN(bedprefix, prefix, plinkexe, npc, verbose=False, threads=False,
     mer = mer.loc[:,covsnames + mdscols]
     if verbose:
         print('%s\n\n'%(sep))    
-    return mer#, ' '.join(covsnames + mdscols)
+    return mer
+
+
 #----------------------------------------------------------------------
 def plotit(prefix, chrom, verbose=False):
     """
@@ -585,6 +582,8 @@ def plotit(prefix, chrom, verbose=False):
     df = df.rename(columns={'P':'PVAL'})
     df = df[df.TEST == 'ADD'].dropna()
     ManhattanPlot(df, prefix, grayscale=True, chromosome=chrom)
+
+
 #----------------------------------------------------------------------
 def main(args):
     """
@@ -618,7 +617,7 @@ def main(args):
                          nosex=args.nosex, verbose=args.verbose, 
                          threads=args.threads, maxmem=args.maxmem)
     else:
-        SetupEIG(bedprefix, args.prefix, args.plinkexe, nosex=args.nosex, 
+        SetupEIG(bed, args.prefix, args.plinkexe, nosex=args.nosex,
                  verbose=args.verbose)
         pca = ExeEIGEN('%s_PCA'%(args.prefix), args.prefix, args.eigexe, 
                        args.npc, verbose=args.verbose)
