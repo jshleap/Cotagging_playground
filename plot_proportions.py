@@ -27,8 +27,10 @@ def tsplot(ax, data, x, y, **kw):
 
 def get_dataframe(pattern, prefix, lines, plink):
     todas = []
-    time = r'$ASN_{frac}$' if ('constant' in pattern or 'cost' in pattern) \
-        else 'EUR (%)'
+    if 'constant' in pattern:
+        time = 'ASN (%)'
+    else:
+        time = 'EUR (%)'
     if plink:
         names = ['number', r'$R^2$', 'Pop', 'run']
         types = dict(zip(names, [int, float, str]))
@@ -48,7 +50,8 @@ def get_dataframe(pattern, prefix, lines, plink):
             df['run'] = i
             df['EUR (%)'] = ((df.number.max() - df.number.values) * 100
                              ) / df.number.max()
-            df[r'$ASN_{frac}$'] = 100 - df.loc[:, 'EUR (%)']
+            if time != 'EUR (%)':
+                df[time] = 100 - df.loc[:, 'EUR (%)']
             todas.append(df)
     df = pd.concat(todas).dropna().reset_index()
     # pops = df.Pop.unique().tolist()
@@ -59,7 +62,7 @@ def get_dataframe(pattern, prefix, lines, plink):
     #    tsplot(ax, gr.get_group(pop), x=time, color=cols[i], label=pop)
     sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
                condition='Pop', ci=[25, 50, 75, 95])
-    plt.title('Sample size: %d' % df.number.max())
+    # plt.title('Sample size: %d' % df.number.max())
     plt.tight_layout()
     plt.savefig('%s_%sruns.pdf' % (prefix, str(df.run.max() + 1)))
     plt.close()

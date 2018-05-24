@@ -45,9 +45,9 @@ fi
 if [ ! -f train.pheno ]; then
     echo -e "\n\nGenerating phenotypes\n"
     export plink
-    python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.8 -f 0 -B ${genos}/EUR -2 ${genos}/${target} -t ${cpus} -M $membytes $covs
-    python3 ${code}/qtraitsimulation.py -p ${target} -m 100 -b 0.8 -f 0 -B ${genos}/${target} -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff -M $membytes $covs
-    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.8 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff EUR.causaleff -M $membytes
+    python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.5 -f 0 -B ${genos}/EUR -2 ${genos}/${target} -t ${cpus} --force_h2 -M $membytes $covs
+    python3 ${code}/qtraitsimulation.py -p ${target} -m 100 -b 0.5 -f 0 -B ${genos}/${target} -2 ${genos}/EUR -t ${cpus} --force_h2 --causal_eff EUR.causaleff -M $membytes $covs
+    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.5 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff --force_h2 EUR.causaleff -M $membytes
     cat EUR.pheno ${target}.pheno > train.pheno
 fi
 
@@ -141,11 +141,11 @@ do
             # $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out props_${i} --threads ${cpus} --memory $mem
             # python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4 --keep ${i}.keep -p 3
             $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out props_${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump props_${i}.assoc.linear --pheno train.pheno --out props_${i} --memory $mem
+            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump props_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out props_${i} --memory $mem
             # Do the constant estimations
             # $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out constant_${i} --threads ${cpus} --memory $mem
             $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out constant_${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --pheno train.pheno --out constant_${i} --memory $mem
+            $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out constant_${i} --memory $mem
     fi
     # Score original
 #    if [[ $prop == None || $prop -lt $i ]]
@@ -203,7 +203,7 @@ do
     #$plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out init_${i} --threads ${cpus} --memory $mem
     # Perform associations and clumping
     $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out init_${i} --threads ${cpus} --memory $mem
-    $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --pheno train.pheno --out init_${i} --memory $mem
+    $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out init_${i} --memory $mem
     grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' init_${i}.clumped)" init_${i}.assoc.linear > init_${i}.myscore
     # Score original
     $plink --bfile ${target}_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out ${target}_init_${i} --threads ${cpus} --memory $mem
@@ -246,7 +246,7 @@ do
         # Perform associations and clumping
     # $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --pca 4 --out frac_${j} --threads ${cpus} --memory $mem
     $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out cost_${j} --threads ${cpus} --memory $mem
-    $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --clump cost_${j}.assoc.linear --pheno train.pheno --out cost_${j} --memory $mem
+    $plink --bfile ${all} --keep frac_${j}.keep --keep-allele-order --allow-no-sex --clump cost_${j}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out cost_${j} --memory $mem
     # Score cost
     grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' cost_${j}.clumped)" cost_${j}.assoc.linear > cost_${j}.myscore
     $plink --bfile ${target}_test --score cost_${j}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out ${target}_${j}_cost --threads ${cpus} --memory $mem

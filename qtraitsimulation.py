@@ -174,7 +174,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
 
 
 # ----------------------------------------------------------------------
-def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
+def create_pheno(prefix, h2, prs_true, noenv=False, covs=None, force_h2=False):
     """
     Generate phenotypes and real betas.
 
@@ -194,11 +194,20 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None):
     nind = prs_true.shape[0]
     if noenv:
         env_effect = np.zeros(nind)
+    elif force_h2:
+        # Make h2 to be close to intended regardless of Vp
+        va = prs_true.gen_eff.var()
+
+        env_effect = np.random.normal(loc=0, scale=std, size=nind)
     else:
         # Compute the enviromental effect as with a variance of 1 - Va, thereby
         # guaranting that Vp = 1
         va = prs_true.gen_eff.var()
-        std = np.sqrt(max(1 - va, 0))
+        if force_h2:
+            ve = (va - (va * h2)) / h2
+            std = np.sqrt(ve)
+        else:
+            std = np.sqrt(max(1 - va, 0))
         env_effect = np.random.normal(loc=0, scale=std, size=nind)
 
     # Include environmental effects into the dataframe
@@ -261,7 +270,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                        causaleff=None, plothist=False, bfile2=None, flip=False,
                        freq_thresh=0.01, quality='png', check=False, seed=None,
                        uniform=False, normalize=False, remove_causals=False,
-                       threads=1, max_memory=None, covs=None, **kwargs):
+                       threads=1, max_memory=None, covs=None, force_h2=False,
+                       **kwargs):
     """
     Execute the code. This code should output a score file, a pheno file, and
     intermediate files with the dataframes produced
@@ -321,7 +331,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
         # Get phenotype
         pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv,
-                                          covs=covs)
+                                          covs=covs, force_h2=force_h2)
         # gc.collect()
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
@@ -380,6 +390,7 @@ if __name__ == '__main__':
                         action='store_true', help='Remove causals from set')
     parser.add_argument('--normalize', default=False, action='store_true')
     parser.add_argument('--covs', default=None)
+    parser.add_argument('--force_h2', default=False, action='store_true')
 
     args = parser.parse_args()
     qtraits_simulation(args.prefix, args.bfile, args.h2, args.ncausal,
@@ -388,4 +399,4 @@ if __name__ == '__main__':
                        bfile2=args.bfile2, seed=args.seed, uniform=args.uniform,
                        flip=args.flip, check=args.check, max_memory=args.maxmem,
                        remove_causals=args.avoid_causals, covs=args.covs,
-                       threads=args.threads)
+                       threads=args.threads, force_h2=args.force_h2)
