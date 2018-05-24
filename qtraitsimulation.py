@@ -7,6 +7,7 @@
 """
 import argparse
 import time
+import gc
 from utilities4cotagging import *
 
 plt.style.use('ggplot')
@@ -193,11 +194,6 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None, force_h2=False):
     nind = prs_true.shape[0]
     if noenv:
         env_effect = np.zeros(nind)
-    elif force_h2:
-        # Make h2 to be close to intended regardless of Vp
-        va = prs_true.gen_eff.var()
-
-        env_effect = np.random.normal(loc=0, scale=std, size=nind)
     else:
         # Compute the enviromental effect as with a variance of 1 - Va, thereby
         # guaranting that Vp = 1
