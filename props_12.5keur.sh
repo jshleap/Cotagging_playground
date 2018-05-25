@@ -47,12 +47,15 @@ if [ ! -f train.pheno ]; then
     export plink
     python3 ${code}/qtraitsimulation.py -p EUR -m 100 -b 0.5 -f 0 -B ${genos}/EUR -2 ${genos}/${target} -t ${cpus} --force_h2 -M $membytes $covs
     python3 ${code}/qtraitsimulation.py -p ${target} -m 100 -b 0.5 -f 0 -B ${genos}/${target} -2 ${genos}/EUR -t ${cpus} --force_h2 --causal_eff EUR.causaleff -M $membytes $covs
-    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.5 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --causal_eff --force_h2 EUR.causaleff -M $membytes
+    python3 ${code}/qtraitsimulation.py -p AFR -m 100 -b 0.5 -f 0 -B ${genos}/AFR -2 ${genos}/EUR -t ${cpus} --force_h2 --causal_eff EUR.causaleff -M $membytes
+    python3 ${code}/qtraitsimulation.py -p AD -m 100 -b 0.5 -f 0 -B ${genos}/AD -2 ${genos}/EUR -t ${cpus} --force_h2 --causal_eff EUR.causaleff -M $membytes
     cat EUR.pheno ${target}.pheno > train.pheno
+    else
+      echo -e "\n\nPhenotypes already present... moving on\n"
 fi
 
 if [ ! -f ${target}.test ]; then
-    echo -e "\nGenerating keep files"
+    echo -e "\n\nGenerating keep files"
     # get the initial 12.5k
     sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
     comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
@@ -62,6 +65,8 @@ if [ ! -f ${target}.test ]; then
     # split train/test in AD
     sort -R ${genos}/${target}.keep| head -n ${sample} > ${target}.train
     comm -23 <(sort ${genos}/${target}.keep) <(sort ${target}.train) > ${target}.test
+    else
+      echo -e "\n\nKeep files already present\n"
 fi
 
 if [ ! -f EUR_test.bed ]; then
@@ -157,6 +162,8 @@ do
     outp EUR_${i}_props.profile EUR proportions.tsv
     $plink --bfile ${genos}/AFR --score props_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${i}_props --threads ${cpus} --memory $mem
     outp AFR_${i}_props.profile AFR proportions.tsv
+    $plink --bfile ${genos}/AD --score props_${i}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD${i}_props --threads ${cpus} --memory $mem
+    outp AD_${i}_props.profile AD proportions.tsv
 #            python3 ${code}/simple_score.py -b ${target}_test -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p train.pheno -l ${target} -m $membytes
 #            python3 ${code}/simple_score.py -b EUR_test -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes
 #            python3 ${code}/simple_score.py -b ${genos}/AFR -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes
@@ -173,6 +180,8 @@ do
     outp EUR_${i}_constant.profile EUR constant.tsv
     $plink --bfile ${genos}/AFR --score constant_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${i}_constant --threads ${cpus} --memory $mem
     outp AFR_${i}_constant.profile AFR constant.tsv
+    $plink --bfile ${genos}/AD --score constant_${i}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD_${i}_constant --threads ${cpus} --memory $mem
+    outp AD_${i}_constant.profile AD constant.tsv
 
 #            python3 ${code}/simple_score.py -b ${target}_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l ${target} -P constant -m $membytes
 #            python3 ${code}/simple_score.py -b EUR_test -c constant_${i}.clumped -s constant_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -P constant -m $membytes
@@ -212,6 +221,8 @@ do
     outp EUR_init_${i}.profile EUR init12k.tsv
     $plink --bfile ${genos}/AFR --score init_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_init_${i} --threads ${cpus} --memory $mem
     outp AFR_init_${i}.profile AFR init12k.tsv
+    $plink --bfile ${genos}/AD --score init_${i}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD_init_${i} --threads ${cpus} --memory $mem
+    outp AD_init_${i}.profile AD init12k.tsv
 
     # python3 ${code}/simple_score.py -b ${target}_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l ${target} -m $membytes -P init12k
     # python3 ${code}/simple_score.py -b EUR_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P init12k
@@ -255,7 +266,6 @@ do
     outp EUR_${j}_cost.profile EUR cost.tsv
     $plink --bfile ${genos}/AFR --score cost_${j}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${j}_cost --threads ${cpus} --memory $mem
     outp AFR_${j}_cost.profile AFR cost.tsv
-    # python3 ${code}/simple_score.py -b ${target}_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l ${target} -m $membytes -P cost
-    # python3 ${code}/simple_score.py -b EUR_test -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes -P cost
-    # python3 ${code}/simple_score.py -b ${genos}/AFR -c cost_${j}.clumped -s cost_${j}.assoc.linear -t ${cpus} -p AFR.pheno -l AFR -m $membytes -P cost
+    $plink --bfile ${genos}/AD --score cost_${j}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD_${j}_cost --threads ${cpus} --memory $mem
+    outp AD_${j}_cost.profile AD cost.tsv
 done

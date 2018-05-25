@@ -5,13 +5,13 @@ PLot proportions
 from glob import iglob
 
 import matplotlib
-
-matplotlib.use('Agg')
+import ternary
 import pandas as pd
 import sys
+import numpy as np
+matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
-import numpy as np
 plt.style.use('ggplot')
 
 

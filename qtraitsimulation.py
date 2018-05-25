@@ -162,7 +162,13 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         with ProgressBar(), dask.set_options(**dask_options):
             fam['gen_eff'] = g[:, idx].dot(causals.beta).compute()
     if causaleff is not None:
-        assert sorted(bim.dropna(subset=['beta']).snp) == sorted(causaleff.snp)
+        try:
+            assert sorted(bim.dropna(subset=['beta']).snp) == sorted(
+                causaleff.snp)
+        except:
+            print(sorted(bim.dropna(subset=['beta']).snp)[:10])
+            print(sorted(causaleff.snp)[:10])
+            raise
     # del g_eff
     # # gc.collect()
     print('Variance in beta is', bim.beta.var())
