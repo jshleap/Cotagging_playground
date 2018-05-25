@@ -83,14 +83,6 @@ if [ ! -f ${genos}/EURn${target}.bed ]
         $plink --bfile ${genos}/EUR --bmerge ${genos}/${target} --keep-allele-order --allow-no-sex --extract merged.totalsnps --make-bed --out ${genos}/EURn${target} --threads ${cpus} --memory $mem
 fi
 all=${genos}/EURn${target}
-#if [ ! -f train.bed  ]; then
-#    $plink --bfile ${all}  --keep train.keep --keep-allele-order --allow-no-sex --make-bed --out train --memory $mem
-#fi
-
-# compute pca for this subset
-#if [ ! -f train.pca  ]; then
-#    python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4
-#fi
 #make train subset
 if [ ! -f train.txt ]
     then
@@ -100,7 +92,8 @@ fi
 
 if [ ! -f train.eigenvec  ]
     then
-        $plink --bfile ${all} --keep train.txt --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
+        cut -f1,2,6,7,8 ${genos}/pca_proj_mydata.sscore|head| tail -n +2 > train.eigenvec
+        #$plink --bfile ${all} --keep train.txt --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
 fi
 
 step=$(( sample/10 ))
