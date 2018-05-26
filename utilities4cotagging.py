@@ -20,20 +20,19 @@ import dask
 import dask.array as da
 import dask.dataframe as dd
 import matplotlib
-matplotlib.use('Agg')
 import numpy as np
 import pandas as pd
 import psutil
 from chest import Chest
 from dask.diagnostics import ProgressBar
 from joblib import Parallel, delayed
-from matplotlib import pyplot as plt
 from numba import jit
 from pandas_plink import read_plink
 from scipy.stats import linregress
 from sklearn.model_selection import train_test_split
 
-
+matplotlib.use('Agg')
+from matplotlib import pyplot as plt
 
 
 # Numbafy linregress (makes it a bit faster)
@@ -382,14 +381,11 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
 
 # ----------------------------------------------------------------------
 #@jit()#parallel=True)
-def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None,
-                  justd=False, extend=False):
+def single_window(df, rg, tg, threads=1, max_memory=None, justd=False,
+                  extend=False):
     """
     Helper function to compute the correlation between variants from a genotype
     array
-
-    :param ridx: Indices of the reference genotype to be used
-    :param tidx: Indices of the target genotype to be used
     :param df: Merged dataframe mapping of the positions in the genotypes
     :param rg: slice of Genotype array of the reference population
     :param tg: slice of Genotype array of the target population
@@ -407,10 +403,9 @@ def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None,
     cache = Chest(available_memory=available_memory)
     # Make sure chunks make sense
     chunk_opts = dict(threads=threads, memory=available_memory)
-    #rg = rg[:, ridx]
-    rg = rg.rechunk(estimate_chunks(shape=rg.shape, **chunk_opts))
-    #tg = tg[:, tidx]
-    tg = tg.rechunk(estimate_chunks(shape=tg.shape, **chunk_opts))
+    if not isinstance(rg, np.ndarray):
+        rg = rg.rechunk(estimate_chunks(shape=rg.shape, **chunk_opts))
+        tg = tg.rechunk(estimate_chunks(shape=tg.shape, **chunk_opts))
     # extend the genotype at both end to avoid edge effects
     if extend:
         # get the indices of the subset genotype array
@@ -431,8 +426,8 @@ def single_window(df, rg, tg, ridx, tidx, threads=1, max_memory=None,
         rho_r, rho_t = rho_r[idx, :], rho_t[idx, :]
         rho_r, rho_t = rho_r[:, idx], rho_t[:, idx]
         # Make sure the shape match
-        assert rho_r.shape[1] == ridx.shape[0] == rho_r.shape[0]
-        assert rho_t.shape[1] == tidx.shape[0] == rho_t.shape[0]
+        assert rho_r.shape[1] == rho_r.shape[0]
+        assert rho_t.shape[1] == rho_t.shape[0]
     else:
         # Just compute the correlations
         rho_r = da.dot(rg.T, rg) / rg.shape[0]
@@ -521,9 +516,9 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
         mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
         # Compute each locus in parallel
         delayed_results = [
-            dask.delayed(single_window)(df, rg, tg, ridx, tidx, threads,
-                                        max_memory, justd, extend)
-            for rg, tg, ridx, tidx, df in window_yielder(rgeno, tgeno, mbim)]
+            dask.delayed(single_window)(df, rg, tg, threads, max_memory, justd,
+                                        extend) for rg, tg, ridx, tidx, df in
+            window_yielder(rgeno, tgeno, mbim)]
 
         with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
                                              pool=ThreadPool(threads)):

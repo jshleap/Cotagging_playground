@@ -2,10 +2,10 @@
 Unit testing for utilities4cotagging
 """
 import pytest
-import filecmp
-from utilities4cotagging import *
-from pptc2 import compute_clumps
 
+from pptc2 import compute_clumps
+from qtraitsimulation import qtraits_simulation
+from utilities4cotagging import *
 
 # Global Variables
 script_path = os.path.dirname(os.path.realpath(__file__))
@@ -35,6 +35,10 @@ pheno['PHENO'] = g[:,idx].dot(sumstats_subset.BETA.values.astype(float)
 (AFR_bim, AFR_fam, AFR_g) = read_geno(bed + '2', 0.01, 1, False, False)
 EUR_g = (EUR_g - EUR_g.mean(axis=0)) / EUR_g.std(axis=0)
 AFR_g = (AFR_g - AFR_g.mean(axis=0)) / AFR_g.std(axis=0)
+o = qtraits_simulation(os.path.join(test_folder, 'AFR'), bfile=AFR_g,
+                       bim=AFR_bim, fam=AFR_fam)
+AFR_pheno, realized_h2, (g, bim, truebeta, causals) = o
+
 toy_sumstats = pd.read_table(os.path.join(test_folder, 'toy_test.gwas'),
                              sep='\t')
 mbim = EUR_bim.merge(AFR_bim, on=['chrom', 'snp', 'pos'], suffixes=['_ref',
@@ -167,8 +171,8 @@ def test_single_window(df, rgeno, tgeno, threads, max_memory, justd, extend,
     with open(exp, 'rb') as F:
         expected = pickle.load(F)
     ridx, tidx = df.i_ref.values, df.i_tar.values
-    out = single_window(df, rgeno[:, ridx], tgeno[:, tidx], ridx, tidx, threads,
-                        max_memory, justd, extend)
+    rg, tg = rgeno[:, ridx], tgeno[:, tidx]
+    out = single_window(df, rg, tg, threads, max_memory, justd, extend)
     if isinstance(out, tuple):
         assert (out[0] == expected[0]).all()
         np.testing.assert_allclose(out[1].compute(), expected[1].compute())
@@ -214,6 +218,9 @@ def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
     os.chdir(cwd)
 
 
+loci = get_ld(EUR_g, EUR_bim, AFR_g, AFR_bim, kbwindow=1000, justd=True,
+              threads=8, max_memory=None)
+
 result = [0.25, 0.25, 0.5, 0.5, 0.2, 0.5, 0.5]
 
 @pytest.mark.parametrize("geno,keep_allele_order,result", [
@@ -222,3 +229,27 @@ result = [0.25, 0.25, 0.5, 0.5, 0.2, 0.5, 0.5]
 def test_compute_maf(geno, keep_allele_order, result):
     assert [compute_maf(geno[:,i].compute(), keep_allele_order) for i in
             range(EUR_g.shape[1])] == result
+
+
+@pytest.mark.parametrize(
+    "loci,sumstats,select_index_by,do_locus_ese,normalize,exp", [
+        ('pvalue', False, True, 'toy_test_ds.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, False, False,
+         'toy_test_cotd.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, False,
+         'toy_test_ds.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, False,
+         'toy_test_cotd.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, True,
+         'toy_test_d_ext.pickle'),
+        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, True,
+         'toy_test_cotd_ext.pickle')
+    ])
+def test_optimize_it(loci, sumstats, select_index_by, do_locus_ese, normalize):
+    ld_range = [0.5]
+    by_range = [1]
+    h2 = 0.5
+    cache = Chest(available_memory=psutil.virtual_memory().available)
+    memory = None
+    test_geno = AFR_g
+    clump_function = compute_clumps
