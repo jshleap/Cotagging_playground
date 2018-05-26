@@ -108,7 +108,7 @@ if [ ! -f ${all}.bed ]
     then
       echo -e "\n\nGenerating merged fileset"
       echo -e "${genos}/${pop1}\n${genos}/${pop2}\n${genos}/${pop3}" > merge.list
-      comm -12 <(sort ${pop1}.totalsnps) <(sort ${pop2}.totalsnps) <(sort ${pop3}.totalsnps) > merged.totalsnps
+      comm -12 <(comm -12 <(sort ${pop1}.totalsnps) <(sort ${pop2}.totalsnps)) <(sort $pop3.totalsnps) > merged.totalsnps
       ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed --out ${all} ${common_plink}
     else
       echo -e "\n\nMerged fileset found!\n"

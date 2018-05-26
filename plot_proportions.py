@@ -49,7 +49,7 @@ def get_dataframe(pattern, prefix, lines, plink):
             df['run'] = i
             df['EUR (%)'] = ((df.number.max() - df.number.values) * 100
                              ) / df.number.max()
-            if time != 'EUR (%)':
+            if (time != 'EUR (%)') or 'cost' in pattern:
                 df[time] = 100 - df.loc[:, 'EUR (%)']
             todas.append(df)
     df = pd.concat(todas).dropna().reset_index()
