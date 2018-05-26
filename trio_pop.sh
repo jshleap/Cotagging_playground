@@ -123,7 +123,7 @@ fi
 
 if [ ! -f train.eigenvec  ]
     then
-        cut -f1,2,6,7,8 ${genos}/pca_proj_mydata.sscore|head| tail -n +2 > train.eigenvec
+        cut -f1,2,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
 fi
 
 step=$(( sample/10 ))
@@ -132,14 +132,14 @@ python -c "import numpy as np;from itertools import product;open('trios.txt','w'
 while read p
   do
     read eu as af <<<${p}
-    if [[ ! $as = 0  ]]; then
-        sort -R ${target}.train| head -n $ad > trio_frac.keep
+    if [[ ! ${as} = 0  ]]; then
+        sort -R ${pop2}.train| head -n ${as} > trio_frac.keep
     fi
-    if [[ ! $eu = 0  ]]; then
-        sort -R EUR.train| head -n $eu >> trio_frac.keep
+    if [[ ! ${eu} = 0  ]]; then
+        sort -R ${pop1}.train| head -n ${eu} >> trio_frac.keep
     fi
-    if [[ ! $af = 0  ]]; then
-        sort -R EUR.train| head -n $eu >> trio_frac.keep
+    if [[ ! ${af} = 0  ]]; then
+        sort -R ${pop3}.train| head -n ${af} >> trio_frac.keep
     fi
     $plink --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --out trio ${common_plink}
     $plink --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
