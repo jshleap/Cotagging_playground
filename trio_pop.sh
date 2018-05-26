@@ -120,5 +120,32 @@ if [ ! -f train.txt ]
         cat ${pop1}.train ${pop2}.train ${pop3}.train > train.keep
 fi
 
-pca=${genos}/
+if [ ! -f train.eigenvec  ]
+    then
+        cut -f1,2,6,7,8 ${genos}/pca_proj_mydata.sscore|head| tail -n +2 > train.eigenvec
+fi
+
 step=$(( sample/10 ))
+sequence=`seq 0 $step $sample`
+python -c "import numpy as np;from itertools import product;open('trios.txt','w').write('\n'.join([' '.join([str(np.round(y,2)) for y in x]) for x in product(np.arange(0,1,0.1), np.arange(0,1,0.1), np.arange(0,1,0.1)) if sum(x) == 1]))"
+while read p
+  do
+    read eu as af <<<${p}
+    if [[ ! $as = 0  ]]; then
+        sort -R ${target}.train| head -n $ad > trio_frac.keep
+    fi
+    if [[ ! $eu = 0  ]]; then
+        sort -R EUR.train| head -n $eu >> trio_frac.keep
+    fi
+    if [[ ! $af = 0  ]]; then
+        sort -R EUR.train| head -n $eu >> trio_frac.keep
+    fi
+    $plink --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --out trio ${common_plink}
+    $plink --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
+    grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped)" trio.assoc.linear > trio.myscore
+    for pop in $pops
+    do
+      $plink --bfile ${pop}_test --score trio.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_trio ${common_plink}
+      outp ${pop}_trio.profile ${pop} trio.tsv
+    done
+  done <trios.txt
