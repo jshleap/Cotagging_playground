@@ -133,13 +133,13 @@ while read p
   do
     read eu as af <<<${p}
     if [[ ! ${as} = 0  ]]; then
-        sort -R ${pop2}.train| head -n `bc <<< "scale=1; (${as} * ${sample})/1"` > trio_frac.keep
+        sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` > trio_frac.keep
     fi
     if [[ ! ${eu} = 0  ]]; then
-        sort -R ${pop1}.train| head -n `bc <<< "scale=1; (${eu} * ${sample})/1"` >> trio_frac.keep
+        sort -R ${pop1}.train| head -n `bc <<< "(${eu} * ${sample})/1"` >> trio_frac.keep
     fi
     if [[ ! ${af} = 0  ]]; then
-        sort -R ${pop3}.train| head -n `bc <<< "scale=1; (${af} * ${sample})/1"` >> trio_frac.keep
+        sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> trio_frac.keep
     fi
     $plink --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --out trio ${common_plink}
     $plink --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
