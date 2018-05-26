@@ -75,7 +75,7 @@ common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 
 if [ "$covs" == TRUE ]
   then
-    do_covs ${pops}
+    do_covs "${pops}"
 fi
 
 # generate the phenos
@@ -92,14 +92,14 @@ fi
 
 if [ ! -f ${pop3}.test ]; then
     echo -e "\n\nGenerating keep files"
-    split_train_test ${pops}
+    split_train_test "${pops}"
     else
       echo -e "\n\nKeep files already present\n"
 fi
 
 if [ ! -f ${pop3}_test.bed ]; then
     echo -e "\n\nGenerating test filesets"
-    gen_tests ${pops}
+    gen_tests "${pops}"
     else
       echo -e "\n\nTest filesets already present... moving on\n"
 fi
