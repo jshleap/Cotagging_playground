@@ -51,6 +51,7 @@ split_train_test()
   c=0
   for i in $1
   do
+    echo -e "\tProcessing $i"
     sort -R ${genos}/${i}.keep| head -n ${sample} > ${i}.train
     comm -23 <(sort ${genos}/${i}.keep) <(sort ${i}.train) > ${i}.test
   done
