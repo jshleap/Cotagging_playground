@@ -155,7 +155,7 @@ do
     outp EUR_${i}_props.profile EUR proportions.tsv
     $plink --bfile ${genos}/AFR --score props_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_${i}_props --threads ${cpus} --memory $mem
     outp AFR_${i}_props.profile AFR proportions.tsv
-    $plink --bfile ${genos}/AD --score props_${i}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD${i}_props --threads ${cpus} --memory $mem
+    $plink --bfile ${genos}/AD --score props_${i}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD_${i}_props --threads ${cpus} --memory $mem
     outp AD_${i}_props.profile AD proportions.tsv
 #            python3 ${code}/simple_score.py -b ${target}_test -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p train.pheno -l ${target} -m $membytes
 #            python3 ${code}/simple_score.py -b EUR_test -c props_${i}.clumped -s props_${i}.assoc.linear -t ${cpus} -p train.pheno -l EUR -m $membytes
