@@ -29,6 +29,11 @@ outp()
   echo -e "$3\t`corr $1`\t$2" >> $4
 }
 
+perfrac()
+{
+  echo -e "${pop1}\t${pop2}\t${pop3}\t`corr $1`\t`corr $2`\t`corr $3`" >> $4
+}
+
 do_covs()
 {
   echo 'Computing covariates'
@@ -163,4 +168,5 @@ while read p
     outp ${pop1}_trio.profile ${pop1} ${eu} trio.tsv
     outp ${pop2}_trio.profile ${pop2} ${as} trio.tsv
     outp ${pop3}_trio.profile ${pop3} ${af} trio.tsv
+    perfrac ${pop1}_trio.profile ${pop2}_trio.profile ${pop3}_trio.profile trio_df.tsv
   done <trios.txt
