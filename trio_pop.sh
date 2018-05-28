@@ -74,14 +74,28 @@ if [ "$covs" == TRUE ]
     do_covs "${pops}"
 fi
 
+all=`echo ${pops} | tr ' ' 'n'`
+if [ ! -f ${genos}/${all}.bed ]
+    then
+      echo -e "\n\nGenerating merged fileset"
+      echo -e "${genos}/${pop1}\n${genos}/${pop2}\n${genos}/${pop3}" > merge.list
+      comm -12 <(comm -12 <(sort ${pop1}.bim) <(sort ${pop2}.bim)) <(sort $pop3.bim) > merged.totalsnps
+      comm -12 <(comm -12 <(sort ${pop1}.totalsnps) <(sort ${pop2}.totalsnps)) <(sort $pop3.totalsnps) > merged.totalsnps
+      ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed --out ${all} ${common_plink}
+    else
+      echo -e "\n\nMerged fileset found!\n"
+fi
+
 # generate the phenos
 if [ ! -f train.pheno ]; then
     echo -e "\n\nGenerating phenotypes\n"
     export plink
-    python3 ${code}/qtraitsimulation.py -p ${pop1} -B ${genos}/${pop1} -2 ${genos}/${pop2} ${common_pheno}
-    python3 ${code}/qtraitsimulation.py -p ${pop2} -B ${genos}/${pop2} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
-    python3 ${code}/qtraitsimulation.py -p ${pop3} -B ${genos}/${pop3} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
-    cat ${pop1}.pheno ${pop2}.pheno ${pop3}.pheno > train.pheno
+    python3 ${code}/qtraitsimulation.py -p train -B ${genos}/${all} ${common_pheno}
+    cp all.totalsnps merged.totalsnps
+
+#    python3 ${code}/qtraitsimulation.py -p ${pop2} -B ${genos}/${pop2} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
+#    python3 ${code}/qtraitsimulation.py -p ${pop3} -B ${genos}/${pop3} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
+#    cat ${pop1}.pheno ${pop2}.pheno ${pop3}.pheno > train.pheno
     else
       echo -e "\n\nPhenotypes already present... moving on\n"
 fi
