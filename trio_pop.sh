@@ -94,7 +94,7 @@ all="${genos}/${all}"
 if [ ! -f train.pheno ]; then
     echo -e "\n\nGenerating phenotypes\n"
     export plink
-    python3 ${code}/qtraitsimulation.py -p train -B ${genos}/${all} ${common_pheno}
+    python3 ${code}/qtraitsimulation.py -p train -B ${all} ${common_pheno}
     cp all.totalsnps merged.totalsnps
 
 #    python3 ${code}/qtraitsimulation.py -p ${pop2} -B ${genos}/${pop2} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
