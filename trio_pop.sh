@@ -132,8 +132,8 @@ fi
 
 if [ ! -f train.eigenvec  ]
     then
-        #cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
-        $plink --bfile ${all} --pca 4 --out train ${common_plink}
+        cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
+        #$plink --bfile ${all} --pca 4 --out train ${common_plink}
 fi
 
 step=$(( sample/10 ))
