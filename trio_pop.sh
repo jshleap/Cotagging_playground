@@ -167,12 +167,12 @@ while read p
     fi
     pcs='PC1_AVG PC2_AVG PC3_AVG PC4_AVG'
     outfn=${fn%.keep}
-    echo -e "\nComputing summary statistics fo $fn"
+    echo -e "\nComputing summary statistics for $fn\n"
     ${plink} --bfile ${all} --keep ${fn} --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name ${pcs} --vif 100 --out ${outfn} ${common_plink}
     echo -e "\nClumping for $fn"
     ${plink} --bfile ${all} --keep ${fn} --clump ${outfn}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${outfn} ${common_plink}
 
-    if [ -f trio.clumped ]; then
+    if [ -f ${outfn}.clumped ]; then
       awk -F' ' '{if (NR!=1) { print $3 }}' ${outfn}.clumped | xargs -n 100 -I {} grep {} ${outfn}.assoc.linear > ${outfn}.myscore
     else
       echo -e "${eu} ${as} ${af}" >> done.txt
