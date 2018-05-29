@@ -26,7 +26,10 @@ def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
         if 'beta_sq' not in df.columns:
             df['beta_sq'] = df.slope**2
         df = df.sort_values(by=sort_columns, ascending=[ascending, False, True])
-        grouped = df.groupby('locus', as_index=False)
+        try:
+            grouped = df.groupby('locus', as_index=False)
+        except:
+            grouped = df.groupby('locus_ese', as_index=False)
         try:
             if ascending:
                 grouped = grouped.apply(lambda grp: grp.nsmallest(1, column))

@@ -32,10 +32,10 @@ outp()
 perfrac()
 {
   preline="\$R^2_{${pop1}}$\t\$R^2_{${pop2}}$\$R^2_{${pop3}}$"
-  if [ -! f $7 ]; then
-    echo -e "${pop1}\t${pop2}\t${pop3}\t${preline}" > $7
+  if [ ! -f trio_df.tsv ]; then
+    echo -e "${pop1}\t${pop2}\t${pop3}\t${preline}" > trio_df.tsv
   fi
-  echo -e "$1\t$3\t$5\t`corr $2`\t`corr $4`\t`corr $6`" >> $7
+  echo -e "$1\t$3\t$5\t`corr $2`\t`corr $4`\t`corr $6`" >> trio_df.tsv
 }
 
 do_covs()
@@ -189,6 +189,6 @@ while read p
     outp ${pop1}_${outfn}.profile ${pop1} ${eu} trio.tsv
     outp ${pop2}_${outfn}.profile ${pop2} ${as} trio.tsv
     outp ${pop3}_${outfn}.profile ${pop3} ${af} trio.tsv
-    perfrac ${eu} ${pop1}_${outfn}.profile ${as} ${pop2}_${outfn}.profile ${af} ${pop3}_${outfn}.profile trio_df.tsv
+    perfrac ${eu} ${pop1}_${outfn}.profile ${as} ${pop2}_${outfn}.profile ${af} ${pop3}_${outfn}.profile
     echo -e "${eu} ${as} ${af}" >> done.txt
   done <trios.txt
