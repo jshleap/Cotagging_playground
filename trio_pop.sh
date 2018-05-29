@@ -31,7 +31,11 @@ outp()
 
 perfrac()
 {
-  echo -e "${pop1}\t${pop2}\t${pop3}\t`corr $1`\t`corr $2`\t`corr $3`" >> $4
+  preline="\$R^2_{${pop1}}$\t\$R^2_{${pop2}}$\$R^2_{${pop3}}$"
+  if [ -! f $7 ]; then
+    echo -e "${pop1}\t${pop2}\t${pop3}\t${preline}" > $7
+  fi
+  echo -e "$1\t$3\t$5\t`corr $2`\t`corr $4`\t`corr $6`" >> $7
 }
 
 do_covs()
@@ -143,11 +147,15 @@ fi
 step=$(( sample/10 ))
 sequence=`seq 0 $step $sample`
 python -c "import numpy as np;from itertools import product;open('trios.txt','w').write('\n'.join([' '.join([str(np.round(y,2)) for y in x]) for x in product(np.arange(0,1,0.1), np.arange(0,1,0.1), np.arange(0,1,0.1)) if sum(x) == 1]))"
+if [ -f done.txt ]; then
+  comm -3 <(sort trios.txt) <(sort done.txt)
+fi
 while read p
   do
     read eu as af <<<${p}
+    if [ -f trio_frac.keep ]; then rm trio_frac.keep; fi
     if [[ ! ${as} = 0  ]]; then
-        sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` > trio_frac.keep
+        sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` >> trio_frac.keep
     fi
     if [[ ! ${eu} = 0  ]]; then
         sort -R ${pop1}.train| head -n `bc <<< "(${eu} * ${sample})/1"` >> trio_frac.keep
@@ -157,7 +165,7 @@ while read p
     fi
     $plink --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name PC1_AVG --vif 100 --out trio ${common_plink}
     $plink --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
-    awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped | xargs -n 100 -I {} grep {} trio.assoc.linear > trio.myscore
+    awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped | xargs -n 100 -I {} grep {} trio.assoc.linear > trio.myscore || continue
     sort -u trio.myscore > temp.txt && mv temp.txt trio.myscore
     for pop in $pops
     do
@@ -166,5 +174,6 @@ while read p
     outp ${pop1}_trio.profile ${pop1} ${eu} trio.tsv
     outp ${pop2}_trio.profile ${pop2} ${as} trio.tsv
     outp ${pop3}_trio.profile ${pop3} ${af} trio.tsv
-    perfrac ${pop1}_trio.profile ${pop2}_trio.profile ${pop3}_trio.profile trio_df.tsv
+    perfrac ${eu} ${pop1}_trio.profile ${as} ${pop2}_trio.profile ${af} ${pop3}_trio.profile trio_df.tsv
+    echo -e "${eu} ${as} ${af}" >> done.txt
   done <trios.txt
