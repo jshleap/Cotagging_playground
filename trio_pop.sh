@@ -141,7 +141,7 @@ if [ ! -f train.eigenvec  ]
     then
         #cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
         cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore > train.eigenvec
-        #$plink --bfile ${all} --pca 4 --out train ${common_plink}
+        #${plink} --bfile ${all} --pca 4 --out train ${common_plink}
 fi
 
 step=$(( sample/10 ))
@@ -163,13 +163,19 @@ while read p
     if [[ ! ${af} = 0  ]]; then
         sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> trio_frac.keep
     fi
-    $plink --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name PC1_AVG PC2_AVG PC3_AVG PC4_AVG --vif 100 --out trio ${common_plink}
-    $plink --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
-    awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped | xargs -n 100 -I {} grep {} trio.assoc.linear > trio.myscore || continue
+    ${plink} --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name PC1_AVG PC_AVG PC3_AVG PC4_AVG --vif 100 --out trio ${common_plink}
+    ${plink} --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
+
+    if [ -f trio.clumped ]; then
+      awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped | xargs -n 100 -I {} grep {} trio.assoc.linear > trio.myscore
+    else
+      continue
+    fi
+
     sort -u trio.myscore > temp.txt && mv temp.txt trio.myscore
     for pop in $pops
     do
-      $plink --bfile ${pop}_test --score trio.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_trio ${common_plink}
+      ${plink} --bfile ${pop}_test --score trio.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_trio ${common_plink}
     done
     outp ${pop1}_trio.profile ${pop1} ${eu} trio.tsv
     outp ${pop2}_trio.profile ${pop2} ${as} trio.tsv
