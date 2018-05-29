@@ -153,34 +153,37 @@ fi
 while read p
   do
     read eu as af <<<${p}
-    if [ -f trio_frac.keep ]; then rm trio_frac.keep; fi
+    fn="trio_${eu}_${as}_${af}.keep"
+    if [ -f ${fn} ]; then rm ${fn}; fi
     if [[ ! ${as} = 0  ]]; then
-        sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` >> trio_frac.keep
+        sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` >> ${fn}
     fi
     if [[ ! ${eu} = 0  ]]; then
-        sort -R ${pop1}.train| head -n `bc <<< "(${eu} * ${sample})/1"` >> trio_frac.keep
+        sort -R ${pop1}.train| head -n `bc <<< "(${eu} * ${sample})/1"` >> ${fn}
     fi
     if [[ ! ${af} = 0  ]]; then
-        sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> trio_frac.keep
+        sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> ${fn}
     fi
-    ${plink} --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name PC1_AVG PC2_AVG PC3_AVG PC4_AVG --vif 100 --out trio ${common_plink}
-    ${plink} --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
+    pcs='PC1_AVG PC2_AVG PC3_AVG PC4_AVG'
+    outfn=${fn%.keep}
+    ${plink} --bfile ${all} --keep ${fn} --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name ${pcs} --vif 100 --out ${outfn} ${common_plink}
+    ${plink} --bfile ${all} --keep ${fn} --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${outfn} ${common_plink}
 
     if [ -f trio.clumped ]; then
-      awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped | xargs -n 100 -I {} grep {} trio.assoc.linear > trio.myscore
+      awk -F' ' '{if (NR!=1) { print $3 }}' ${outfn}.clumped | xargs -n 100 -I {} grep {} ${outfn}.assoc.linear > ${outfn}.myscore
     else
       echo -e "${eu} ${as} ${af}" >> done.txt
       continue
     fi
 
-    sort -u trio.myscore > temp.txt && mv temp.txt trio.myscore
+    sort -u ${outfn}.myscore > temp.txt && mv temp.txt ${outfn}.myscore
     for pop in $pops
     do
-      ${plink} --bfile ${pop}_test --score trio.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_trio ${common_plink}
+      ${plink} --bfile ${pop}_test --score ${outfn}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${outfn} ${common_plink}
     done
-    outp ${pop1}_trio.profile ${pop1} ${eu} trio.tsv
-    outp ${pop2}_trio.profile ${pop2} ${as} trio.tsv
-    outp ${pop3}_trio.profile ${pop3} ${af} trio.tsv
-    perfrac ${eu} ${pop1}_trio.profile ${as} ${pop2}_trio.profile ${af} ${pop3}_trio.profile trio_df.tsv
+    outp ${pop1}_${outfn}.profile ${pop1} ${eu} trio.tsv
+    outp ${pop2}_${outfn}.profile ${pop2} ${as} trio.tsv
+    outp ${pop3}_${outfn}.profile ${pop3} ${af} trio.tsv
+    perfrac ${eu} ${pop1}_${outfn}.profile ${as} ${pop2}_${outfn}.profile ${af} ${pop3}_${outfn}.profile trio_df.tsv
     echo -e "${eu} ${as} ${af}" >> done.txt
   done <trios.txt
