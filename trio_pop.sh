@@ -163,12 +163,13 @@ while read p
     if [[ ! ${af} = 0  ]]; then
         sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> trio_frac.keep
     fi
-    ${plink} --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name PC1_AVG PC_AVG PC3_AVG PC4_AVG --vif 100 --out trio ${common_plink}
+    ${plink} --bfile ${all} --keep trio_frac.keep --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name PC1_AVG PC2_AVG PC3_AVG PC4_AVG --vif 100 --out trio ${common_plink}
     ${plink} --bfile ${all} --keep trio_frac.keep --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out trio ${common_plink}
 
     if [ -f trio.clumped ]; then
       awk -F' ' '{if (NR!=1) { print $3 }}' trio.clumped | xargs -n 100 -I {} grep {} trio.assoc.linear > trio.myscore
     else
+      echo -e "${eu} ${as} ${af}" >> done.txt
       continue
     fi
 
