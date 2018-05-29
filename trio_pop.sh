@@ -86,38 +86,38 @@ fi
 all=`echo ${pops} | tr ' ' 'n'`
 if [ ! -f ${genos}/${all}.bed ]
     then
-      echo -e "\n\nGenerating merged fileset"
+      echo -e "\nGenerating merged fileset"
       echo -e "${genos}/${pop1}\n${genos}/${pop2}\n${genos}/${pop3}" > merge.list
       comm -12 <(comm -12 <(sort ${genos}/${pop1}.bim) <(sort ${genos}/${pop2}.bim)) <(sort ${genos}/$pop3.bim) > merged.totalsnps
       ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed --out ${genos}/${all} ${common_plink}
     else
-      echo -e "\n\nMerged fileset found!\n"
+      echo -e "\nMerged fileset found!\n"
 fi
 all="${genos}/${all}"
 # generate the phenos
 if [ ! -f train.pheno ]; then
-    echo -e "\n\nGenerating phenotypes\n"
+    echo -e "\nGenerating phenotypes\n"
     export plink
     python3 ${code}/qtraitsimulation.py -p train -B ${all} ${common_pheno}
 #    python3 ${code}/qtraitsimulation.py -p ${pop2} -B ${genos}/${pop2} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
 #    python3 ${code}/qtraitsimulation.py -p ${pop3} -B ${genos}/${pop3} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
 #    cat ${pop1}.pheno ${pop2}.pheno ${pop3}.pheno > train.pheno
     else
-      echo -e "\n\nPhenotypes already present... moving on\n"
+      echo -e "\nPhenotypes already present... moving on\n"
 fi
 
 if [ ! -f ${pop3}.test ]; then
-    echo -e "\n\nGenerating keep files"
+    echo -e "\nGenerating keep files"
     split_train_test "${pops}"
     else
-      echo -e "\n\nKeep files already present\n"
+      echo -e "\nKeep files already present\n"
 fi
 
 if [ ! -f ${pop3}_test.bed ]; then
-    echo -e "\n\nGenerating test filesets"
+    echo -e "\nGenerating test filesets"
     gen_tests "${pops}"
     else
-      echo -e "\n\nTest filesets already present... moving on\n"
+      echo -e "\nTest filesets already present... moving on\n"
 fi
 
 #all=`echo ${pops} | tr ' ' 'n'`
@@ -154,6 +154,7 @@ while read p
   do
     read eu as af <<<${p}
     fn="trio_${eu}_${as}_${af}.keep"
+    echo -e "\nExecuting ${fn%.keep}"
     if [ -f ${fn} ]; then rm ${fn}; fi
     if [[ ! ${as} = 0  ]]; then
         sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` >> ${fn}
@@ -166,19 +167,23 @@ while read p
     fi
     pcs='PC1_AVG PC2_AVG PC3_AVG PC4_AVG'
     outfn=${fn%.keep}
+    echo -e "\nComputing summary statistics fo $fn"
     ${plink} --bfile ${all} --keep ${fn} --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name ${pcs} --vif 100 --out ${outfn} ${common_plink}
-    ${plink} --bfile ${all} --keep ${fn} --clump trio.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${outfn} ${common_plink}
+    echo -e "\nClumping for $fn"
+    ${plink} --bfile ${all} --keep ${fn} --clump ${outfn}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${outfn} ${common_plink}
 
     if [ -f trio.clumped ]; then
       awk -F' ' '{if (NR!=1) { print $3 }}' ${outfn}.clumped | xargs -n 100 -I {} grep {} ${outfn}.assoc.linear > ${outfn}.myscore
     else
       echo -e "${eu} ${as} ${af}" >> done.txt
+      echo -e "\n${fn%.keep} failed"
       continue
     fi
 
     sort -u ${outfn}.myscore > temp.txt && mv temp.txt ${outfn}.myscore
     for pop in $pops
     do
+      echo -e "\nScoring in ${pop}"
       ${plink} --bfile ${pop}_test --score ${outfn}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${outfn} ${common_plink}
     done
     outp ${pop1}_${outfn}.profile ${pop1} ${eu} trio.tsv
