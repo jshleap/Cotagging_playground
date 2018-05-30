@@ -148,7 +148,9 @@ step=$(( sample/10 ))
 sequence=`seq 0 $step $sample`
 python -c "import numpy as np;from itertools import product;open('trios.txt','w').write('\n'.join([' '.join([str(np.round(y,2)) for y in x]) for x in product(np.arange(0,1,0.1), np.arange(0,1,0.1), np.arange(0,1,0.1)) if sum(x) == 1]))"
 if [ -f done.txt ]; then
-  comm -3 <(sort trios.txt) <(sort done.txt)
+  comm -3 <(sort trios.txt) <(sort done.txt) > execute.txt
+  else
+    cp trios.txt execute.txt
 fi
 while read p
   do
