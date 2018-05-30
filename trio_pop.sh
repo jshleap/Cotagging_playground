@@ -31,7 +31,7 @@ outp()
 
 perfrac()
 {
-  preline="\$R^2_{${pop1}}$\t\$R^2_{${pop2}}$\$R^2_{${pop3}}$"
+  preline="\$R^2_{${pop1}}$\t\$R^2_{${pop2}}$\t\$R^2_{${pop3}}$"
   if [ ! -f trio_df.tsv ]; then
     echo -e "${pop1}\t${pop2}\t${pop3}\t${preline}" > trio_df.tsv
   fi
@@ -165,10 +165,12 @@ while read p
     if [[ ! ${af} = 0  ]]; then
         sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> ${fn}
     fi
-    pcs='PC1_AVG PC2_AVG PC3_AVG PC4_AVG'
+    pcs='PC1 PC2 PC3 PC4'
     outfn=${fn%.keep}
     echo -e "\nComputing summary statistics for $fn\n"
-    ${plink} --bfile ${all} --keep ${fn} --linear hide-covar --pheno train.pheno --covar train.eigenvec --covar-name ${pcs} --vif 100 --out ${outfn} ${common_plink}
+    ${plink} --bfile ${all} --keep ${fn} --make-bed --out current ${common_plink}
+    flashpca --bfile current -n ${cpus} -m ${mem} -d 4
+    ${plink} --bfile current --linear hide-covar --pheno train.pheno --covar pcs.txt --covar-name ${pcs} --out ${outfn} ${common_plink}
     echo -e "\nClumping for $fn"
     ${plink} --bfile ${all} --keep ${fn} --clump ${outfn}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${outfn} ${common_plink}
 
