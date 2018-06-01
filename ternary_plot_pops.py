@@ -1,5 +1,4 @@
 from glob import iglob
-
 import matplotlib
 import ternary
 import pandas as pd
@@ -41,3 +40,34 @@ def plot_ternary(av_df, labels_ordered):
     tax.clear_matplotlib_ticks()
     plt.tight_layout()
     plt.show()
+
+
+files = iglob('run*/trio_df.tsv')
+df = pd.concat([pd.read_table(fn, sep='\t') for fn in files]).groupby(
+    ['EUR',  'ASN', 'AFR'], as_index=False).agg('mean')
+
+import ternary
+
+## Boundary and Gridlines
+scale = 100
+figure, tax = ternary.figure(scale=scale)
+
+# Draw Boundary and Gridlines
+tax.boundary(linewidth=2.0)
+#tax.gridlines(color="black", multiple=10)
+#tax.gridlines(color="blue", multiple=1, linewidth=0.5)
+
+# Set Axis labels and Title
+fontsize = 20
+tax.set_title("Simplex Boundary and Gridlines", fontsize=fontsize)
+tax.left_axis_label("Left label $\\alpha^2$", fontsize=fontsize)
+tax.right_axis_label("Right label $\\beta^2$", fontsize=fontsize)
+tax.bottom_axis_label("Bottom label $\\Gamma - \\Omega$", fontsize=fontsize)
+tax.scatter(points, c=colors)
+# Set ticks
+tax.ticks(axis='lbr', linewidth=1, multiple=10)
+
+# Remove default Matplotlib Axes
+tax.clear_matplotlib_ticks()
+
+ternary.plt.show()

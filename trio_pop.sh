@@ -195,4 +195,4 @@ while read p
     outp ${pop3}_${outfn}.profile ${pop3} ${af} trio.tsv
     perfrac ${eu} ${pop1}_${outfn}.profile ${as} ${pop2}_${outfn}.profile ${af} ${pop3}_${outfn}.profile
     echo -e "${eu} ${as} ${af}" >> done.txt
-  done <trios.txt
+  done <execute.txt

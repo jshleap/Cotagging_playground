@@ -220,32 +220,31 @@ def test_get_ld(rgeno, rbim, tgeno, tbim, kbwindow, threads, max_memory, justd,
 
 loci = get_ld(EUR_g, EUR_bim, AFR_g, AFR_bim, kbwindow=1000, justd=True,
               threads=8, max_memory=None)
-
 result = [0.25, 0.25, 0.5, 0.5, 0.2, 0.5, 0.5]
 
 @pytest.mark.parametrize("geno,keep_allele_order,result", [
     (EUR_g, False, result)
                          ])
 def test_compute_maf(geno, keep_allele_order, result):
-    assert [compute_maf(geno[:,i].compute(), keep_allele_order) for i in
+    assert [compute_maf(geno[:, i].compute(), keep_allele_order) for i in
             range(EUR_g.shape[1])] == result
 
 
 @pytest.mark.parametrize(
-    "loci,sumstats,select_index_by,do_locus_ese,normalize,exp", [
-        ('pvalue', False, True, 'toy_test_ds.pickle'),
-        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, False, False,
-         'toy_test_cotd.pickle'),
-        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, False,
-         'toy_test_ds.pickle'),
-        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, False,
-         'toy_test_cotd.pickle'),
-        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, True,
-         'toy_test_d_ext.pickle'),
-        (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, True,
-         'toy_test_cotd_ext.pickle')
+    "select_index_by,do_locus_ese,normalize,exp", [
+        ('pvalue', False,True,),
+        # (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 1, None, False, False,
+        #  'toy_test_cotd.pickle'),
+        # (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, False,
+        #  'toy_test_ds.pickle'),
+        # (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, False,
+        #  'toy_test_cotd.pickle'),
+        # (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, True, True,
+        #  'toy_test_d_ext.pickle'),
+        # (EUR_g, EUR_bim, AFR_g, AFR_bim, 1000, 4, None, False, True,
+        #  'toy_test_cotd_ext.pickle')
     ])
-def test_optimize_it(loci, sumstats, select_index_by, do_locus_ese, normalize):
+def test_optimize_it(select_index_by, do_locus_ese, normalize):
     ld_range = [0.5]
     by_range = [1]
     h2 = 0.5
@@ -253,3 +252,4 @@ def test_optimize_it(loci, sumstats, select_index_by, do_locus_ese, normalize):
     memory = None
     test_geno = AFR_g
     clump_function = compute_clumps
+
