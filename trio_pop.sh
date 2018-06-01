@@ -12,10 +12,8 @@ code=$2
 plink=$3
 init=12500
 sample=$4
-pop1=$5
-pop2=$6
-pop3=$7
-covs=$8
+pops=$5
+covs=$6
 
 corr()
 {
@@ -72,8 +70,13 @@ gen_tests()
   done
 }
 
-
-pops="${pop1} ${pop2} ${pop3}"
+read -r -a array <<< "${pops}"
+for i in `seq 0 $(( ${#array[@]} - 1 ))`
+do
+  j=$(( i + 1 ))
+  echo -e "\ni is $i and j is $j, declaring pop${j} as ${array[i]}"
+  declare pop${j}=${array[i]}
+done
 
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
@@ -137,12 +140,12 @@ if [ ! -f train.txt ]
         cat ${pop1}.train ${pop2}.train ${pop3}.train > train.keep
 fi
 
-if [ ! -f train.eigenvec  ]
-    then
-        #cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
-        cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore > train.eigenvec
-        #${plink} --bfile ${all} --pca 4 --out train ${common_plink}
-fi
+#if [ ! -f train.eigenvec  ]
+#    then
+#        #cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
+#        cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore > train.eigenvec
+#        #${plink} --bfile ${all} --pca 4 --out train ${common_plink}
+#fi
 
 step=$(( sample/10 ))
 sequence=`seq 0 $step $sample`

@@ -22,6 +22,7 @@ corr()
   ssdx+=($3-mx)*($3-mx); ssdy+=($6-my)*($6-my);} END {
   print (cov / ( sqrt(ssdx) * sqrt(ssdy)) )^2 }' pass=1 $1 pass=2 $1
 }
+
 outp()
 {
   infn=$1
@@ -30,6 +31,36 @@ outp()
   outfn=$3
   echo -e "$n\t`corr $infn`\t$Pop" >> $outfn
 }
+
+compute_duo()
+{
+  # 1 : prefix of output
+  # 2 : fraction computed
+  # 3 : Path to merged plink fileset
+  # 4 : flags common to plink calls
+  # 5 : vector with names of populations
+  pcs='PC1 PC2 PC3 PC4'
+  prefix="${1}_${2}"
+  if [ ! -f ${prefix}.clumped ]
+  then
+    echo -e "\nComputing summary statistics for ${prefix}\n"
+    ${plink} --bfile $3 --keep ${2}.keep --make-bed --out current_prop $4
+    flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
+    $plink --bfile current_prop --linear hide-covar --pheno train.pheno --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
+    $plink --bfile current_prop --clump ${prefix}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
+  else
+    echo -e "${prefix} has already been done"
+  fi
+  grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" ${prefix}.assoc.linear > ${prefix}.myscore
+  for pop in $5
+  do
+    $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${prefix} $4
+    outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
+  done
+}
+
+common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
+common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 
 if [ "$covs" == TRUE ]
   then
@@ -90,11 +121,11 @@ if [ ! -f train.txt ]
         cat train.keep initial.keep | sort | uniq > train.txt
 fi
 
-if [ ! -f train.eigenvec  ]
-    then
-        cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
-        #$plink --bfile ${all} --keep train.txt --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
-fi
+#if [ ! -f train.eigenvec  ]
+#    then
+#        cut -f1,2,5,6,7,8 ${genos}/pca_proj_mydata.sscore| tail -n +2 > train.eigenvec
+#        #$plink --bfile ${all} --keep train.txt --keep-allele-order --allow-no-sex --pca 4 --out train --threads ${cpus} --memory $mem
+#fi
 
 step=$(( sample/10 ))
 
@@ -134,16 +165,20 @@ do
     fi
     # Compute sumstats and clump for proportions
     # ${i}.eigenvec
+    pcs='PC1 PC2 PC3 PC4'
     if [ ! -f props_${i}.clumped ]
         then
             # $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out props_${i} --threads ${cpus} --memory $mem
             # python3 ${code}/skpca.py -b ${all} -t ${cpus} -m ${mem} -c 4 --keep ${i}.keep -p 3
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out props_${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --clump props_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out props_${i} --memory $mem
+            echo -e "\nComputing summary statistics for $fn\n"
+            ${plink} --bfile ${all} --keep ${i}.keep --make-bed --out current_prop ${common_plink}
+            flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
+            $plink --bfile current_prop --linear hide-covar --pheno train.pheno --covar pcs.txt --covar-name ${pcs} --out props_${i} ${common_plink}
+            $plink --bfile current_prop --clump props_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out props_${i} ${common_plink}
             # Do the constant estimations
             # $plink --bfile ${all} --keep ${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out constant_${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out constant_${i} --threads ${cpus} --memory $mem
-            $plink --bfile ${all} --keep constant_${i}.keep --keep-allele-order --allow-no-sex --clump constant_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out constant_${i} --memory $mem
+#            $plink --bfile current_prop --linear hide-covar --pheno train.pheno --covar pcs.txt --covar-name ${pcs} --out constant_${i} ${common_plink}
+#            $plink --bfile current_prop --clump constant_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out constant_${i} ${common_plink}
     fi
     # Score original
 #    if [[ $prop == None || $prop -lt $i ]]
@@ -204,17 +239,20 @@ do
     # compute pca for this subset
     #$plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --pca 4 --out init_${i} --threads ${cpus} --memory $mem
     # Perform associations and clumping
-    $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --linear hide-covar --pheno train.pheno --covar train.eigenvec --out init_${i} --threads ${cpus} --memory $mem
-    $plink --bfile ${all} --keep init_${i}.keep --keep-allele-order --allow-no-sex --clump init_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out init_${i} --memory $mem
+    echo -e "\nComputing summary statistics for $fn\n"
+    ${plink} --bfile ${all} --keep init_${i}.keep --make-bed --out current_init ${common_plink}
+    flashpca --bfile current_init -n ${cpus} -m ${mem} -d 4
+    $plink --bfile current_init --linear hide-covar --pheno train.pheno --covar train.eigenvec --out init_${i} ${common_plink}
+    $plink --bfile current_init --clump init_${i}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out init_${i} ${common_plink}
     grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' init_${i}.clumped)" init_${i}.assoc.linear > init_${i}.myscore
     # Score original
-    $plink --bfile ${target}_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out ${target}_init_${i} --threads ${cpus} --memory $mem
+    $plink --bfile ${target}_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --out ${target}_init_${i} ${common_plink}
     outp ${target}_init_${i}.profile ${target} init12k.tsv
-    $plink --bfile EUR_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --keep-allele-order --allow-no-sex --out EUR_init_${i} --threads ${cpus} --memory $mem
+    $plink --bfile EUR_test --score init_${i}.myscore 2 4 7 sum center --pheno train.pheno --out EUR_init_${i} ${common_plink}
     outp EUR_init_${i}.profile EUR init12k.tsv
-    $plink --bfile ${genos}/AFR --score init_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --keep-allele-order --allow-no-sex --out AFR_init_${i} --threads ${cpus} --memory $mem
+    $plink --bfile ${genos}/AFR --score init_${i}.myscore 2 4 7 sum center --pheno AFR.pheno --out AFR_init_${i} ${common_plink}
     outp AFR_init_${i}.profile AFR init12k.tsv
-    $plink --bfile ${genos}/AD --score init_${i}.myscore 2 4 7 sum center --pheno AD.pheno --keep-allele-order --allow-no-sex --out AD_init_${i} --threads ${cpus} --memory $mem
+    $plink --bfile ${genos}/AD --score init_${i}.myscore 2 4 7 sum center --pheno AD.pheno --out AD_init_${i} ${common_plink}
     outp AD_init_${i}.profile AD init12k.tsv
 
     # python3 ${code}/simple_score.py -b ${target}_test -c ${i}.clumped -s ${i}.assoc.linear -t ${cpus} -p train.pheno -l ${target} -m $membytes -P init12k
