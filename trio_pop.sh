@@ -102,9 +102,6 @@ if [ ! -f train.pheno ]; then
     echo -e "\nGenerating phenotypes\n"
     export plink
     python3 ${code}/qtraitsimulation.py -p train -B ${all} ${common_pheno}
-#    python3 ${code}/qtraitsimulation.py -p ${pop2} -B ${genos}/${pop2} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
-#    python3 ${code}/qtraitsimulation.py -p ${pop3} -B ${genos}/${pop3} -2 ${genos}/${pop1} --causal_eff ${pop1}.causaleff ${common_pheno}
-#    cat ${pop1}.pheno ${pop2}.pheno ${pop3}.pheno > train.pheno
     else
       echo -e "\nPhenotypes already present... moving on\n"
 fi
@@ -123,16 +120,6 @@ if [ ! -f ${pop3}_test.bed ]; then
       echo -e "\nTest filesets already present... moving on\n"
 fi
 
-#all=`echo ${pops} | tr ' ' 'n'`
-#if [ ! -f ${all}.bed ]
-#    then
-#      echo -e "\n\nGenerating merged fileset"
-#      echo -e "${genos}/${pop1}\n${genos}/${pop2}\n${genos}/${pop3}" > merge.list
-#      comm -12 <(comm -12 <(sort ${pop1}.totalsnps) <(sort ${pop2}.totalsnps)) <(sort $pop3.totalsnps) > merged.totalsnps
-#      ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed --out ${all} ${common_plink}
-#    else
-#      echo -e "\n\nMerged fileset found!\n"
-#fi
 
 #make train subset
 if [ ! -f train.txt ]

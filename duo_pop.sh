@@ -67,15 +67,23 @@ if [ "$covs" == TRUE ]
     covs='--covs Covs.txt'
 fi
 
+if [ ! -f ${genos}/EURnASNnAFRnAD.bed ]
+    then
+      echo -e "\n\nGenerating merged filesets"
+      echo -e "${genos}/EUR\n${genos}/ASN\n${genos}/AFR\n${genos}/AD" > merge.list
+      comm -12 <(comm -12 <(comm -12 <(sort ${genos}/EUR.bim) <(sort ${genos}/ASN.bim)) <(sort ${genos}/AFR.bim)) <(sort ${genos}/AD.bim) > merged.totalsnps
+      ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed --out ${genos}/EURnASNnAFRnAD ${common_plink}
+      cat ${genos}/EUR.fam ${genos}/${target}.fam > duo.keep
+      ${plink} --bfile ${genos}/EURnASNnAFRnAD --keep duo.keep --make-bed --out ${genos}/EURn${target} ${common_plink}
+fi
+
+pops4=${genos}/EURnASNnAFRnAD
+all=${genos}/EURn${target}
 # generate the phenos
 if [ ! -f train.pheno ]; then
     echo -e "\n\nGenerating phenotypes\n"
     export plink
-    python3 ${code}/qtraitsimulation.py -p EUR -B ${genos}/EUR -2 ${genos}/${target} ${common_pheno}
-    python3 ${code}/qtraitsimulation.py -p ${target} -B ${genos}/${target} -2 ${genos}/EUR --causal_eff EUR.causaleff ${common_pheno}
-    python3 ${code}/qtraitsimulation.py -p AFR -B ${genos}/AFR -2 ${genos}/EUR --causal_eff EUR.causaleff ${common_pheno}
-    python3 ${code}/qtraitsimulation.py -p AD -B ${genos}/AD -2 ${genos}/EUR --causal_eff EUR.causaleff ${common_pheno}
-    cat EUR.pheno ${target}.pheno > train.pheno
+    python3 ${code}/qtraitsimulation.py -p train -B ${pops4} ${common_pheno}
     else
       echo -e "\n\nPhenotypes already present... moving on\n"
 fi
@@ -102,13 +110,7 @@ if [ ! -f EUR_test.bed ]; then
     $plink --bfile ${genos}/EUR --keep EUR.test --make-bed --out EUR_test ${common_plink}
 fi
 
-if [ ! -f ${genos}/EURn${target}.bed ]
-    then
-        echo -e "\n\nGenerating merged filesets"
-        comm -12 <(sort EUR.totalsnps) <(sort ${target}.totalsnps) > merged.totalsnps
-        ${plink} --bfile ${genos}/EUR --bmerge ${genos}/${target} --extract merged.totalsnps --make-bed --out ${genos}/EURn${target} ${common_plink}
-fi
-all=${genos}/EURn${target}
+
 #make train subset
 if [ ! -f train.txt ]
     then
