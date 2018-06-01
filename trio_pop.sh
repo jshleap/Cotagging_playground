@@ -10,7 +10,6 @@ membytes=$(( mem * 1000000 ))
 genos=$1
 code=$2
 plink=$3
-init=12500
 sample=$4
 pops=$5
 covs=$6
