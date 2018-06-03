@@ -7,11 +7,18 @@ cwd=$PWD
 cpus=16
 mem=37000
 membytes=$(( mem * 1000000 ))
+# Path to genotypes
 genos=$1
+# Path to code
 code=$2
+# Path and binary of plink
+# TODO: remove it as argument and assume is in the path??
 plink=$3
+# Number of individuals to be scored
 sample=$4
+# Space separated string (needs to be quoted) with the populations prefix
 pops=$5
+# Whether to use covariates of not. Dafault is Not
 covs=$6
 
 corr()
@@ -23,7 +30,8 @@ corr()
 }
 outp()
 {
-  echo -e "$3\t`corr $1`\t$2" >> $4
+  if [ ! -f $4 ]; then echo -e "Pop\t\$R^2_{${4}}$\tFrac\tIndex" > $4; fi
+  echo -e "$3\t`corr $1`\t$2\t$5" >> $4
 }
 
 perfrac()
@@ -141,6 +149,7 @@ if [ -f done.txt ]; then
   else
     cp trios.txt execute.txt
 fi
+index=0
 while read -r -a p
   do
     eu=${p[0]}
@@ -182,8 +191,9 @@ while read -r -a p
       if [ -z ${p[k]} ]; then f="NA";else f=${p[k]};fi
       echo -e "\nScoring in ${pop}"
       ${plink} --bfile ${pop}_test --score ${outfn}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${outfn} ${common_plink}
-      outp ${pop}_${outfn}.profile ${pop} ${f} trio.tsv
+      outp ${pop}_${outfn}.profile ${pop} ${f} trio.tsv ${index}
     done
+    index=$(( index + 1 ))
 #    outp ${pop1}_${outfn}.profile ${pop1} ${eu} trio.tsv
 #    outp ${pop2}_${outfn}.profile ${pop2} ${as} trio.tsv
 #    outp ${pop3}_${outfn}.profile ${pop3} ${af} trio.tsv
