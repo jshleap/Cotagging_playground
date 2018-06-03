@@ -21,6 +21,14 @@ pops=$5
 # Whether to use covariates of not. Dafault is Not
 covs=$6
 
+echo "Executing code with the following arguments:"
+echo "genos = ${genos}"
+echo "code = ${code}"
+echo "plink = ${plink}"
+echo "sample = ${sample}"
+echo "pops = ${pops}"
+echo "covs = ${covs}"
+
 corr()
 {
   awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)
@@ -156,16 +164,25 @@ while read -r -a p
     as=${p[1]}
     af=${p[2]}
     fn="trio_${eu}_${as}_${af}.keep"
-    echo -e "\nExecuting ${fn%.keep}"
+    echo -e "\nExecuting ${fn%.keep} on ${sample} individuals"
     if [ -f ${fn} ]; then rm ${fn}; fi
-    if [[ ! ${as} = 0  ]]; then
-        sort -R ${pop2}.train| head -n `bc <<< "(${as} * ${sample})/1"` >> ${fn}
+    t=`bc <<< "(${eu} == 0)"`
+    if [ ${t} -ne 1 ]; then
+      eur=`bc <<< "(${eu} * ${sample})/1"`
+      echo "  Including ${eur} individuals from ${pop1}"
+      sort -R ${pop1}.train| head -n ${eur} >> ${fn}
     fi
-    if [[ ! ${eu} = 0  ]]; then
-        sort -R ${pop1}.train| head -n `bc <<< "(${eu} * ${sample})/1"` >> ${fn}
+    t=`bc <<< "(${as} == 0)"`
+    if [ ${t} -ne 1 ]; then
+      asn=`bc <<< "(${as} * ${sample})/1"`
+      echo "  Including ${asn} individuals from ${pop2}"
+      sort -R ${pop2}.train| head -n ${asn} >> ${fn}
     fi
-    if [[ ! ${af} = 0  ]]; then
-        sort -R ${pop3}.train| head -n `bc <<< "(${af} * ${sample})/1"` >> ${fn}
+    t=`bc <<< "(${af} == 0)"`
+    if [ ${t} -ne 1 ]; then
+      afr=`bc <<< "(${af} * ${sample})/1"`
+      echo "  Including ${afr} individuals from ${pop3}"
+      sort -R ${pop3}.train| head -n ${afr} >> ${fn}
     fi
     pcs='PC1 PC2 PC3 PC4'
     outfn=${fn%.keep}
