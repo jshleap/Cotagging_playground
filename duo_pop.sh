@@ -12,7 +12,6 @@ init=12500
 sample=$4
 target=$5
 covs=$6
-#TODO: make functions
 corr()
 {
   awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)

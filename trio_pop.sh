@@ -141,9 +141,11 @@ if [ -f done.txt ]; then
   else
     cp trios.txt execute.txt
 fi
-while read p
+while read -r -a p
   do
-    read eu as af <<<${p}
+    eu=${p[0]}
+    as=${p[1]}
+    af=${p[2]}
     fn="trio_${eu}_${as}_${af}.keep"
     echo -e "\nExecuting ${fn%.keep}"
     if [ -f ${fn} ]; then rm ${fn}; fi
@@ -174,14 +176,17 @@ while read p
     fi
 
     sort -u ${outfn}.myscore > temp.txt && mv temp.txt ${outfn}.myscore
-    for pop in $pops
+    for k in `seq 0 $(( ${#array[@]} - 1 ))`
     do
+      pop=${array[k]}
+      if [ -z ${p[k]} ]; then f="NA";else f=${p[k]};fi
       echo -e "\nScoring in ${pop}"
       ${plink} --bfile ${pop}_test --score ${outfn}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${outfn} ${common_plink}
+      outp ${pop}_${outfn}.profile ${pop} ${f} trio.tsv
     done
-    outp ${pop1}_${outfn}.profile ${pop1} ${eu} trio.tsv
-    outp ${pop2}_${outfn}.profile ${pop2} ${as} trio.tsv
-    outp ${pop3}_${outfn}.profile ${pop3} ${af} trio.tsv
+#    outp ${pop1}_${outfn}.profile ${pop1} ${eu} trio.tsv
+#    outp ${pop2}_${outfn}.profile ${pop2} ${as} trio.tsv
+#    outp ${pop3}_${outfn}.profile ${pop3} ${af} trio.tsv
     perfrac ${eu} ${pop1}_${outfn}.profile ${as} ${pop2}_${outfn}.profile ${af} ${pop3}_${outfn}.profile
     echo -e "${eu} ${as} ${af}" >> done.txt
   done <execute.txt
