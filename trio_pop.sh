@@ -38,8 +38,8 @@ corr()
 }
 outp()
 {
-  if [ ! -f $4 ]; then echo -e "Pop\t\$R^2_{${4}}$\tFrac\tIndex" > $4; fi
-  echo -e "$3\t`corr $1`\t$2\t$5" >> $4
+  if [ ! -f $4 ]; then echo -e "Pop\t\$R^2$\tFrac\tIndex" > $4; fi
+  echo -e "$2\t`corr $1`\t$3\t$5" >> $4
 }
 
 perfrac()
