@@ -86,11 +86,10 @@ if [ ! -f train.pheno ]; then
     else
       echo -e "\n\nPhenotypes already present... moving on\n"
 fi
-
+# get the initial
+sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
 if [ ! -f ${target}.test ]; then
     echo -e "\n\nGenerating keep files"
-    # get the initial 12.5k
-    sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
     comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
     # split train/test in EUR
     sort -R EUR.rest| head -n ${sample} > EUR.train

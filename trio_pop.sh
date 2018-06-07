@@ -151,7 +151,12 @@ fi
 
 step=$(( sample/10 ))
 sequence=`seq 0 $step $sample`
-python -c "import numpy as np;from itertools import product;open('trios.txt','w').write('\n'.join([' '.join([str(np.round(y,2)) for y in x]) for x in product(np.arange(0,1,0.1), np.arange(0,1,0.1), np.arange(0,1,0.1)) if sum(x) == 1]))"
+if [ ! -f trios.txt ]
+ then python -c "import numpy as np;from itertools import product;open('trios.txt','w').write('\n'.join([' '.join([str(np.round(y,2)) for y in x]) for x in product(np.arange(0,1,0.1), np.arange(0,1,0.1), np.arange(0,1,0.1)) if sum(x) == 1]))"
+fi
+# patching for missing fractions
+echo -e "\n0.1 0.9 0.0\n0.3 0.6 0.1\n0.6 0.3 0.1\n0.7 0.2 0.1\n" >> trios.txt
+sed '/^$/d' trios.txt | sort -u > temp  && mv temp trios.txt
 if [ -f done.txt ]; then
   comm -3 <(sort trios.txt) <(sort done.txt) > execute.txt
   else
