@@ -41,18 +41,22 @@ compute_duo()
   if [ ! -f ${prefix}.clumped ]
   then
     echo -e "\nComputing summary statistics for ${prefix}\n"
-    ${plink} --bfile $3 --keep ${2}.keep --make-bed --out current_prop $4
+    ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
     $plink --bfile current_prop --linear hide-covar --pheno train.pheno --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     $plink --bfile current_prop --clump ${prefix}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
     echo -e "${prefix} has already been done"
   fi
-  grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" ${prefix}.assoc.linear > ${prefix}.myscore
+  if [ ! -f ${prefix}.myscore ]; then
+    grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" ${prefix}.assoc.linear > ${prefix}.myscore
+  fi
   for pop in $5
   do
-    $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${prefix} $4
-    outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
+    if [ ! -f ${pop}_${prefix}.profile ]; then
+      $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${prefix} $4
+      outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
+    fi
   done
 }
 
@@ -125,7 +129,7 @@ sequence=`seq 0 $step $sample`
 echo -e "\n\nStarting Original"
 if [ -f constant.tsv ]
     then
-        pre=`cut -f1 constant.tsv`
+        pre=`cut -f1 proportions.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`
     else
         sequ=$sequence
@@ -135,14 +139,16 @@ for i in ${sequ}
 do
     eur=$(( sample - i ))
     echo -e "\n\nProcesing $eur european and $i $target"
-    if [[ $eur = $sample ]]
-        then
-            cat EUR.train > ${i}.keep
-            cp EUR.train constant_${i}.keep
-        else
-            head -n $eur EUR.train > ${i}.keep
-            head -n $i ${target}.train >> ${i}.keep
-            cp EUR.train constant_${i}.keep
+    t=`bc <<< "(${eur} == 0)"`
+    if [[ $eur = $sample ]]; then
+      cat EUR.train > ${i}.keep
+      cp EUR.train constant_${i}.keep
+    elif [ ${t} -ne 1 ]; then
+      head -n $eur EUR.train > ${i}.keep
+      head -n $i ${target}.train >> ${i}.keep
+      cp EUR.train constant_${i}.keep
+    else
+      head -n $i ${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
     compute_duo proportions ${i} ${all} "${common_plink}" "EUR ${target}" ${i}.keep
