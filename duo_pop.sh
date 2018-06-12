@@ -102,7 +102,7 @@ if [ ! -f ${target}.test ]; then
     sort -R ${genos}/${target}.keep| head -n ${sample} > ${target}.train
     comm -23 <(sort ${genos}/${target}.keep) <(sort ${target}.train) > ${target}.test
     else
-      echo -e "\n\nKeep files already present\n"
+      echo -e "\n\nTrain/test Keep files already present\n"
 fi
 
 if [ ! -f EUR_test.bed ]; then
@@ -152,7 +152,7 @@ do
       head -n $i ${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
-    compute_duo proportions ${i} ${all} "${common_plink}" "EUR ${target}" ${i}.keep
+    compute_duo proportions ${i} ${all} "${common_plink}" "${target} ${others}" ${i}.keep
 done
 
 
@@ -172,7 +172,7 @@ do
     cat initial.keep > init_${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
-   compute_duo init ${i} ${all} "${common_plink}" "EUR ${target}" init_${i}.keep
+   compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}"init_${i}.keep
 done
 
 # do the cost derived
@@ -201,5 +201,5 @@ do
         sort -R EUR.train| head -n $eu >> frac_${j}.keep
     fi
     # Perform associations and clumping
-    compute_duo cost ${j} ${all} "${common_plink}" "EUR ${target}" frac_${j}.keep
+    compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" frac_${j}.keep
 done
