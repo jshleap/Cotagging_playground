@@ -157,7 +157,7 @@ done
 
 
 # constant initial source add mixing
-if [ -f init12k.tsv ]
+if [ -f init.tsv ]
     then
         pre=`cut -f1 init12k.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`
@@ -172,7 +172,7 @@ do
     cat initial.keep > init_${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
-   compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}"init_${i}.keep
+   compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" init_${i}.keep
 done
 
 # do the cost derived
