@@ -8,10 +8,10 @@ membytes=$(( mem * 1000000 ))
 genos=$1
 code=$2
 plink=$3
-init=12500
-sample=$4
-target=$5
-covs=$6
+init=$4
+sample=$5
+target=$6
+covs=$7
 corr()
 {
   awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)
@@ -122,6 +122,7 @@ fi
 
 step=$(( sample/10 ))
 
+others=`echo 'EUR ASN AFR AD' | sed -e "s/$target //"`
 # do Original
 prop=NONE
 const=NONE

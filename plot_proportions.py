@@ -68,7 +68,8 @@ def get_dataframe(pattern, prefix, lines, plink):
 
 if len(sys.argv) > 1:
     plink = True
-get_dataframe('run*/proportions.tsv', 'Proportions', 44, plink)
+n=22
+get_dataframe('run*/proportions.tsv', 'Proportions', n, plink)
 #get_dataframe('run*/constant.tsv', 'Constant', 44, plink)
-get_dataframe('run*/init12k.tsv', 'init12k', 44, plink)
-get_dataframe('run*/cost.tsv', 'Cost', 44, plink)
+get_dataframe('run*/init.tsv', 'init', n, plink)
+get_dataframe('run*/cost.tsv', 'Cost', n, plink)
