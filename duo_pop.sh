@@ -128,7 +128,7 @@ prop=NONE
 const=NONE
 sequence=`seq 0 $step $sample`
 echo -e "\n\nStarting Original"
-if [ -f constant.tsv ]
+if [ -f proportions.tsv ]
     then
         pre=`cut -f1 proportions.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`
@@ -142,14 +142,15 @@ do
     echo -e "\n\nProcesing $eur european and $i $target"
     t=`bc <<< "(${eur} == 0)"`
     if [[ $eur = $sample ]]; then
-      cat EUR.train > ${i}.keep
-      cp EUR.train constant_${i}.keep
+      head -n ${eur} EUR.train > ${i}.keep
+      #cat EUR.train > ${i}.keep
+      #cp EUR.train constant_${i}.keep
     elif [ ${t} -ne 1 ]; then
-      head -n $eur EUR.train > ${i}.keep
-      head -n $i ${target}.train >> ${i}.keep
+      head -n ${eur} EUR.train > ${i}.keep
+      head -n ${i} ${target}.train >> ${i}.keep
       cp EUR.train constant_${i}.keep
     else
-      head -n $i ${target}.train >> ${i}.keep
+      head -n ${i} ${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
     compute_duo proportions ${i} ${all} "${common_plink}" "${target} ${others}" ${i}.keep
@@ -159,7 +160,7 @@ done
 # constant initial source add mixing
 if [ -f init.tsv ]
     then
-        pre=`cut -f1 init12k.tsv`
+        pre=`cut -f1 init.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`
     else
         sequ=${sequence}
