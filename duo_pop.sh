@@ -12,6 +12,8 @@ init=$4
 sample=$5
 target=$6
 covs=$7
+
+
 corr()
 {
   awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)
@@ -65,9 +67,12 @@ common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 
 if [ "$covs" == TRUE ]
   then
-    cut -d' ' -f1,2 ${genos}/${target}.fam|sed 's/$/ 1/' > Covs.txt
-    cut -d' ' -f1,2 ${genos}/EUR.fam|sed 's/$/ 0/' >> Covs.txt
-    covs='--covs Covs.txt'
+    count=0
+    for p in EUR ASN AFR AD;do
+      cut -d' ' -f1,2 ${genos}/${p}.fam|sed 's/$/ ${count}/' >> Covs.txt
+      covs='--covs Covs.txt'
+      count=$(( ${count} + 1 ))
+    done
 fi
 
 if [ ! -f ${genos}/EURnASNnAFRnAD.bed ]
