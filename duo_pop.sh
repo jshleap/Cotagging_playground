@@ -62,9 +62,6 @@ compute_duo()
   done
 }
 
-common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
-common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
-
 if [ "$covs" == TRUE ]
   then
     count=0
@@ -74,6 +71,9 @@ if [ "$covs" == TRUE ]
       count=$(( ${count} + 1 ))
     done
 fi
+
+common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
+common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 
 if [ ! -f ${genos}/EURnASNnAFRnAD.bed ]
     then
