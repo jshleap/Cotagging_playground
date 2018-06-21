@@ -93,13 +93,15 @@ do
   declare pop${j}=${array[i]}
 done
 
-common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
-common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 
 if [ "$covs" == TRUE ]
   then
     do_covs "${pops}"
 fi
+
+common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
+common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
+
 
 all=`echo ${pops} | tr ' ' 'n'`
 if [ ! -f ${genos}/${all}.bed ]
