@@ -82,6 +82,8 @@ if [ "$covs" == TRUE ]
     covs='--covs Covs.txt'
 fi
 
+echo "Performing Rawlsian analysis of two Populations with target ${target}"
+
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 
