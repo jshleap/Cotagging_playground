@@ -1,5 +1,5 @@
-#!/bin/sh -xv
-set -e
+#!/bin/bash
+#set -e
 source ~/.bashrc
 cwd=$PWD
 cpus=16
