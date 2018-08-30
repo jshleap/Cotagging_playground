@@ -73,18 +73,22 @@ gen_merge_list()
 }
 
 
-echo "Performing Rawlsian analysis of two Populations with target ${target}"
-if [ "$covs" == TRUE ]
+gen_keeps_n_covs()
+{
+  count=0
+  for p in EUR ASN AFR AD;do
+    cut -f1,2 ${genos}/${p}.fam| tee ${p}.keep | \
+    sed "s/$/ ${count}/" >> Covs.txt
+    count=$(( ${count} + 1 ))
+  done
+  if [ "$covs" == TRUE ]
   then
-    count=0
-    for p in EUR ASN AFR AD;do
-      cut -f1,2 ${genos}/${p}.fam|sed "s/$/ ${count}/" >> Covs.txt
-      count=$(( ${count} + 1 ))
-    done
-    covs='--covs Covs.txt'
-fi
+  covs='--covs Covs.txt'
+  fi
+}
 
-
+echo "Performing Rawlsian analysis of two Populations with target ${target}"
+gen_keeps_n_covs
 
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
