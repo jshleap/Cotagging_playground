@@ -11,7 +11,8 @@ plink=$3
 init=$4
 sample=$5
 target=$6
-covs=$7
+pops=$7
+covs=$8
 
 
 corr()
@@ -63,14 +64,23 @@ compute_duo()
 }
 
 
+gen_merge_list()
+{
+  # only one input, the string with the current populations
+  for p in $1
+    do
+      echo "${genos}/${p}" >> merge.list
+    done
+}
+
 if [ "$covs" == TRUE ]
   then
     count=0
     for p in EUR ASN AFR AD;do
-      cut -d' ' -f1,2 ${genos}/${p}.fam|sed 's/$/ ${count}/' >> Covs.txt
-      covs='--covs Covs.txt'
+      cut -f1,2 ${genos}/${p}.fam|sed "s/$/ ${count}/" >> Covs.txt
       count=$(( ${count} + 1 ))
     done
+    covs='--covs Covs.txt'
 fi
 
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
