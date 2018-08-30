@@ -11,8 +11,7 @@ plink=$3
 init=$4
 sample=$5
 target=$6
-pops=$7
-covs=$8
+covs=$7
 
 
 corr()
