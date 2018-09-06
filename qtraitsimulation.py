@@ -155,6 +155,11 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         cols = {'FID': 'fid', 'IID': 'iid', 'SCORESUM': 'gen_eff'}
         gen_eff = gen_eff.rename(columns=cols)
         gen_eff = gen_eff.reindex(columns=['fid', 'iid', 'gen_eff'])
+        # Coerce everything in FID and IID to str before merging
+        gen_eff['iid'] = gen_eff.iid.astype(str)
+        gen_eff['fid'] = gen_eff.fid.astype(str)
+        fam['iid'] = fam.iid.astype(str)
+        fam['fid'] = fam.fid.astype(str)
         fam = fam.merge(gen_eff, on=['fid', 'iid'])
     else:
         dask_options = dict(num_workers=threads, cache=cache, pool=ThreadPool(
