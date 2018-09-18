@@ -12,7 +12,7 @@ import numpy as np
 matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+import argparse
 plt.style.use('ggplot')
 
 
@@ -70,12 +70,19 @@ def get_dataframe(pattern, prefix, lines, plink):
     plt.close()
 
 
-if len(sys.argv) > 1:
-    plink = True
-else:
-    plink = False
-n = 44
-get_dataframe('run*/proportions.tsv', 'Proportions', n, plink)
-# get_dataframe('run*/constant.tsv', 'Constant', 44, plink)
-get_dataframe('run*/init.tsv', 'init', n, plink)
-get_dataframe('run*/cost.tsv', 'Cost', n, plink)
+def main(plink, folder, n):
+    get_dataframe('%s/proportions.tsv' % folder, 'Proportions', n, plink)
+    # get_dataframe('run*/constant.tsv', 'Constant', 44, plink)
+    get_dataframe('%s/init.tsv' % folder, 'init', n, plink)
+    get_dataframe('%s/cost.tsv' % folder, 'Cost', n, plink)
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--plink', default=True, action='store_false')
+    parser.add_argument('-f', '--folder', default='run*')
+    parser.add_argument('-n', '--expected_n', default=44, type=int,
+                        help='expected number of lines in each tsv file')
+    args = parser.parse_args()
+    main(args.plink, args.folder, args.expected_n)
