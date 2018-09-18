@@ -16,16 +16,6 @@ import argparse
 plt.style.use('ggplot')
 
 
-def tsplot(ax, data, x, y, **kw):
-    # x = np.arange(data.shape[1])
-    est = np.mean(data, axis=0)
-    sd = np.std(data, axis=0)
-    cis = (est - sd, est + sd)
-    ax.fill_between(x, cis[0], cis[1], alpha=0.2, **kw)
-    ax.plot(x, est, **kw)
-    ax.margins(x=0)
-
-
 def get_dataframe(pattern, prefix, lines, plink):
     todas = []
     if 'constant' in pattern:
@@ -38,8 +28,7 @@ def get_dataframe(pattern, prefix, lines, plink):
     else:
         names = ['number', r'$R^2$', 'TP', 'FP', 'ncausal', 'Pop', 'run', time]
         types = dict(zip(names, [int, float, int, int, int, str, int, float]))
-    read_opts = dict(sep='\t', header=None,
-                     names=names)  # , delim_whitespace=True)
+    read_opts = dict(sep='\t', header=None, names=names)
     value = r"$R^2$"
     files = iglob(pattern)
     for i, fn in enumerate(files):
@@ -56,13 +45,12 @@ def get_dataframe(pattern, prefix, lines, plink):
                 df[time] = 100 - df.loc[:, 'EUR (%)']
             todas.append(df)
     df = pd.concat(todas).dropna().reset_index()
-    # pops = df.Pop.unique().tolist()
-    # cols = ['r', 'b', 'purple']
-    # gr = df.groupby('Pop')
     f, ax = plt.subplots()
-    # for i, pop in enumerate(pops):
-    #    tsplot(ax, gr.get_group(pop), x=time, color=cols[i], label=pop)
-    sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
+    if len(files) == 1:
+        sns.tsplot(time=time, value=value, data=df, ax=ax, condition='Pop',
+                   ci=[25, 50, 75, 95])
+    else:
+        sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
                condition='Pop', ci=[25, 50, 75, 95])
     # plt.title('Sample size: %d' % df.number.max())
     plt.tight_layout()
@@ -75,7 +63,6 @@ def main(plink, folder, n):
     # get_dataframe('run*/constant.tsv', 'Constant', 44, plink)
     get_dataframe('%s/init.tsv' % folder, 'init', n, plink)
     get_dataframe('%s/cost.tsv' % folder, 'Cost', n, plink)
-
 
 
 if __name__ == '__main__':
