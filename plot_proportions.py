@@ -46,9 +46,11 @@ def get_dataframe(pattern, prefix, lines, plink):
             todas.append(df)
     df = pd.concat(todas).dropna().reset_index()
     f, ax = plt.subplots()
-    if len(files) == 1:
-        sns.tsplot(time=time, value=value, data=df, ax=ax, condition='Pop',
-                   ci=[25, 50, 75, 95])
+    if len(todas) == 1:
+        sub = df.reindex(columns=[value, 'Pop', time]).pivot_table(
+            values=value, index=time, columns='Pop')
+        sub = sub.reindex(columns=['ASN', 'EUR', 'AFR', 'AD'])
+        sub.plot(ax=ax)
     else:
         sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
                condition='Pop', ci=[25, 50, 75, 95])
