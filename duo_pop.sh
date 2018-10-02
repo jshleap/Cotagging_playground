@@ -76,11 +76,13 @@ gen_merge_list()
 gen_keeps_n_covs()
 {
   count=0
+  if [[ ! -f 'Covs.txt' ]];then
   for p in EUR ASN AFR AD;do
     cut -f1,2 ${genos}/${p}.fam| tee ${p}.keep | \
     sed "s/$/ ${count}/" >> Covs.txt
     count=$(( ${count} + 1 ))
   done
+  fi
   if [ "$covs" == TRUE ]
   then
   covs='--covs Covs.txt'

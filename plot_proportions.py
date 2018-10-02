@@ -49,6 +49,7 @@ def get_dataframe(pattern, prefix, lines, plink):
     if len(todas) == 1:
         sub = df.reindex(columns=[value, 'Pop', time]).pivot_table(
             values=value, index=time, columns='Pop')
+        print(sub)
         sub = sub.reindex(columns=['ASN', 'EUR', 'AFR', 'AD'])
         sub.plot(ax=ax)
     else:
