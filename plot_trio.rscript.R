@@ -2,7 +2,7 @@ library(latex2exp)
 library(viridis)
 library(ggtern)
 
-df = read.table('Averaged_trio.tsv', sep='\t', header=TRUE, row.names=1)
+df = read.table('trio_df.tsv', sep='\t', header=TRUE)
 
 AFR = ggtern(df,aes(EUR,ASN,AFR)) +  scale_fill_viridis(TeX('R^2_{AFR}'), 
                                                         option='plasma', direction=-1) +

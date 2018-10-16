@@ -18,8 +18,9 @@ plink=$3
 sample=$4
 # Space separated string (needs to be quoted) with the populations prefix
 pops=$5
+h2=$
 # Whether to use covariates of not. Dafault is Not
-covs=$6
+covs=$7
 
 echo "Executing code with the following arguments:"
 echo "genos = ${genos}"
@@ -99,7 +100,7 @@ if [ "$covs" == TRUE ]
     do_covs "${pops}"
 fi
 
-common_pheno="-m 100 -b 0.5 -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
+common_pheno="-m 100 -b ${h2} -f 0 -t ${cpus} --force_h2 -M ${membytes} ${covs}"
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 
 
