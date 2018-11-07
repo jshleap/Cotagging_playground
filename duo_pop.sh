@@ -205,7 +205,7 @@ do
     fi
     # Compute sumstats and clump for proportions
     compute_duo proportions ${i} ${all} "${common_plink}" \
-    "${target} ${others}" ${i}.keep
+    "${target} ${others}" ${i}.keep ${covs}
 done
 
 
@@ -226,7 +226,7 @@ do
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
    compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
-   init_${i}.keep
+   init_${i}.keep ${covs}
 done
 
 # do the cost derived
@@ -255,5 +255,6 @@ do
         sort -R EUR.train| head -n $eu >> frac_${j}.keep
     fi
     # Perform associations and clumping
-    compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" frac_${j}.keep
+    compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
+    frac_${j}.keep ${covs}
 done
