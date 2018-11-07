@@ -50,7 +50,8 @@ compute_duo()
   # 3 : Path to merged plink fileset
   # 4 : flags common to plink calls
   # 5 : vector with names of populations
-  # 6 : Covariates
+  # 6 : keep file of prefix
+  # 7 : Covariates
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [ ! -f ${prefix}.clumped ]
@@ -58,13 +59,13 @@ compute_duo()
     echo -e "\nComputing summary statistics for ${prefix}\n"
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
-    if echo $6| grep -q -- '--covs'; then
+    if echo $7| grep -q -- '--covs'; then
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
     fi
     $plink --bfile current_prop --linear hide-covar --pheno train.pheno \
     --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
-    # --clump-r2 0.50              LD threshold for clumping is default
+    # --clump-r2 0.50              LD thqreshold for clumping is default
     $plink --bfile current_prop --clump ${prefix}.assoc.linear \
     --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
