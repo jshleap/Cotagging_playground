@@ -77,6 +77,11 @@ compute_duo()
   for pop in $5
   do
     if [ ! -f ${pop}_${prefix}.profile ]; then
+      if [ ! -f ${pop}_test.bed ]; then
+        cp ${pop}.bed ${pop}_test.bed
+        cp ${pop}.bim ${pop}_test.bim
+        cp ${pop}.fam ${pop}_test.fam
+      fi
       $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
       --pheno train.pheno --out ${pop}_${prefix} $4
       outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
@@ -149,7 +154,7 @@ if [ ! -f ${target}.test ]; then
     # split train/test in EUR
     sort -R EUR.rest| head -n ${sample} > EUR.train
     comm -23 <(sort EUR.rest) <(sort EUR.train) > EUR.test
-    # split train/test in AD
+    # split train/test in target
     sort -R ${genos}/${target}.keep| head -n ${sample} > ${target}.train
     comm -23 <(sort ${genos}/${target}.keep) <(sort ${target}.train) > ${target}.test
     else
@@ -159,8 +164,10 @@ fi
 if [ ! -f EUR_test.bed ]; then
     echo -e "\n\nGenerating test filesets"
     # create the test filesets
-    $plink --bfile ${genos}/${target} --keep ${target}.test --make-bed --out ${target}_test ${common_plink}
-    $plink --bfile ${genos}/EUR --keep EUR.test --make-bed --out EUR_test ${common_plink}
+    $plink --bfile ${genos}/${target} --keep ${target}.test --make-bed \
+    --out ${target}_test ${common_plink}
+    $plink --bfile ${genos}/EUR --keep EUR.test --make-bed --out EUR_test \
+    ${common_plink}
 fi
 
 
