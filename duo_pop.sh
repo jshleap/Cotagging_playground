@@ -51,7 +51,6 @@ compute_duo()
   # 4 : flags common to plink calls
   # 5 : vector with names of populations
   # 6 : Covariates
-  echo $6
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [ ! -f ${prefix}.clumped ]
@@ -59,7 +58,7 @@ compute_duo()
     echo -e "\nComputing summary statistics for ${prefix}\n"
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
-    if echo $6| grep -q '--covs'; then
+    if echo $6| grep -q -- '--covs'; then
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
     fi
@@ -213,7 +212,7 @@ do
     fi
     # Compute sumstats and clump for proportions
     compute_duo proportions ${i} ${all} "${common_plink}" \
-    "${target} ${others}" ${i}.keep ${covs}
+    "${target} ${others}" ${i}.keep "${covs}"
 done
 
 
@@ -234,7 +233,7 @@ do
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
    compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
-   init_${i}.keep ${covs}
+   init_${i}.keep "${covs}"
 done
 
 # do the cost derived
@@ -264,5 +263,5 @@ do
     fi
     # Perform associations and clumping
     compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
-    frac_${j}.keep ${covs}
+    frac_${j}.keep "${covs}"
 done
