@@ -51,6 +51,7 @@ compute_duo()
   # 4 : flags common to plink calls
   # 5 : vector with names of populations
   # 6 : Covariates
+  echo $6
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [ ! -f ${prefix}.clumped ]
