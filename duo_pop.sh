@@ -14,7 +14,6 @@ target=$6
 h2=$7
 covs=$8
 
-
 corr()
 {
   awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)
@@ -32,6 +31,18 @@ outp()
   echo -e "$n\t`corr $infn`\t$Pop" >> $outfn
 }
 
+
+python_merge()
+{
+python - << EOF
+import pandas as pd
+df1 = pd.read_table('pcs.txt', sep='\t')
+df2 = pd.read_table('Covs.txt', sep='\t')
+merged = df1.merge(df2, on=['FID','IID'])
+merged.to_csv('pcs.txt', sep='\t', index=False)
+EOF
+}
+
 compute_duo()
 {
   # 1 : prefix of output
@@ -39,6 +50,7 @@ compute_duo()
   # 3 : Path to merged plink fileset
   # 4 : flags common to plink calls
   # 5 : vector with names of populations
+  # 6 : Covariates
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [ ! -f ${prefix}.clumped ]
@@ -46,18 +58,27 @@ compute_duo()
     echo -e "\nComputing summary statistics for ${prefix}\n"
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
-    $plink --bfile current_prop --linear hide-covar --pheno train.pheno --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
-    $plink --bfile current_prop --clump ${prefix}.assoc.linear --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
+    if echo $6| grep -q '--covs'; then
+        python_merge
+        pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
+    fi
+    $plink --bfile current_prop --linear hide-covar --pheno train.pheno \
+    --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
+    # --clump-r2 0.50              LD threshold for clumping is default
+    $plink --bfile current_prop --clump ${prefix}.assoc.linear \
+    --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
     echo -e "${prefix} has already been done"
   fi
   if [ ! -f ${prefix}.myscore ]; then
-    grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" ${prefix}.assoc.linear > ${prefix}.myscore
+    grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" \
+    ${prefix}.assoc.linear > ${prefix}.myscore
   fi
   for pop in $5
   do
     if [ ! -f ${pop}_${prefix}.profile ]; then
-      $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center --pheno train.pheno --out ${pop}_${prefix} $4
+      $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
+      --pheno train.pheno --out ${pop}_${prefix} $4
       outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
     fi
   done
@@ -100,10 +121,14 @@ if [ ! -f ${genos}/EURnASNnAFRnAD.bed ]
     then
       echo -e "\n\nGenerating merged filesets"
       echo -e "${genos}/EUR\n${genos}/ASN\n${genos}/AFR\n${genos}/AD" > merge.list
-      comm -12 <(comm -12 <(comm -12 <(sort ${genos}/EUR.bim) <(sort ${genos}/ASN.bim)) <(sort ${genos}/AFR.bim)) <(sort ${genos}/AD.bim) > merged.totalsnps
-      ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed --out ${genos}/EURnASNnAFRnAD ${common_plink}
+      comm -12 <(comm -12 <(comm -12 <(sort ${genos}/EUR.bim) \
+      <(sort ${genos}/ASN.bim)) <(sort ${genos}/AFR.bim)) \
+      <(sort ${genos}/AD.bim) > merged.totalsnps
+      ${plink} --merge-list merge.list --extract merged.totalsnps --make-bed \
+      --out ${genos}/EURnASNnAFRnAD ${common_plink}
       cat ${genos}/EUR.fam ${genos}/${target}.fam > duo.keep
-      ${plink} --bfile ${genos}/EURnASNnAFRnAD --keep duo.keep --make-bed --out ${genos}/EURn${target} ${common_plink}
+      ${plink} --bfile ${genos}/EURnASNnAFRnAD --keep duo.keep --make-bed \
+      --out ${genos}/EURn${target} ${common_plink}
 fi
 
 pops4=${genos}/EURnASNnAFRnAD
@@ -179,7 +204,8 @@ do
       head -n ${i} ${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
-    compute_duo proportions ${i} ${all} "${common_plink}" "${target} ${others}" ${i}.keep
+    compute_duo proportions ${i} ${all} "${common_plink}" \
+    "${target} ${others}" ${i}.keep
 done
 
 
@@ -199,7 +225,8 @@ do
     cat initial.keep > init_${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
-   compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" init_${i}.keep
+   compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
+   init_${i}.keep
 done
 
 # do the cost derived
