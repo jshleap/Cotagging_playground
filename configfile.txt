@@ -1,0 +1,13 @@
+# The config file should have these mandatory fields:
+
+cpus=# CPUs per submission
+mem=# max memory per submission
+genos=#path to genotype files (bed files)
+plink=#path to plink executable
+init=# number of individuals from source population to be availble initially
+sample=#number of individuals to be analized in the testing set
+target=#name of target population
+h2=#desired heritability
+covs=#TRUE if want covariates to be included else None
+template_file= #path to template file for submission
+submit_command= #submission command of the template file (e.g qsub, sbatch, etc)

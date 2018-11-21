@@ -12,7 +12,6 @@ from utilities4cotagging import *
 
 plt.style.use('ggplot')
 
-
 # ----------------------------------------------------------------------
 #@profile
 def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,

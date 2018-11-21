@@ -54,7 +54,7 @@ compute_duo()
   # 7 : Covariates
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
-  if [ ! -f ${prefix}.clumped ]
+  if [[ ! -f ${prefix}.clumped ]]
   then
     echo -e "\nComputing summary statistics for ${prefix}\n"
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
