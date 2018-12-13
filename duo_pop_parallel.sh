@@ -17,7 +17,7 @@ do
         rhs="${rhs%%*( )}"   # Del trailing spaces
         rhs="${rhs%\"*}"     # Del opening string quotes
         rhs="${rhs#\"*}"     # Del closing string quotes
-        declare $lhs="$rhs"
+        declare ${lhs}="$rhs"
     fi
 done < $1
 }
@@ -413,7 +413,7 @@ fi
 }
 
 make_train_subset(){
-if [ ! -f train.txt ]
+if [[ ! -f train.txt ]]
     then
         cat ${target}.train EUR.train > train.keep
         cat train.keep initial.keep | sort | uniq > train.txt
@@ -511,7 +511,8 @@ done
 
 execute(){
 # Get the config file
-parse_config_file $1
+#parse_config_file $1
+source $1
 cwd=$PWD
 membytes=$(( mem * 1000000 ))
 echo "Performing Rawlsian analysis of two Populations with target ${target}"
