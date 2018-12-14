@@ -6,6 +6,8 @@
 #       bash duo_pop_parallel.sh configfile
 
 
+TIMEFORMAT="Time elapsed: %R"
+export TIMEFORMAT
 parse_config_file(){
 # Parse the config file courtesy of
 # https://stackoverflow.com/users/1851270/antonio
@@ -287,6 +289,16 @@ merged.to_csv('pcs.txt', sep='\t', index=False)
 EOF
 }
 
+run_gwas(){
+# 1) Plink executable with path
+# 2) Covariate names
+# 3) chromosome
+# 4) prefix
+$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
+--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
+--allow-no-sex
+}
+
 compute_duo()
 {
   # 1 : prefix of output
@@ -307,11 +319,18 @@ compute_duo()
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
     fi
-    ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
-    --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
+    export -f run_gwas
+    echo "Running GWAS in parallel in ${chrs} chromosomes"
+    time parallel --will-cite -j 75% run_gwas ${plink} ${pcs} {} \
+    ${prefix} ::: `seq ${chrs}`
+    cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
+    rm ${prefix}_chr*.assoc.linear
+    # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
+    # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
-    ${plink} --bfile current_prop --clump ${prefix}.assoc.linear \
-    --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
+    echo "Running Scorings"
+    time ${plink} --bfile current_prop --clump ${prefix}.assoc.linear \
+     --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
     echo -e "${prefix} has already been done"
   fi
@@ -329,7 +348,8 @@ compute_duo()
       fi
       $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
       --pheno train.pheno --out ${pop}_${prefix} $4
-      outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
+      echo "Running correlation for pop ${pop}"
+      time outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
     fi
   done
 }
@@ -450,7 +470,9 @@ do
       head -n ${i} ${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
-    compute_duo proportions ${i} ${all} "${common_plink}" \
+    echo "Running compute_duo proportions ${i} ${all} "${common_plink}" \
+    "${target} ${others}" ${i}.keep "${covs}""
+    time compute_duo proportions ${i} ${all} "${common_plink}" \
     "${target} ${others}" ${i}.keep "${covs}"
 done
 }
@@ -472,7 +494,9 @@ do
     cat initial.keep > init_${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
-   compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
+   echo "compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
+   init_${i}.keep "${covs}""
+   time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    init_${i}.keep "${covs}"
 done
 }
@@ -504,7 +528,9 @@ do
         sort -R EUR.train| head -n $eu >> frac_${j}.keep
     fi
     # Perform associations and clumping
-    compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
+    echo "compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
+    frac_${j}.keep "${covs}""
+    time compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
     frac_${j}.keep "${covs}"
 done
 }
@@ -521,16 +547,26 @@ others=`echo 'EUR ASN AFR AD' | sed -e "s/$target //"`
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
-gen_keeps_n_covs
-merge_filesets
-generate_pheno
-get_initial
-gen_test
-make_train_subset
-proportions
-init
+echo "Running gen_keeps_n_covs"
+time gen_keeps_n_covs
+echo "Running merge_filesets"
+time merge_filesets
+echo "Running generate_pheno"
+time generate_pheno
+echo "Running get_initial"
+time get_initial
+echo "Running gen_test"
+time gen_test
+echo "Running make_train_subset"
+time make_train_subset
+echo "Running proportions"
+time proportions
+echo "Running init"
+time init
+echo "Running cost"
 cost
 }
 #--------------------------------------Execution-------------------------------------
-
-execute $1
+TIMEFORMAT="Time elapsed in the full pipeline: %R"
+export TIMEFORMAT
+time execute $1

@@ -11,3 +11,4 @@ h2=#desired heritability
 covs=#TRUE if want covariates to be included else None
 template_file= #path to template file for submission
 submit_command= #submission command of the template file (e.g qsub, sbatch, etc)
+chrs= #Number of chromosomes to analyze. This will be a sequence from 1 to this number
