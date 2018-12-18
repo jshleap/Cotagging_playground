@@ -11,17 +11,17 @@ queries = c("GWAS",'UK biobank', 'UKBB')
 if (!file.exists("PLOS_intersect.R")){
   print('Getting PLOS')
   # plos + uk biobank 194
-  plosgwas <- ft_search(query = "GWAS + 'UK biobank'", from = "plos", limit=1000)
+  #plosgwas <- ft_search(query = "GWAS + 'UK biobank'", from = "plos", limit=1000)
   
-#PLOS Search API rate limit: Please limit your API requests to 7200 requests a day,
-# plos GWAS 4858
-#plosgwas <- ft_search(query = "GWAS", from = "plos", limit=4858)
-# plos UKBB 31
-#plosukbb <- ft_search(query = "UKBB", from = "plos", limit=31)
-# plos 'UK biobank' 2034
-#plosukbb2 <- ft_search(query = "'UK biobank'", from = "plos", limit=2034)
-#PLOS <- intersect(unique(union(plosukbb2$plos$data$id, plosukbb$plos$data$id)), plosgwas$plos$data$id)
-save(PLOS, file = 'PLOS_intersect.R')}else{
+  #PLOS Search API rate limit: Please limit your API requests to 7200 requests a day,
+  # plos GWAS 4858
+  plosgwas <- ft_search(query = "GWAS", from = "plos", limit=4858)
+  # plos UKBB 31
+  plosukbb <- ft_search(query = "UKBB", from = "plos", limit=31)
+  # plos 'UK biobank' 2034
+  plosukbb2 <- ft_search(query = "'UK biobank'", from = "plos", limit=5000)
+  PLOS <- intersect(unique(union(plosukbb2$plos$data$id, plosukbb$plos$data$id)), plosgwas$plos$data$id)
+  save(PLOS, file = 'PLOS_intersect.R')}else{
     load('PLOS_intersect.R')
 }
 
@@ -104,15 +104,16 @@ if (file.exists("BIOARXIV.R")){
   }
 ####
 if (file.exists("SCOPUS.R")){
-  # Scopus GWAS + "UK biobnak" 665
-  SCOPUS <- ft_search(query='GWAS "UK biobank"', from='scopus', limit=665)$scopus$data$'prism:doi'
+  # Scopus GWAS + "UK biobnak" 679
+  SCOPUS <- ft_search(query='GWAS "UK biobank"', from='scopus', limit=1000)$scopus$data$'prism:doi'
   SCOPUS <- SCOPUS[!is.na(SCOPUS)]
   save(SCOPUS, file = "SCOPUS.R")
   }
 
 allofthem <- c(SCOPUS, BIOARXIV, ARXIV, ENTREZ, CROSSREF, BMC, PLOS)
 allofthem <- unique(allofthem)
-ft_get(allofthem, type=c('xml','pdf'))
+ft_get(allofthem, type='xml')
+ft_get(allofthem, type='pdf')
 write(allofthem, 'dois.txt')
 
 
