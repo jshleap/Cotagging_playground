@@ -326,7 +326,7 @@ compute_duo()
     echo "Running GWAS in parallel in ${chrs} chromosomes"
     p=`echo ${pcs}| sed 's/ /,/g'`
     split -n ${cpus} current_prop.bim
-    time parallel --will-cite -j 100% run_gwas ${plink} "${p}" {} \
+    time parallel --will-cite --max-procs ${cpus} run_gwas ${plink} "${p}" {} \
     ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
