@@ -321,7 +321,8 @@ compute_duo()
     fi
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes"
-    time parallel --will-cite -j 75% run_gwas ${plink} "${pcs}" {} \
+    p=`echo ${pcs}| sed 's/ /,/g'`
+    time parallel --will-cite -j 75% run_gwas ${plink} "${p}" {} \
     ${prefix} ::: `seq ${chrs}`
     cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_chr*.assoc.linear
