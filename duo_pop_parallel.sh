@@ -295,8 +295,11 @@ run_gwas(){
 # 3) chromosome
 # 4) prefix
 $1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
---covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
+--covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
 --allow-no-sex
+#$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
+#--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
+#--allow-no-sex
 }
 
 compute_duo()
@@ -322,10 +325,14 @@ compute_duo()
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes"
     p=`echo ${pcs}| sed 's/ /,/g'`
-    time parallel --will-cite -j 75% run_gwas ${plink} "${p}" {} \
-    ${prefix} ::: `seq ${chrs}`
-    cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
-    rm ${prefix}_chr*.assoc.linear
+    split -n ${cpus} current_prop.bim
+    time parallel --will-cite -j 100% run_gwas ${plink} "${p}" {} \
+    ${prefix} ::: x*
+    #${prefix} ::: `seq ${chrs}`
+    #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
+    cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
+    rm ${prefix}_x*.assoc.linear
+    #rm ${prefix}_chr*.assoc.linear
     # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
     # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
