@@ -326,6 +326,8 @@ compute_duo()
     echo "Running GWAS in parallel in ${chrs} chromosomes"
     p=`echo ${pcs}| sed 's/ /,/g'`
     split -n ${cpus} current_prop.bim
+    TIMEFORMAT="Running GWAS. Time elapsed: %R"
+    export TIMEFORMAT
     time ls x*| parallel --will-cite --max-procs ${cpus} run_gwas ${plink} \
     "${p}" {} ${prefix}
     #${prefix} ::: `seq ${chrs}`
@@ -336,7 +338,8 @@ compute_duo()
     # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
     # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
-    echo "Running Scorings"
+    TIMEFORMAT="Running Scorings. Time elapsed: %R"
+    export TIMEFORMAT
     time ${plink} --bfile current_prop --clump ${prefix}.assoc.linear \
      --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
