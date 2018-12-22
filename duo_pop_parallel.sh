@@ -294,9 +294,11 @@ run_gwas(){
 # 2) Covariate names
 # 3) chromosome
 # 4) prefix
-$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
---covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
---allow-no-sex
+# 5) chromosome or range of chromosomes
+# 6) memory
+$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory $6 \
+--covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --chr $5 \
+--keep-allele-order --allow-no-sex
 #$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
 #--allow-no-sex
@@ -325,11 +327,14 @@ compute_duo()
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes"
     p=`echo ${pcs}| sed 's/ /,/g'`
-    split -n ${cpus} current_prop.bim
+    tlines=`wc -l < current_prop.bim`
+    nlines=`python -c "from math import ceil; print(ceil(${tlines}/${cpus}))"`
+    split -l ${nlines} current_prop.bim
+    pmem=`python -c "from math import ceil; print(ceil(${mem}/${cpus}))"`
     TIMEFORMAT="Running GWAS. Time elapsed: %R"
     export TIMEFORMAT
     time ls x*| parallel --will-cite --max-procs ${cpus} run_gwas ${plink} \
-    "${p}" {} ${prefix}
+    "${p}" {} ${prefix} ${chr} ${pmem}
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
