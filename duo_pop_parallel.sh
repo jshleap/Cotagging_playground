@@ -334,7 +334,7 @@ compute_duo()
     TIMEFORMAT="Running GWAS. Time elapsed: %R"
     export TIMEFORMAT
     time ls x*| parallel --will-cite --max-procs ${cpus} run_gwas ${plink} \
-    "${p}" {} ${prefix} ${chr} ${pmem}
+    "${p}" {} ${prefix} ${chrs} ${pmem}
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
