@@ -315,15 +315,17 @@ compute_duo()
   prefix="${1}_${2}"
   if [[ ! -f ${prefix}.clumped ]]
   then
-    echo -e "\nComputing summary statistics for ${prefix}\n"
+    echo -e "\nComputing summary statistics for ${prefix}\n" >&2
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
     if echo $7| grep -q -- '--covs'; then
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
     fi
+    TIMEFORMAT="GWAS done! Time elapsed: %R"
+    export TIMEFORMAT
     export -f run_gwas
-    echo "Running GWAS in parallel in ${chrs} chromosomes"
+    echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
     split -n ${cpus} current_prop.bim
     time parallel --will-cite --max-procs ${cpus} run_gwas ${plink} "${p}" {} \
@@ -336,11 +338,13 @@ compute_duo()
     # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
     # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
-    echo "Running Scorings"
+    echo "Running Scorings" >&2
+    TIMEFORMAT="Scorings Done! Time elapsed: %R"
+    export TIMEFORMAT
     time ${plink} --bfile current_prop --clump ${prefix}.assoc.linear \
      --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
-    echo -e "${prefix} has already been done"
+    echo -e "${prefix} has already been done" >&2
   fi
   if [[ ! -f ${prefix}.myscore ]]; then
     grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" \
@@ -357,6 +361,8 @@ compute_duo()
       $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
       --pheno train.pheno --out ${pop}_${prefix} $4
       echo "Running correlation for pop ${pop}"
+      TIMEFORMAT="Correlations Done! Time elapsed: %R"
+      export TIMEFORMAT
       time outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
     fi
   done
@@ -390,7 +396,7 @@ gen_keeps_n_covs()
 merge_filesets(){
 if [[ ! -f ${genos}/EURnASNnAFRnAD.bed ]]
     then
-      echo -e "\n\nGenerating merged filesets"
+      echo -e "\n\nGenerating merged filesets" >&2
       echo -e "${genos}/EUR\n${genos}/ASN\n${genos}/AFR\n${genos}/AD" > merge.list
       comm -12 <(comm -12 <(comm -12 <(sort ${genos}/EUR.bim) \
       <(sort ${genos}/ASN.bim)) <(sort ${genos}/AFR.bim)) \
@@ -405,18 +411,18 @@ fi
 
 generate_pheno(){
 if [[ ! -f train.pheno ]]; then
-    echo -e "\n\nGenerating phenotypes\n"
+    echo -e "\n\nGenerating phenotypes\n" >&2
     export plink
     qtrait_simulation
     else
-      echo -e "\n\nPhenotypes already present... moving on\n"
+      echo -e "\n\nPhenotypes already present... moving on\n" >&2
 fi
 }
 
 get_initial(){
 sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
 if [ ! -f ${target}.test ]; then
-    echo -e "\n\nGenerating keep files"
+    echo -e "\n\nGenerating keep files" >&2
     comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
     # split train/test in EUR
     sort -R EUR.rest| head -n ${sample} > EUR.train
@@ -425,13 +431,13 @@ if [ ! -f ${target}.test ]; then
     sort -R ${genos}/${target}.keep| head -n ${sample} > ${target}.train
     comm -23 <(sort ${genos}/${target}.keep) <(sort ${target}.train) > ${target}.test
     else
-      echo -e "\n\nTrain/test Keep files already present\n"
+      echo -e "\n\nTrain/test Keep files already present\n" >&2
 fi
 }
 
 gen_test(){
 if [[ ! -f EUR_test.bed ]]; then
-    echo -e "\n\nGenerating test filesets"
+    echo -e "\n\nGenerating test filesets" >&2
     # create the test filesets
     $plink --bfile ${genos}/${target} --keep ${target}.test --make-bed \
     --out ${target}_test ${common_plink}
@@ -452,7 +458,7 @@ proportions(){
 prop=NONE
 const=NONE
 sequence=`seq 0 ${step} ${sample}`
-echo -e "\n\nStarting Original"
+echo -e "\n\nStarting Original" >&2
 if [[ -f proportions.tsv ]]
     then
         pre=`cut -f1 proportions.tsv`
@@ -464,7 +470,7 @@ fi
 for i in ${sequ}
 do
     eur=$(( sample - i ))
-    echo -e "\n\nProcesing $eur european and $i $target"
+    echo -e "\n\nProcesing $eur european and $i $target" >&2
     t=`bc <<< "(${eur} == 0)"`
     if [[ $eur = $sample ]]; then
       head -n ${eur} EUR.train > ${i}.keep
@@ -478,8 +484,10 @@ do
       head -n ${i} ${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
+    TIMEFORMAT="compute_duo proportions Done! Time elapsed: %R"
+    export TIMEFORMAT
     echo "Running compute_duo proportions ${i} ${all} "${common_plink}" \
-    "${target} ${others}" ${i}.keep "${covs}""
+    "${target} ${others}" ${i}.keep "${covs}"" >&2
     time compute_duo proportions ${i} ${all} "${common_plink}" \
     "${target} ${others}" ${i}.keep "${covs}"
 done
@@ -494,16 +502,18 @@ if [[ -f init.tsv ]]
     else
         sequ=${sequence}
 fi
-echo -e "\n\nStarting constant initial source add mixing"
+echo -e "\n\nStarting constant initial source add mixing" >&2
 for i in ${sequ}
 do
     eur=$(( sample - i ))
-    echo -e "\n\nProcesing $eur european and $i $target with start of $init"
+    echo -e "\n\nProcesing $eur european and $i $target with start of $init" >&2
     cat initial.keep > init_${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
+   TIMEFORMAT="compute_duo init Done! Time elapsed: %R"
+   export TIMEFORMAT
    echo "compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
-   init_${i}.keep "${covs}""
+   init_${i}.keep "${covs}"" >&2
    time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    init_${i}.keep "${covs}"
 done
@@ -519,7 +529,7 @@ if [[ -f cost.tsv ]]
     else
         sequ=${sequence}
 fi
-echo -e "\n\nStarting cost"
+echo -e "\n\nStarting cost" >&2
 for j in ${sequ}
 do
     eu=`bc <<< "scale = 1; $j/10"`
@@ -528,7 +538,7 @@ do
     n=`bc <<< "$n/1"`
     eu=`bc <<< "($n * $eu)/1"`
     ad=`bc <<< "($n * $ad)/1"`
-    echo -e "\n\nProcesing $eu european and $ad admixed"
+    echo -e "\n\nProcesing $eu european and $ad admixed" >&2
     if [[ ! $ad = 0  ]]; then
         sort -R ${target}.train| head -n $ad > frac_${j}.keep
     fi
@@ -537,7 +547,9 @@ do
     fi
     # Perform associations and clumping
     echo "compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
-    frac_${j}.keep "${covs}""
+    frac_${j}.keep "${covs}"" >&2
+    TIMEFORMAT="compute_duo cost Done! Time elapsed: %R"
+    export TIMEFORMAT
     time compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
     frac_${j}.keep "${covs}"
 done
@@ -549,30 +561,57 @@ execute(){
 source $1
 cwd=$PWD
 membytes=$(( mem * 1000000 ))
-echo "Performing Rawlsian analysis of two Populations with target ${target}"
+echo "Performing Rawlsian analysis of two Populations with target ${target}" >&2
 step=$(( sample/10 ))
 others=`echo 'EUR ASN AFR AD' | sed -e "s/$target //"`
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
-echo "Running gen_keeps_n_covs"
+
+TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
+export TIMEFORMAT
+echo "Running gen_keeps_n_covs" >&2
 time gen_keeps_n_covs
-echo "Running merge_filesets"
+
+TIMEFORMAT="merge_filesets done! Time elapsed: %R"
+export TIMEFORMAT
+echo "Running merge_filesets" >&2
 time merge_filesets
-echo "Running generate_pheno"
+
+echo "Running generate_pheno" >&2
+TIMEFORMAT="generate_pheno done! Time elapsed: %R"
+export TIMEFORMAT
 time generate_pheno
-echo "Running get_initial"
+
+echo "Running get_initial" >&2
+TIMEFORMAT="get_initial done! Time elapsed: %R"
+export TIMEFORMAT
 time get_initial
-echo "Running gen_test"
+
+echo "Running gen_test" >&2
+TIMEFORMAT="get_test done! Time elapsed: %R"
+export TIMEFORMAT
 time gen_test
-echo "Running make_train_subset"
+
+echo "Running make_train_subset" >&2
+TIMEFORMAT="make_train_subset done! Time elapsed: %R"
+export TIMEFORMAT
 time make_train_subset
-echo "Running proportions"
+
+echo "Running proportions" >&2
+TIMEFORMAT="proportions done! Time elapsed: %R"
+export TIMEFORMAT
 time proportions
-echo "Running init"
+
+echo "Running init" >&2
+TIMEFORMAT="init done! Time elapsed: %R"
+export TIMEFORMAT
 time init
-echo "Running cost"
-cost
+
+echo "Running cost" >&2
+TIMEFORMAT="cost done! Time elapsed: %R"
+export TIMEFORMAT
+time cost
 }
 #--------------------------------------Execution-------------------------------------
 TIMEFORMAT="Time elapsed in the full pipeline: %R"
