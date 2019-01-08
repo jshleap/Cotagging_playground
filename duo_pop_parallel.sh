@@ -334,7 +334,6 @@ compute_duo()
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_x*.assoc.linear
-    #rm ${prefix}_chr*.assoc.linear
     # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
     # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
