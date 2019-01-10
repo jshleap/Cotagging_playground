@@ -328,10 +328,10 @@ compute_duo()
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_prop.bim`
-    nlines=`python -c "import numpy as np; print(np.ceil(${blines}/${cpus}"`
+    nlines=`python -c "import numpy as np; print(np.ceil(${blines}/${cpus}))"`
     split -l ${nlines} current_prop.bim
-    time parallel --will-cite --max-procs ${cpus} run_gwas ${plink} "${p}" {} \
-    ${prefix} ::: x*
+    time parallel --will-cite ${multi} --j ${cpus} run_gwas ${plink} "${p}" \
+    {} ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
@@ -568,6 +568,9 @@ others=`echo 'EUR ASN AFR AD' | sed -e "s/${target} //"`
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
+if [[ -z $PBS_NODEFILE ]]; then
+ multi="--env $PBS_O_WORKDIR --sshloginfile $PBS_NODEFILE"
+fi
 
 TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
 export TIMEFORMAT

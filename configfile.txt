@@ -1,6 +1,6 @@
 # The config file should have these mandatory fields:
 
-cpus=# CPUs per submission. Needs to be at least chrs (see below)
+cpus=# CPUs per node in submission (a.k.a. ppn in PBS).
 mem=# max memory per submission
 genos=#path to genotype files (bed files)
 plink=#path to plink executable
