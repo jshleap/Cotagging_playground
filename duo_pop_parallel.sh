@@ -275,7 +275,7 @@ outp()
   n="${infn//[!0-9]/}"
   Pop=$2
   outfn=$3
-  echo -e "$n\t`corr $infn`\t$Pop" >> $outfn
+  echo -e "$n\t`corr $infn`\t$Pop" >> ${outfn}
 }
 
 python_merge()
@@ -327,7 +327,9 @@ compute_duo()
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
-    split -n ${cpus} current_prop.bim
+    blines=`wc -l < current_prop.bim`
+    nlines=`python -c "import numpy as np; print(np.ceil(${blines}/${cpus}"`
+    split -l ${nlines} current_prop.bim
     time parallel --will-cite --max-procs ${cpus} run_gwas ${plink} "${p}" {} \
     ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
@@ -357,7 +359,7 @@ compute_duo()
         cp ${pop}.bim ${pop}_test.bim
         cp ${pop}.fam ${pop}_test.fam
       fi
-      $plink --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
+      ${plink} --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
       --pheno train.pheno --out ${pop}_${prefix} $4
       echo "Running correlation for pop ${pop}"
       TIMEFORMAT="Correlations Done! Time elapsed: %R"
@@ -420,7 +422,7 @@ fi
 
 get_initial(){
 sort -R ${genos}/EUR.keep| head -n ${init} > initial.keep
-if [ ! -f ${target}.test ]; then
+if [[ ! -f ${target}.test ]]; then
     echo -e "\n\nGenerating keep files" >&2
     comm -23 <(sort ${genos}/EUR.keep) <(sort initial.keep) > EUR.rest
     # split train/test in EUR
@@ -471,7 +473,7 @@ do
     eur=$(( sample - i ))
     echo -e "\n\nProcesing $eur european and $i $target" >&2
     t=`bc <<< "(${eur} == 0)"`
-    if [[ $eur = $sample ]]; then
+    if [[ ${eur} = ${sample} ]]; then
       head -n ${eur} EUR.train > ${i}.keep
       #cat EUR.train > ${i}.keep
       #cp EUR.train constant_${i}.keep
@@ -537,12 +539,12 @@ do
     n=`bc <<< "$n/1"`
     eu=`bc <<< "($n * $eu)/1"`
     ad=`bc <<< "($n * $ad)/1"`
-    echo -e "\n\nProcesing $eu european and $ad admixed" >&2
-    if [[ ! $ad = 0  ]]; then
+    echo -e "\n\nProcesing ${eu} european and ${ad} admixed" >&2
+    if [[ ! ${ad} = 0  ]]; then
         sort -R ${target}.train| head -n $ad > frac_${j}.keep
     fi
     if [[ ! $eu = 0  ]]; then
-        sort -R EUR.train| head -n $eu >> frac_${j}.keep
+        sort -R EUR.train| head -n ${eu} >> frac_${j}.keep
     fi
     # Perform associations and clumping
     echo "compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
@@ -562,7 +564,7 @@ cwd=$PWD
 membytes=$(( mem * 1000000 ))
 echo "Performing Rawlsian analysis of two Populations with target ${target}" >&2
 step=$(( sample/10 ))
-others=`echo 'EUR ASN AFR AD' | sed -e "s/$target //"`
+others=`echo 'EUR ASN AFR AD' | sed -e "s/${target} //"`
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
