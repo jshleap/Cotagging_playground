@@ -328,7 +328,7 @@ compute_duo()
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_prop.bim`
-    nlines=`python -c "import numpy as np; print(np.ceil(${blines}/${cpus}))"`
+    nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
     split -l ${nlines} current_prop.bim
     time parallel --will-cite ${multi} --j ${cpus} run_gwas ${plink} "${p}" \
     {} ${prefix} ::: x*
