@@ -9,6 +9,4 @@ sample=#number of individuals to be analized in the testing set
 target=#name of target population
 h2=#desired heritability
 covs=#TRUE if want covariates to be included else None
-template_file= #path to template file for submission
-submit_command= #submission command of the template file (e.g qsub, sbatch, etc)
-chrs= #Chromosomes to analyze. Can be a chromosome or a range (e.g 2-5 will do chrs 2, 3, 4 and 5)
+chrs= #Number of chromosomes to analyze. This will be a sequence from 1 to this number
