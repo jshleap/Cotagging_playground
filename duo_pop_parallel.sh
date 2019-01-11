@@ -316,7 +316,7 @@ compute_duo()
   if [[ ! -f ${prefix}.clumped ]]
   then
     echo -e "\nComputing summary statistics for ${prefix}\n" >&2
-    ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
+    ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4 --chr ${chrs}
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
     if echo $7| grep -q -- '--covs'; then
         python_merge
@@ -361,7 +361,7 @@ compute_duo()
       fi
       ${plink} --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
       --pheno train.pheno --out ${pop}_${prefix} $4
-      echo "Running correlation for pop ${pop}"
+      echo "Running correlation for pop ${pop}" >&2
       TIMEFORMAT="Correlations Done! Time elapsed: %R"
       export TIMEFORMAT
       time outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
@@ -477,7 +477,7 @@ do
       head -n ${eur} EUR.train > ${i}.keep
       #cat EUR.train > ${i}.keep
       #cp EUR.train constant_${i}.keep
-    elif [ ${t} -ne 1 ]; then
+    elif [[ ${t} -ne 1 ]]; then
       head -n ${eur} EUR.train > ${i}.keep
       head -n ${i} ${target}.train >> ${i}.keep
       cp EUR.train constant_${i}.keep
@@ -568,13 +568,13 @@ others=`echo 'EUR ASN AFR AD' | sed -e "s/${target} //"`
 common_plink="--keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
-if [[ -z $PBS_NODEFILE ]]; then
+if [[ ${nodes} > 1 ]]; then
  multi="--env $PBS_O_WORKDIR --sshloginfile $PBS_NODEFILE"
 fi
 
 TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
 export TIMEFORMAT
-echo "Running gen_keeps_n_covs" >&2
+echo "Running gen_keeps_n_covs" >&2f
 time gen_keeps_n_covs
 
 TIMEFORMAT="merge_filesets done! Time elapsed: %R"
