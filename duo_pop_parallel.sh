@@ -296,7 +296,8 @@ run_gwas(){
 # 4) prefix
 $1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
 --covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
---allow-no-sex
+${common_plink}
+#--allow-no-sex
 #$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
 #--allow-no-sex
@@ -329,8 +330,10 @@ compute_duo()
   prefix="${1}_${2}"
   if [[ ! -f ${prefix}.clumped ]]
   then
-    echo -e "\nComputing summary statistics for ${prefix}\n" >&2
+    echo -e "\nComputing summary statistics for ${prefix}:\n" >&2
+    echo -e "${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4 ${common_plink}" >&2
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4 ${common_plink}
+    echo -e "flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4"
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
     if echo $7| grep -q -- '--covs'; then
         python_merge
