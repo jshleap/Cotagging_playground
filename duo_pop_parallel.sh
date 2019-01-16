@@ -331,8 +331,8 @@ compute_duo()
   if [[ ! -f ${prefix}.clumped ]]
   then
     echo -e "\nComputing summary statistics for ${prefix}:\n" >&2
-    echo -e "${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4 ${common_plink}" >&2
-    ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4 ${common_plink}
+    echo -e "${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4" >&2
+    ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
     echo -e "flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4"
     flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
     if echo $7| grep -q -- '--covs'; then
@@ -360,7 +360,7 @@ compute_duo()
     TIMEFORMAT="Scorings Done! Time elapsed: %R"
     export TIMEFORMAT
     time ${plink} --bfile current_prop --clump ${prefix}.assoc.linear \
-     --clump-p1 0.01 --pheno train.pheno ${common_plink} --out ${prefix} $4
+     --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
     echo -e "${prefix} has already been done" >&2
   fi
