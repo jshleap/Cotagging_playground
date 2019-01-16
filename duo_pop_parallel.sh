@@ -304,16 +304,20 @@ ${common_plink}
 }
 
 forloopcorr(){
-  if [[ ! -f ${1}_${prefix}.profile ]]; then
+# 1) fileset prefix
+# 2) out prefix
+# 3) prefix
+# 4) plink
+  if [[ ! -f ${1}_${3}.profile ]]; then
     if [[ ! -f ${1}_test.bed ]]; then
         cp ${1}.bed ${1}_test.bed
         cp ${1}.bim ${1}_test.bim
         cp ${1}.fam ${1}_test.fam
     fi
-  ${plink} --bfile ${1}_test --score ${prefix}.myscore 2 4 7 sum center \
-  --pheno train.pheno --out ${1}_${prefix} $4
+  ${4} --bfile ${1}_test --score ${3}.myscore 2 4 7 sum center \
+  --pheno train.pheno --out ${1}_${3} $4
   echo "Running correlation for pop ${1}" >&2
-  time outp ${1}_${prefix}.profile ${1} ${2}.tsv
+  time outp ${1}_${3}.profile ${1} ${2}.tsv
   fi
 }
 
@@ -372,7 +376,9 @@ compute_duo()
   export TIMEFORMAT
   export -f forloopcorr
   export -f outp
-  time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ::: $5
+  export -f corr
+  time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ${prefix} \
+  ${plink}::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
