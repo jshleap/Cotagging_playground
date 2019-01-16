@@ -371,6 +371,7 @@ compute_duo()
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
+  export -f outp
   time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ::: $5
 #  for pop in $5
 #  do
