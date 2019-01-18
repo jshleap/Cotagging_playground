@@ -308,6 +308,7 @@ forloopcorr(){
 # 2) out prefix
 # 3) prefix
 # 4) plink
+# 4) plink common flags
   if [[ ! -f ${1}_${3}.profile ]]; then
     if [[ ! -f ${1}_test.bed ]]; then
         cp ${1}.bed ${1}_test.bed
@@ -315,9 +316,18 @@ forloopcorr(){
         cp ${1}.fam ${1}_test.fam
     fi
   ${4} --bfile ${1}_test --score ${3}.myscore 2 4 7 sum center \
-  --pheno train.pheno --out ${1}_${3} $4
+  --pheno train.pheno --out ${1}_${3} $5
   echo "Running correlation for pop ${1}" >&2
-  time outp ${1}_${3}.profile ${1} ${2}.tsv
+  infn=${1}_${3}.profile
+  n="${infn//[!0-9]/}"
+  Pop=$1
+  outfn=${2}.tsv
+  correl=`awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)
+  my=sy/(n-1); cov+=($3-mx)*($6-my)
+  ssdx+=($3-mx)*($3-mx); ssdy+=($6-my)*($6-my);} END {
+  print (cov / ( sqrt(ssdx) * sqrt(ssdy)) )^2 }' pass=1 ${infn} pass=2 ${infn}`
+  echo -e "$n\t`${correl}`\t$Pop" >> ${outfn}
+  #time outp ${1}_${3}.profile ${1} ${2}.tsv
   fi
 }
 
@@ -375,10 +385,10 @@ compute_duo()
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
-  export -f outp
-  export -f corr
+  #export -f outp
+  #export -f corr
   time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ${prefix} \
-  ${plink}::: $5
+  ${plink} ${common_plink} ::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
