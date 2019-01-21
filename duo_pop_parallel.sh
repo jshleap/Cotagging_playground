@@ -308,7 +308,7 @@ forloopcorr(){
 # 2) out prefix
 # 3) prefix
 # 4) plink
-# 4) plink common flags
+# 5) plink common flags
   if [[ ! -f ${1}_${3}.profile ]]; then
     if [[ ! -f ${1}_test.bed ]]; then
         cp ${1}.bed ${1}_test.bed
@@ -361,8 +361,8 @@ compute_duo()
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
     split -l ${nlines} current_prop.bim
-    time parallel --will-cite ${multi} --j ${cpus} run_gwas ${plink} "${p}" \
-    {} ${prefix} ::: x*
+    time parallel --will-cite --env _ ${multi} --j ${cpus} run_gwas ${plink} \
+    "${p}" {} ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
@@ -387,8 +387,8 @@ compute_duo()
   export -f forloopcorr
   #export -f outp
   #export -f corr
-  time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ${prefix} \
-  ${plink} ${common_plink} ::: $5
+  time parallel --will-cite --env _ ${multi} --j ${cpus} forloopcorr {} $1 \
+  ${prefix} ${plink} "'${common_plink}'" ::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
