@@ -326,7 +326,7 @@ forloopcorr(){
   my=sy/(n-1); cov+=($3-mx)*($6-my)
   ssdx+=($3-mx)*($3-mx); ssdy+=($6-my)*($6-my);} END {
   print (cov / ( sqrt(ssdx) * sqrt(ssdy)) )^2 }' pass=1 ${infn} pass=2 ${infn}`
-  echo -e "$n\t`${correl}`\t$Pop" >> ${outfn}
+  echo -e "$n\t${correl}\t$Pop" >> ${outfn}
   #time outp ${1}_${3}.profile ${1} ${2}.tsv
   fi
 }
