@@ -241,8 +241,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     else:
         g, bim, truebeta, causals = pd.read_pickle(picklefile)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
-        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv,
-                                          covs=covs, force_h2=force_h2)
+        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, covs=covs,
+                                          force_h2=force_h2)
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
