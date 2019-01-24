@@ -257,7 +257,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     return pheno, realized_h2, (g, bim, truebeta, causals)
 
 qtraits_simulation(train, "'${pops4}'", ${h2}, 100, threads=${cpus}, freq_thresh=0,
-                   force_h2=True, max_memory=${membytes} covs=${covs})
+                   force_h2=True, max_memory=${membytes}, covs=${covs})
 EOF
 }
 
