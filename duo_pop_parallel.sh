@@ -582,6 +582,17 @@ TIMEFORMAT="cost done! Time elapsed: %R"
 export TIMEFORMAT
 }
 
+prepare_multinode(){
+parallel --record-env
+sed -i '/BASH/d' .parallel/ignored_vars
+IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]" ", "`
+nnodes=$(( ${#ARR[@]} - 1 ))
+multi="--env _"
+for i in `seq 1 ${nnodes}`; do
+    multi="${multi} -S ${ARR[0]}${ARR[i]}"
+done
+}
+
 execute(){
 # Get the config file
 #parse_config_file $1
@@ -595,7 +606,7 @@ common_plink="--chr ${chrs} --keep-allele-order --allow-no-sex --threads ${cpus}
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
 if [[ ${nodes} > 1 ]]; then
- multi="--env $PBS_O_WORKDIR --sshloginfile $PBS_NODEFILE"
+ prepare_multinode
 fi
 
 TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
