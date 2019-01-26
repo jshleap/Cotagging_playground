@@ -241,8 +241,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     else:
         g, bim, truebeta, causals = pd.read_pickle(picklefile)
     if not os.path.isfile('%s.prs_pheno.gz' % outprefix):
-        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, noenv=noenv,
-                                          covs=covs, force_h2=force_h2)
+        pheno, realized_h2 = create_pheno(outprefix, h2, truebeta, covs=covs,
+                                          force_h2=force_h2)
     else:
         pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
@@ -256,8 +256,8 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
         bim.reset_index(drop=True, inplace=True)
     return pheno, realized_h2, (g, bim, truebeta, causals)
 
-qtraits_simulation(train, ${pops4}, ${h2}, 100, threads=${cpus}, freq_thresh=0,
-                   force_h2=True, max_memory=${membytes} covs=${covs})
+qtraits_simulation('train', "${pops4}", ${h2}, 100, threads=${cpus}, freq_thresh=0,
+                   force_h2=True, max_memory=${membytes}, covs=${covs})
 EOF
 }
 
@@ -304,16 +304,30 @@ ${common_plink}
 }
 
 forloopcorr(){
-  if [[ ! -f ${1}_${prefix}.profile ]]; then
+# 1) fileset prefix
+# 2) out prefix
+# 3) prefix
+# 4) plink
+# 5) plink common flags
+  if [[ ! -f ${1}_${3}.profile ]]; then
     if [[ ! -f ${1}_test.bed ]]; then
         cp ${1}.bed ${1}_test.bed
         cp ${1}.bim ${1}_test.bim
         cp ${1}.fam ${1}_test.fam
     fi
-  ${plink} --bfile ${1}_test --score ${prefix}.myscore 2 4 7 sum center \
-  --pheno train.pheno --out ${1}_${prefix} $4
+  ${4} --bfile ${1}_test --score ${3}.myscore 2 4 7 sum center \
+  --pheno train.pheno --out ${1}_${3} $5
   echo "Running correlation for pop ${1}" >&2
-  time outp ${1}_${prefix}.profile ${1} ${2}.tsv
+  infn=${1}_${3}.profile
+  n="${infn//[!0-9]/}"
+  Pop=$1
+  outfn=${2}.tsv
+  correl=`awk 'pass==1 {sx+=$3; sy+=$6; n+=1} pass==2 {mx=sx/(n-1)
+  my=sy/(n-1); cov+=($3-mx)*($6-my)
+  ssdx+=($3-mx)*($3-mx); ssdy+=($6-my)*($6-my);} END {
+  print (cov / ( sqrt(ssdx) * sqrt(ssdy)) )^2 }' pass=1 ${infn} pass=2 ${infn}`
+  echo -e "$n\t${correl}\t$Pop" >> ${outfn}
+  #time outp ${1}_${3}.profile ${1} ${2}.tsv
   fi
 }
 
@@ -347,8 +361,8 @@ compute_duo()
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
     split -l ${nlines} current_prop.bim
-    time parallel --will-cite ${multi} --j ${cpus} run_gwas ${plink} "${p}" \
-    {} ${prefix} ::: x*
+    time parallel --will-cite --env _ ${multi} --j ${cpus} run_gwas ${plink} \
+    "${p}" {} ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
@@ -371,8 +385,10 @@ compute_duo()
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
-  export -f outp
-  time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ::: $5
+  #export -f outp
+  #export -f corr
+  time parallel --will-cite --env _ ${multi} --j ${cpus} forloopcorr {} $1 \
+  ${prefix} ${plink} "'${common_plink}'" ::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
