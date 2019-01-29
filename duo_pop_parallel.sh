@@ -309,11 +309,12 @@ forloopcorr(){
 # 3) prefix
 # 4) plink
 # 5) plink common flags
+# 6) path to genotypes
   if [[ ! -f ${1}_${3}.profile ]]; then
     if [[ ! -f ${1}_test.bed ]]; then
-        cp ${1}.bed ${1}_test.bed
-        cp ${1}.bim ${1}_test.bim
-        cp ${1}.fam ${1}_test.fam
+        ln -s ${genos}/${1}.bed ${1}_test.bed
+        ln-s ${genos}/${1}.bim ${1}_test.bim
+        ln -s ${genos}/${1}.fam ${1}_test.fam
     fi
   ${4} --bfile ${1}_test --score ${3}.myscore 2 4 7 sum center \
   --pheno train.pheno --out ${1}_${3} $5
@@ -388,7 +389,7 @@ compute_duo()
   #export -f outp
   #export -f corr
   time parallel --will-cite --env _ ${multi} --j ${cpus} forloopcorr {} $1 \
-  ${prefix} ${plink} "'${common_plink}'" ::: $5
+  ${prefix} ${plink} "'${common_plink}'" ${genos} ::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
