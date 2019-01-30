@@ -313,7 +313,7 @@ forloopcorr(){
   if [[ ! -f ${1}_${3}.profile ]]; then
     if [[ ! -f ${1}_test.bed ]]; then
         ln -s ${genos}/${1}.bed ${1}_test.bed
-        ln-s ${genos}/${1}.bim ${1}_test.bim
+        ln -s ${genos}/${1}.bim ${1}_test.bim
         ln -s ${genos}/${1}.fam ${1}_test.fam
     fi
   ${4} --bfile ${1}_test --score ${3}.myscore 2 4 7 sum center \
