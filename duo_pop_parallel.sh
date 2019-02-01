@@ -348,8 +348,8 @@ compute_duo()
     echo -e "\nComputing summary statistics for ${prefix}:\n" >&2
     echo -e "${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4" >&2
     ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
-    echo -e "flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4"
-    flashpca --bfile current_prop -n ${cpus} -m ${mem} -d 4
+    echo -e "${flashpca} --bfile current_prop -n ${cpus} -m ${mem} -d 4"
+    ${flashpca} --bfile current_prop -n ${cpus} -m ${mem} -d 4
     if echo $7| grep -q -- '--covs'; then
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`

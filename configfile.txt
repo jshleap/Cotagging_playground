@@ -10,3 +10,4 @@ target=#name of target population
 h2=#desired heritability
 covs=#TRUE if want covariates to be included else None
 chrs=#range or list (how it is passed to plink, eg. 19-22) of chromosomes to subset
+flashpca=# Include path to flashpca software
