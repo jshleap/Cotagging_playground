@@ -18,6 +18,7 @@ chmod +x flashpca_x86-64
 # get flashpca in your profile
 echo "export PATH=$PATH:$PWD" >> ~/.bashrc
 # install pandas_plink
-git clone https://github.com/limix/pandas-plink.git && cd pandas-plink
+git clone https://github.com/limix/pandas-plink.git
+cd pandas-plink
 python3 setup.py install --prefix=$HOME/.local
 cd ${cwd}
