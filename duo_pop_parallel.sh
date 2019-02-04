@@ -31,7 +31,7 @@ python3 - << EOF
 import os
 import gc
 import dask
-import pickle
+import dill as pickle
 import numpy as np
 import pandas as pd
 from chest import Chest
@@ -365,7 +365,7 @@ compute_duo()
     time parallel --will-cite --env _ ${multi} --j ${cpus} run_gwas ${plink} \
     "${p}" {} ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
-    #cat ${prefix}_chr*.assoc.linear > ${prefix}.assoc.linear
+    #cat ${prefix}_chr*.assoc.licd near > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_x*.assoc.linear
     # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
