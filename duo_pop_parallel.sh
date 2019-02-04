@@ -362,8 +362,8 @@ compute_duo()
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
     split -l ${nlines} current_prop.bim
-    time parallel --will-cite --env _ ${multi} --j ${cpus} run_gwas ${plink} \
-    "${p}" {} ${prefix} ::: x*
+    time parallel --will-cite${multi} --j ${cpus} run_gwas ${plink} "${p}" {} \
+    ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.licd near > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
@@ -388,8 +388,8 @@ compute_duo()
   export -f forloopcorr
   #export -f outp
   #export -f corr
-  time parallel --will-cite --env _ ${multi} --j ${cpus} forloopcorr {} $1 \
-  ${prefix} ${plink} "'${common_plink}'" ${genos} ::: $5
+  time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ${prefix} \
+  ${plink} "'${common_plink}'" ${genos} ::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
@@ -604,7 +604,7 @@ parallel --record-env
 sed -i '/BASH/d' .parallel/ignored_vars
 IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]" ", "`
 nnodes=$(( ${#ARR[@]} - 1 ))
-multi="--env _"
+multi=" --env _"
 for i in `seq 1 ${nnodes}`; do
     multi="${multi} -S ${ARR[0]}${ARR[i]}"
 done
