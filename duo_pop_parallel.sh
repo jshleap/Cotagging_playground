@@ -360,7 +360,7 @@ compute_duo()
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_prop.bim`
-    nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
+    nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
     split -l ${nlines} current_prop.bim
     time parallel --will-cite${multi} --j ${cpus} run_gwas ${plink} "${p}" {} \
     ${prefix} ::: x*
@@ -624,6 +624,8 @@ pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
 if [[ ${nodes} > 1 ]]; then
  prepare_multinode
+ processes=$(( nodes * cpus )); else
+ processes=${cpus}
 fi
 
 TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
