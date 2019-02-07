@@ -358,7 +358,7 @@ compute_duo()
     export TIMEFORMAT
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
-    echo "Spliting current_prop.bim into ${nodes} nodes * ${cpus} cpus = ${processes} chunks"
+    echo "Spliting current_prop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks"
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
@@ -625,7 +625,7 @@ pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
 if [[ ${nodes} > 1 ]]; then
  prepare_multinode
- processes=$(( nodes * cpus )); else
+ processes=$(( nnodes * cpus )); else
  processes=${cpus}
 fi
 
