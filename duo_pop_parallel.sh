@@ -601,6 +601,7 @@ export TIMEFORMAT
 }
 
 prepare_multinode(){
+echo "More than one node, preparing parallel options" >& 2
 parallel --record-env
 sed -i '/BASH/d' .parallel/ignored_vars
 IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]" ", "`
@@ -609,6 +610,7 @@ multi=" --env _"
 for i in `seq 1 ${nnodes}`; do
     multi="${multi} -S ${ARR[0]}${ARR[i]}"
 done
+echo "    Options set to ${muli}" >& 2
 }
 
 execute(){
@@ -623,11 +625,13 @@ others=`echo 'EUR ASN AFR AD' | sed -e "s/${target} //"`
 common_plink="--chr ${chrs} --keep-allele-order --allow-no-sex --threads ${cpus} --memory ${mem}"
 pops4=${genos}/EURnASNnAFRnAD
 all=${genos}/EURn${target}
-if [[ ${nodes} > 1 ]]; then
+if [[ ${nnodes} > 1 ]]; then
  prepare_multinode
  processes=$(( nnodes * cpus )); else
  processes=${cpus}
 fi
+echo "Number of processes to run ${processes}"
+export processes
 
 TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
 export TIMEFORMAT
