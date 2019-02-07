@@ -358,6 +358,7 @@ compute_duo()
     export TIMEFORMAT
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
+    echo "Spliting current_prop.bim into ${nodes} nodes * ${cpus} cpus = ${processes} chunks"
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
