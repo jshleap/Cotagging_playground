@@ -603,12 +603,21 @@ export TIMEFORMAT
 prepare_multinode(){
 echo "More than one node, preparing parallel options" >& 2
 parallel --record-env
-sed -i '/BASH/d' .parallel/ignored_vars
-IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]" ", "`
+sed -i '/BASH/d' ~/.parallel/ignored_vars
+IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]-" ", ,"`
 nnodes=$(( ${#ARR[@]} - 1 ))
 multi=" --env _"
 for i in `seq 1 ${nnodes}`; do
-    multi="${multi} -S ${ARR[0]}${ARR[i]}"
+    if [[ ${ARR[i]} == *"-"* ]]; then
+        # get the range
+        b=`echo  ${a}|tr "-" " "`
+        narr=`seq $b`
+        for a in ${narr}; do
+            multi="${multi} -S ${ARR[0]}${a}"
+        done
+    else
+        multi="${multi} -S ${ARR[0]}${ARR[i]}"
+    fi
 done
 echo "    Options set to ${muli}" >& 2
 }
