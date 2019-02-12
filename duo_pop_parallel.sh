@@ -358,7 +358,7 @@ compute_duo()
     export TIMEFORMAT
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
-    echo "Spliting current_prop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks"
+    echo "Spliting current_prop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
@@ -480,9 +480,9 @@ gen_test(){
 if [[ ! -f EUR_test.bed ]]; then
     echo -e "\n\nGenerating test filesets" >&2
     # create the test filesets
-    $plink --bfile ${genos}/${target} --keep ${target}.test --make-bed \
+    ${plink} --bfile ${genos}/${target} --keep ${target}.test --make-bed \
     --out ${target}_test ${common_plink}
-    $plink --bfile ${genos}/EUR --keep EUR.test --make-bed --out EUR_test \
+    ${plink} --bfile ${genos}/EUR --keep EUR.test --make-bed --out EUR_test \
     ${common_plink}
 fi
 }
@@ -604,8 +604,10 @@ prepare_multinode(){
 echo "More than one node, preparing parallel options" >& 2
 parallel --record-env
 sed -i '/BASH/d' ~/.parallel/ignored_vars
+sed -i '/SLURM/d' ~/.parallel/ignored_vars
+sed -i '/MODULES/d' ~/.parallel/ignored_vars
 IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]-" ", ,"`
-nnodes=$(( ${#ARR[@]} - 1 ))
+#nnodes=$(( ${#ARR[@]} + 1 ))
 multi=" --env _"
 for i in `seq 1 ${nnodes}`; do
     if [[ ${ARR[i]} == *"-"* ]]; then
@@ -619,7 +621,7 @@ for i in `seq 1 ${nnodes}`; do
         multi="${multi} -S ${ARR[0]}${ARR[i]}"
     fi
 done
-echo "    Options set to ${muli}" >& 2
+echo "    Options set to ${multi}" >& 2
 }
 
 execute(){
@@ -639,7 +641,7 @@ if [[ ${nnodes} > 1 ]]; then
  processes=$(( nnodes * cpus )); else
  processes=${cpus}
 fi
-echo "Number of processes to run ${processes}"
+echo "Number of processes to run ${processes}" >&2
 export processes
 
 TIMEFORMAT="gen_keeps_n_covs done! Time elapsed: %R"
