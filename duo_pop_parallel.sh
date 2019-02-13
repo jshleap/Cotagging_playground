@@ -363,8 +363,8 @@ compute_duo()
     blines=`wc -l < current_prop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
     split -l ${nlines} current_prop.bim
-    time parallel --will-cite${multi} --j ${cpus} run_gwas ${plink} "${p}" {} \
-    ${prefix} ::: x*
+    time parallel --will-cite${multi} --j ${cpus} --wd . run_gwas ${plink} \
+    "${p}" {} ${prefix} ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.licd near > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
@@ -606,13 +606,13 @@ parallel --record-env
 sed -i '/BASH/d' ~/.parallel/ignored_vars
 sed -i '/SLURM/d' ~/.parallel/ignored_vars
 sed -i '/MODULES/d' ~/.parallel/ignored_vars
-IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]-" ", ,"`
-#nnodes=$(( ${#ARR[@]} + 1 ))
+echo "    Processing the following nodes: $SLURM_NODELIST"  >& 2
+IFS=',' read -ra ARR <<< `echo $SLURM_NODELIST| tr "[]" ", "`
 multi=" --env _"
-for i in `seq 1 ${nnodes}`; do
+for i in `seq 1 $(( ${#ARR[@]} - 1 ))`; do
     if [[ ${ARR[i]} == *"-"* ]]; then
         # get the range
-        b=`echo  ${a}|tr "-" " "`
+        b=`echo  ${ARR[i]}|tr "-" " "`
         narr=`seq $b`
         for a in ${narr}; do
             multi="${multi} -S ${ARR[0]}${a}"
