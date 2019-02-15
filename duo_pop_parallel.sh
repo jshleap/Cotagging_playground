@@ -389,8 +389,8 @@ compute_duo()
   export -f forloopcorr
   #export -f outp
   #export -f corr
-  time parallel --will-cite ${multi} --j ${cpus} forloopcorr {} $1 ${prefix} \
-  ${plink} "'${common_plink}'" ${genos} ::: $5
+  time parallel --will-cite ${multi} --j ${cpus} --wd . forloopcorr {} $1 \
+  ${prefix} ${plink} "'${common_plink}'" ${genos} ::: $5
 #  for pop in $5
 #  do
 #    if [[ ! -f ${pop}_${prefix}.profile ]]; then
