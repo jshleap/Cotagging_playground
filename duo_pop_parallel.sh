@@ -496,13 +496,20 @@ fi
 }
 
 proportions_f(){
+# 1) number of samples to take
+# 2) step to do the mixing
+# 3) target pop
+# 4) all pops
+# 5) common flags in plink
+# 6) covs
+others=`echo 'EUR ASN AFR AD' | sed -e "s/${3} //"`
 echo -e "\n\nRunning proportions" >&2
 cwd=${PWD}
 mkdir -p proportions
 cd proportions
 prop=NONE
 const=NONE
-sequence=`seq 0 ${step} ${sample}`
+sequence=`seq 0 ${2} ${1}`
 if [[ -f proportions.tsv ]]
     then
         pre=`cut -f1 proportions.tsv`
@@ -511,27 +518,27 @@ if [[ -f proportions.tsv ]]
         sequ=${sequence}
 fi
 
+sample=$1
 for i in ${sequ}
 do
     eur=$(( sample - i ))
-    echo -e "\n\nProcesing $eur european and $i $target" >&2
+    echo -e "\n\nProcesing $eur european and $i ${3}" >&2
     t=`bc <<< "(${eur} == 0)"`
-    if [[ ${eur} = ${sample} ]]; then
+    if [[ ${eur} = ${1} ]]; then
       head -n ${eur} EUR.train > ${i}.keep
       #cat EUR.train > ${i}.keep
       #cp EUR.train constant_${i}.keep
     elif [[ ${t} -ne 1 ]]; then
       head -n ${eur} EUR.train > ${i}.keep
-      head -n ${i} ${target}.train >> ${i}.keep
+      head -n ${i} ${3}.train >> ${i}.keep
       cp EUR.train constant_${i}.keep
     else
-      head -n ${i} ${target}.train >> ${i}.keep
+      head -n ${i} ${3}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
-    echo "Running compute_duo proportions ${i} ${all} "${common_plink}" \
-    "${target} ${others}" ${i}.keep "${covs}"" >&2
-    time compute_duo proportions ${i} ${all} "${common_plink}" \
-    "${target} ${others}" ${i}.keep "${covs}"
+    echo "Running compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" \
+    ${i}.keep "${covs}"" >&2
+    time compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" ${i}.keep "${6}"
 done
 TIMEFORMAT="proportions done! Time elapsed: %R"
 export TIMEFORMAT
@@ -539,6 +546,12 @@ cd ${cwd}
 }
 
 init_f(){
+sample=$1
+target=$2
+init=$3
+all=$4
+common_plink=$5
+covs=$6
 echo -e "\n\nRunning init" >&2
 cwd=${PWD}
 mkdir -p init
@@ -572,6 +585,12 @@ cd ${cwd}
 }
 
 cost_f(){
+sample=$1
+all=$2
+common_plink=$3
+target=$4
+others=$5
+covs=$6
 echo -e "\n\nRunning cost" >&2
 cwd=${PWD}
 mkdir -p cost
@@ -590,7 +609,7 @@ for j in ${sequ}
 do
     eu=`bc <<< "scale = 1; $j/10"`
     ad=`bc <<< "scale = 1; 1 - ($j/10)"`
-    n=`bc <<< "scale = 1; $sample / (($ad * 2) + $eu)"`
+    n=`bc <<< "scale = 1; ${sample} / (($ad * 2) + $eu)"`
     n=`bc <<< "$n/1"`
     eu=`bc <<< "($n * $eu)/1"`
     ad=`bc <<< "($n * $ad)/1"`
@@ -691,7 +710,12 @@ time make_train_subset
 export -f proportions_f
 export -f init_f
 export -f cost_f
-parallel --joblog --will-cite${multi} --j ${cpus} --wd . {} ::: proportions_f init_f cost_f
+
+echo "proportions_f ${sample} ${step} ${target} ${all} ${common_plink} ${covs}" >> commands.txt
+echo "init_f ${sample} ${target} ${init} ${all} ${common_plink}  ${covs}" >> commands.txt
+echo "cost_f ${sample} ${all} ${common_plink} ${target} ${others} ${covs}" >> commads.txt
+
+parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
 
 TIMEFORMAT="Time elapsed in the full pipeline: %R"
 export TIMEFORMAT
