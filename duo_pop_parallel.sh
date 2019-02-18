@@ -292,7 +292,7 @@ EOF
 run_gwas(){
 # 1) Plink executable with path
 # 2) Covariate names
-# 3) chromosome
+# 3) snps to compute
 # 4) prefix
 $1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
 --covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
@@ -495,11 +495,14 @@ if [[ ! -f train.txt ]]
 fi
 }
 
-proportions(){
+proportions_f(){
+echo -e "\n\nRunning proportions" >&2
+cwd=${PWD}
+mkdir -p proportions
+cd proportions
 prop=NONE
 const=NONE
 sequence=`seq 0 ${step} ${sample}`
-echo -e "\n\nStarting Original" >&2
 if [[ -f proportions.tsv ]]
     then
         pre=`cut -f1 proportions.tsv`
@@ -532,9 +535,14 @@ do
 done
 TIMEFORMAT="proportions done! Time elapsed: %R"
 export TIMEFORMAT
+cd ${cwd}
 }
 
-init(){
+init_f(){
+echo -e "\n\nRunning init" >&2
+cwd=${PWD}
+mkdir -p init
+cd init
 # constant initial source add mixing
 if [[ -f init.tsv ]]
     then
@@ -560,9 +568,14 @@ do
 done
 TIMEFORMAT="init done! Time elapsed: %R"
 export TIMEFORMAT
+cd ${cwd}
 }
 
-cost(){
+cost_f(){
+echo -e "\n\nRunning cost" >&2
+cwd=${PWD}
+mkdir -p cost
+cd cost
 # do the cost derived
 sequence=`seq 0 10`
 if [[ -f cost.tsv ]]
@@ -598,6 +611,7 @@ do
 done
 TIMEFORMAT="cost done! Time elapsed: %R"
 export TIMEFORMAT
+cd ${cwd}
 }
 
 prepare_multinode(){
@@ -674,14 +688,11 @@ TIMEFORMAT="make_train_subset done! Time elapsed: %R"
 export TIMEFORMAT
 time make_train_subset
 
-echo -e "\n\nRunning proportions" >&2
-time proportions
+export -f proportions_f
+export -f init_f
+export -f cost_f
+parallel --joblog --will-cite${multi} --j ${cpus} --wd . {} ::: proportions_f init_f cost_fz
 
-echo -e "\n\nRunning init" >&2
-time init
-
-echo -e "\n\nRunning cost" >&2
-time cost
 TIMEFORMAT="Time elapsed in the full pipeline: %R"
 export TIMEFORMAT
 }
