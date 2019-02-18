@@ -691,7 +691,7 @@ time make_train_subset
 export -f proportions_f
 export -f init_f
 export -f cost_f
-parallel --joblog --will-cite${multi} --j ${cpus} --wd . {} ::: proportions_f init_f cost_fz
+parallel --joblog --will-cite${multi} --j ${cpus} --wd . {} ::: proportions_f init_f cost_f
 
 TIMEFORMAT="Time elapsed in the full pipeline: %R"
 export TIMEFORMAT
