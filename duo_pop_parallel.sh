@@ -387,24 +387,8 @@ compute_duo()
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
-  #export -f outp
-  #export -f corr
   time parallel --will-cite ${multi} --j ${cpus} --wd . forloopcorr {} $1 \
   ${prefix} ${plink} "'${common_plink}'" ${genos} ::: $5
-#  for pop in $5
-#  do
-#    if [[ ! -f ${pop}_${prefix}.profile ]]; then
-#      if [[ ! -f ${pop}_test.bed ]]; then
-#        cp ${pop}.bed ${pop}_test.bed
-#        cp ${pop}.bim ${pop}_test.bim
-#        cp ${pop}.fam ${pop}_test.fam
-#      fi
-#      ${plink} --bfile ${pop}_test --score ${prefix}.myscore 2 4 7 sum center \
-#      --pheno train.pheno --out ${pop}_${prefix} $4
-#      echo "Running correlation for pop ${pop}" >&2
-#      time outp ${pop}_${prefix}.profile ${pop} ${1}.tsv
-#    fi
-#  done
   TIMEFORMAT="compute_duo proportions Done! Time elapsed: %R"
   export TIMEFORMAT
 }
@@ -525,15 +509,15 @@ do
     echo -e "\n\nProcesing $eur european and $i ${3}" >&2
     t=`bc <<< "(${eur} == 0)"`
     if [[ ${eur} = ${1} ]]; then
-      head -n ${eur} EUR.train > ${i}.keep
+      head -n ${eur} ${cwd}/EUR.train > ${i}.keep
       #cat EUR.train > ${i}.keep
       #cp EUR.train constant_${i}.keep
     elif [[ ${t} -ne 1 ]]; then
-      head -n ${eur} EUR.train > ${i}.keep
-      head -n ${i} ${3}.train >> ${i}.keep
-      cp EUR.train constant_${i}.keep
+      head -n ${eur} ${cwd}/EUR.train > ${i}.keep
+      head -n ${i} ${cwd}/${3}.train >> ${i}.keep
+      cp ${cwd}/EUR.train constant_${i}.keep
     else
-      head -n ${i} ${3}.train >> ${i}.keep
+      head -n ${i} ${cwd}/${3}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
     echo "Running compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" \
@@ -572,8 +556,8 @@ do
     eur=$(( sample - i ))
     echo -e "\n\nProcesing $eur european and $i $target with start of $init" >&2
     cat initial.keep > init_${i}.keep
-    if [[ ! $i = 0 ]]; then head -n $i ${target}.train >> init_${i}.keep; fi
-    if [[ ! $eur = 0  ]]; then head -n $eur EUR.train >> init_${i}.keep; fi
+    if [[ ! $i = 0 ]]; then head -n $i ${cwd}/${target}.train >> init_${i}.keep; fi
+    if [[ ! $eur = 0  ]]; then head -n $eur ${cwd}/EUR.train >> init_${i}.keep; fi
    echo "compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    init_${i}.keep "${covs}"" >&2
    time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
@@ -615,10 +599,10 @@ do
     ad=`bc <<< "($n * $ad)/1"`
     echo -e "\n\nProcesing ${eu} european and ${ad} admixed" >&2
     if [[ ! ${ad} = 0  ]]; then
-        sort -R ${target}.train| head -n $ad > frac_${j}.keep
+        sort -R ${cwd}/${target}.train| head -n $ad > frac_${j}.keep
     fi
     if [[ ! $eu = 0  ]]; then
-        sort -R EUR.train| head -n ${eu} >> frac_${j}.keep
+        sort -R ${cwd}/EUR.train| head -n ${eu} >> frac_${j}.keep
     fi
     # Perform associations and clumping
     echo "compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
@@ -710,6 +694,10 @@ time make_train_subset
 export -f proportions_f
 export -f init_f
 export -f cost_f
+export -f compute_duo
+export -f python_merge
+export -f run_gwas
+export -f forloopcorr
 
 echo "proportions_f ${sample} ${step} ${target} ${all} ${common_plink} ${covs}" >> commands.txt
 echo "init_f ${sample} ${target} ${init} ${all} ${common_plink}  ${covs}" >> commands.txt
