@@ -337,22 +337,20 @@ compute_duo()
 {
   # 1 : prefix of output
   # 2 : fraction computed
-  # 3 : Path to merged plink fileset
-  # 4 : flags common to plink calls
-  # 5 : vector with names of populations
-  # 6 : keep file of prefix
-  # 7 : Covariates
-  source $8
+  # 3 : keep file of prefix
+  # 4 : Variables file
+
+  source $4
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [[ ! -f ${prefix}.clumped ]]
   then
     echo -e "\nComputing summary statistics for ${prefix}:\n" >&2
-    echo -e "${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4" >&2
-    ${plink} --bfile $3 --keep $6 --make-bed --out current_prop $4
+    echo -e "${plink} --bfile ${all} --keep $3 --make-bed --out current_prop ${common_plink}" >&2
+    ${plink} --bfile ${all} --keep $3 --make-bed --out current_prop ${common_plink}
     echo -e "${flashpca} --bfile current_prop -n ${cpus} -m ${mem} -d 4"
     ${flashpca} --bfile current_prop -n ${cpus} -m ${mem} -d 4
-    if echo $7| grep -q -- '--covs'; then
+    if echo ${covs}| grep -q -- '--covs'; then
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
     fi
@@ -367,8 +365,6 @@ compute_duo()
     split -l ${nlines} current_prop.bim
     time parallel --will-cite${multi} --j ${cpus} --wd . run_gwas ${plink} \
     "${p}" {} ${prefix} $8 ::: x*
-    #${prefix} ::: `seq ${chrs}`
-    #cat ${prefix}_chr*.assoc.licd near > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_x*.assoc.linear
     # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
@@ -390,7 +386,7 @@ compute_duo()
   export TIMEFORMAT
   export -f forloopcorr
   time parallel --will-cite ${multi} --j ${cpus} --wd . forloopcorr {} $1 \
-  ${prefix} ${plink} "'${common_plink}'" ${genos} ::: $5
+  ${prefix} ${plink} "'${common_plink}'" ${genos} ::: EUR ASN AFR AD
   TIMEFORMAT="compute_duo proportions Done! Time elapsed: %R"
   export TIMEFORMAT
 }
@@ -482,21 +478,16 @@ fi
 }
 
 proportions_f(){
-# 1) number of samples to take
-# 2) step to do the mixing
-# 3) target pop
-# 4) all pops
-# 5) common flags in plink
-# 6) others
-# 7) covs
-others=$6
+# 1) variables file
+source $1
+config_file=$1
 echo -e "\n\nRunning proportions" >&2
 cwd=${PWD}
 mkdir -p proportions
 cd proportions
 prop=NONE
 const=NONE
-sequence=`seq 0 ${2} ${1}`
+sequence=`seq 0 ${step} ${sample}`
 if [[ -f proportions.tsv ]]
     then
         pre=`cut -f1 proportions.tsv`
@@ -505,27 +496,26 @@ if [[ -f proportions.tsv ]]
         sequ=${sequence}
 fi
 
-sample=$1
 for i in ${sequ}
 do
     eur=$(( sample - i ))
-    echo -e "\n\nProcesing $eur european and $i ${3}" >&2
+    echo -e "\n\nProcesing $eur european and $i ${target}" >&2
     t=`bc <<< "(${eur} == 0)"`
-    if [[ ${eur} = ${1} ]]; then
+    if [[ ${eur} = ${sample} ]]; then
       head -n ${eur} ${cwd}/EUR.train > ${i}.keep
       #cat EUR.train > ${i}.keep
       #cp EUR.train constant_${i}.keep
     elif [[ ${t} -ne 1 ]]; then
       head -n ${eur} ${cwd}/EUR.train > ${i}.keep
-      head -n ${i} ${cwd}/${3}.train >> ${i}.keep
+      head -n ${i} ${cwd}/${target}.train >> ${i}.keep
       cp ${cwd}/EUR.train constant_${i}.keep
     else
-      head -n ${i} ${cwd}/${3}.train >> ${i}.keep
+      head -n ${i} ${cwd}/${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
-    echo "Running compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" \
+    echo "Running compute_duo proportions ${i} ${all} "${common_plink}" "${target} ${others}" \
     ${i}.keep "${covs}"" >&2
-    time compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" ${i}.keep "${6}" ${cpus} ${mem}
+    time compute_duo proportions ${i} ${i}.keep ${config_file}
 done
 TIMEFORMAT="proportions done! Time elapsed: %R"
 export TIMEFORMAT
@@ -533,13 +523,8 @@ cd ${cwd}
 }
 
 init_f(){
-sample=$1
-target=$2
-init=$3
-all=$4
-common_plink=$5
-covs=$7
-others=$6
+source $1
+config_file=$1
 echo -e "\n\nRunning init" >&2
 cwd=${PWD}
 mkdir -p init
@@ -564,8 +549,9 @@ do
     if [[ ! $eur = 0  ]]; then head -n $eur ${cwd}/EUR.train >> init_${i}.keep; fi
    echo "compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    init_${i}.keep "${covs}"" >&2
-   time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
-   init_${i}.keep "${covs}"
+   #time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
+   #init_${i}.keep "${covs}" ${config_file}
+   time compute_duo init ${i} ${i}.keep ${config_file}
 done
 TIMEFORMAT="init done! Time elapsed: %R"
 export TIMEFORMAT
@@ -573,12 +559,8 @@ cd ${cwd}
 }
 
 cost_f(){
-sample=$1
-all=$2
-common_plink=$3
-target=$4
-others=$5
-covs=$6
+source $1
+config_file=$1
 echo -e "\n\nRunning cost" >&2
 cwd=${PWD}
 mkdir -p cost
@@ -613,8 +595,10 @@ do
     frac_${j}.keep "${covs}"" >&2
     TIMEFORMAT="compute_duo cost Done! Time elapsed: %R"
     export TIMEFORMAT
-    time compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
-    frac_${j}.keep "${covs}"
+    #time compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
+    #frac_${j}.keep "${covs}" ${config_file}
+    time compute_duo cost ${j} ${j}.keep ${config_file}
+
 done
 TIMEFORMAT="cost done! Time elapsed: %R"
 export TIMEFORMAT
@@ -704,9 +688,16 @@ export -f python_merge
 export -f run_gwas
 export -f forloopcorr
 
-echo "proportions_f ${sample} ${step} ${target} ${all}'`echo ${common_plink}`' '`echo ${others}`' ${covs} $1" > commands.txt
-echo "init_f ${sample} ${target} ${init} ${all} '`echo ${common_plink}`' '`echo ${others}`' ${covs} $1"  >> commands.txt
-echo "cost_f ${sample} ${all} '`echo ${common_plink}`' ${target} '`echo ${others}`' ${covs} $1" >> commands.txt
+echo -e "sample=${sample}\nstep=${step}\ntarget=${target}" > variables.txt
+echo -e "all=${all}\n'\ncommon_plink=`echo ${common_plink}`'" >> variables.txt
+echo -e "others='`echo ${others}`'\n${covs}\nflashpca=${flashpca}" >> variables.txt
+echo -e "covs=${covs}\nchrs=${chrs}\ncpus=${cpus}" >> variables.txt
+echo -e "processes=${processes}\nplink=${plink}\nmulti=${multi}" >> variables.txt
+echo -e "genos=${genos}"  >> variables.txt
+
+echo "proportions_f ${PWD}/variables.txt" > commands.txt
+echo "init_f ${PWD}/variables.txt"  >> commands.txt
+echo "cost_f ${PWD}/variables.txt" >> commands.txt
 
 parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
 
