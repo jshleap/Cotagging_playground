@@ -279,7 +279,7 @@ outp()
 }
 
 python_merge()
-{
+{ # more predictable behaviour than join
 python - << EOF
 import pandas as pd
 df1 = pd.read_table('pcs.txt', sep='\t')
@@ -294,6 +294,7 @@ run_gwas(){
 # 2) Covariate names
 # 3) snps to compute
 # 4) prefix
+source $5
 $1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
 --covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
 ${common_plink}
@@ -341,6 +342,7 @@ compute_duo()
   # 5 : vector with names of populations
   # 6 : keep file of prefix
   # 7 : Covariates
+  source $8
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [[ ! -f ${prefix}.clumped ]]
@@ -364,7 +366,7 @@ compute_duo()
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
     split -l ${nlines} current_prop.bim
     time parallel --will-cite${multi} --j ${cpus} --wd . run_gwas ${plink} \
-    "${p}" {} ${prefix} ::: x*
+    "${p}" {} ${prefix} $8 ::: x*
     #${prefix} ::: `seq ${chrs}`
     #cat ${prefix}_chr*.assoc.licd near > ${prefix}.assoc.linear
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
@@ -523,7 +525,7 @@ do
     # Compute sumstats and clump for proportions
     echo "Running compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" \
     ${i}.keep "${covs}"" >&2
-    time compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" ${i}.keep "${6}"
+    time compute_duo proportions ${i} ${4} "${5}" "${3} ${others}" ${i}.keep "${6}" ${cpus} ${mem}
 done
 TIMEFORMAT="proportions done! Time elapsed: %R"
 export TIMEFORMAT
@@ -647,6 +649,7 @@ execute(){
 # Get the config file
 #parse_config_file $1
 source $1
+config_file=$1
 cwd=$PWD
 membytes=$(( mem * 1000000 ))
 echo "Performing Rawlsian analysis of two Populations with target ${target}" >&2
@@ -701,9 +704,9 @@ export -f python_merge
 export -f run_gwas
 export -f forloopcorr
 
-echo "proportions_f ${sample} ${step} ${target} ${all}'`echo ${common_plink}`' '`echo ${others}`' ${covs}" > commands.txt
-echo "init_f ${sample} ${target} ${init} ${all} '`echo ${common_plink}`' '`echo ${others}`' ${covs}"  >> commands.txt
-echo "cost_f ${sample} ${all} '`echo ${common_plink}`' ${target} '`echo ${others}`' ${covs}" >> commands.txt
+echo "proportions_f ${sample} ${step} ${target} ${all}'`echo ${common_plink}`' '`echo ${others}`' ${covs} $1" > commands.txt
+echo "init_f ${sample} ${target} ${init} ${all} '`echo ${common_plink}`' '`echo ${others}`' ${covs} $1"  >> commands.txt
+echo "cost_f ${sample} ${all} '`echo ${common_plink}`' ${target} '`echo ${others}`' ${covs} $1" >> commands.txt
 
 parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
 
