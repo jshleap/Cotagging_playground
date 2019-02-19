@@ -485,8 +485,9 @@ proportions_f(){
 # 3) target pop
 # 4) all pops
 # 5) common flags in plink
-# 6) covs
-others=`echo 'EUR ASN AFR AD' | sed -e "s/${3} //"`
+# 6) others
+# 7) covs
+others=$6
 echo -e "\n\nRunning proportions" >&2
 cwd=${PWD}
 mkdir -p proportions
@@ -535,7 +536,8 @@ target=$2
 init=$3
 all=$4
 common_plink=$5
-covs=$6
+covs=$7
+others=$6
 echo -e "\n\nRunning init" >&2
 cwd=${PWD}
 mkdir -p init
@@ -699,9 +701,9 @@ export -f python_merge
 export -f run_gwas
 export -f forloopcorr
 
-echo "proportions_f ${sample} ${step} ${target} ${all} ${common_plink} ${covs}" >> commands.txt
-echo "init_f ${sample} ${target} ${init} ${all} ${common_plink}  ${covs}" >> commands.txt
-echo "cost_f ${sample} ${all} ${common_plink} ${target} ${others} ${covs}" >> commads.txt
+echo "proportions_f ${sample} ${step} ${target} ${all}'`echo ${common_plink}`' '`echo ${others}`' ${covs}" > commands.txt
+echo "init_f ${sample} ${target} ${init} ${all} '`echo ${common_plink}`' '`echo ${others}`' ${covs}"  >> commands.txt
+echo "cost_f ${sample} ${all} '`echo ${common_plink}`' ${target} '`echo ${others}`' ${covs}" >> commands.txt
 
 parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
 
