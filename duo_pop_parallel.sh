@@ -295,11 +295,11 @@ run_gwas(){
 # 3) snps to compute
 # 4) prefix
 source $5
-$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
+$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 --covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
 ${common_plink}
 #--allow-no-sex
-#$1 --bfile current_prop --linear hide-covar --pheno train.pheno --memory 7000 \
+#$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
 #--allow-no-sex
 }
@@ -339,17 +339,16 @@ compute_duo()
   # 2 : fraction computed
   # 3 : keep file of prefix
   # 4 : Variables file
-
   source $4
   pcs='PC1 PC2 PC3 PC4'
   prefix="${1}_${2}"
   if [[ ! -f ${prefix}.clumped ]]
   then
     echo -e "\nComputing summary statistics for ${prefix}:\n" >&2
-    echo -e "${plink} --bfile ${all} --keep $3 --make-bed --out current_prop ${common_plink}" >&2
-    ${plink} --bfile ${all} --keep $3 --make-bed --out current_prop ${common_plink}
-    echo -e "${flashpca} --bfile current_prop -n ${cpus} -m ${mem} -d 4"
-    ${flashpca} --bfile current_prop -n ${cpus} -m ${mem} -d 4
+    echo -e "${plink} --bfile ${all} --keep $3 --make-bed --out current_pop ${common_plink}" >&2
+    ${plink} --bfile ${all} --keep $3 --make-bed --out current_pop ${common_plink}
+    echo -e "${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4"
+    ${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4
     if echo ${covs}| grep -q -- '--covs'; then
         python_merge
         pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
@@ -358,22 +357,22 @@ compute_duo()
     export TIMEFORMAT
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
-    echo "Spliting current_prop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks" >&2
+    echo "Spliting current_pop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
-    blines=`wc -l < current_prop.bim`
+    blines=`wc -l < current_pop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
-    split -l ${nlines} current_prop.bim
+    split -l ${nlines} current_pop.bim
     time parallel --will-cite${multi} --j ${cpus} --wd . run_gwas ${plink} \
     "${p}" {} ${prefix} $8 ::: x*
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_x*.assoc.linear
-    # ${plink} --bfile current_prop --linear hide-covar --pheno train.pheno \
+    # ${plink} --bfile current_pop --linear hide-covar --pheno train.pheno \
     # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
     echo "Running Scorings" >&2
     TIMEFORMAT="Scorings Done! Time elapsed: %R"
     export TIMEFORMAT
-    time ${plink} --bfile current_prop --clump ${prefix}.assoc.linear \
+    time ${plink} --bfile current_pop --clump ${prefix}.assoc.linear \
      --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
   else
     echo -e "${prefix} has already been done" >&2
@@ -387,7 +386,7 @@ compute_duo()
   export -f forloopcorr
   time parallel --will-cite ${multi} --j ${cpus} --wd . forloopcorr {} $1 \
   ${prefix} ${plink} "'${common_plink}'" ${genos} ::: EUR ASN AFR AD
-  TIMEFORMAT="compute_duo proportions Done! Time elapsed: %R"
+  TIMEFORMAT="compute_duo $1 Done! Time elapsed: %R"
   export TIMEFORMAT
 }
 
@@ -508,13 +507,13 @@ do
     elif [[ ${t} -ne 1 ]]; then
       head -n ${eur} ${cwd}/EUR.train > ${i}.keep
       head -n ${i} ${cwd}/${target}.train >> ${i}.keep
-      cp ${cwd}/EUR.train constant_${i}.keep
+      #cp ${cwd}/EUR.train constant_${i}.keep
     else
       head -n ${i} ${cwd}/${target}.train >> ${i}.keep
     fi
     # Compute sumstats and clump for proportions
-    echo "Running compute_duo proportions ${i} ${all} "${common_plink}" "${target} ${others}" \
-    ${i}.keep "${covs}"" >&2
+    echo "Running compute_duo proportions ${i} ${i}.keep with config_file:" >&2
+    cat ${config_file} >&2
     time compute_duo proportions ${i} ${i}.keep ${config_file}
 done
 TIMEFORMAT="proportions done! Time elapsed: %R"
@@ -529,6 +528,9 @@ echo -e "\n\nRunning init" >&2
 cwd=${PWD}
 mkdir -p init
 cd init
+mv ${cwd}/initial.keep
+ln -s ${cwd}/${target}.test ./
+ln -s ${cwd}/${target}.train ./
 # constant initial source add mixing
 if [[ -f init.tsv ]]
     then
@@ -547,8 +549,8 @@ do
     cat initial.keep > init_${i}.keep
     if [[ ! $i = 0 ]]; then head -n $i ${cwd}/${target}.train >> init_${i}.keep; fi
     if [[ ! $eur = 0  ]]; then head -n $eur ${cwd}/EUR.train >> init_${i}.keep; fi
-   echo "compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
-   init_${i}.keep "${covs}"" >&2
+   echo "compute_duo init ${i} ${i}.keep ${config_file} with config_file:" >&2
+   cat ${config_file} >&2
    #time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    #init_${i}.keep "${covs}" ${config_file}
    time compute_duo init ${i} ${i}.keep ${config_file}
@@ -591,12 +593,10 @@ do
         sort -R ${cwd}/EUR.train| head -n ${eu} >> frac_${j}.keep
     fi
     # Perform associations and clumping
-    echo "compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
-    frac_${j}.keep "${covs}"" >&2
+    echo "compute_duo cost ${j} ${j}.keep ${config_file} with config_file:" >&2
+    cat ${config_file} >&2
     TIMEFORMAT="compute_duo cost Done! Time elapsed: %R"
     export TIMEFORMAT
-    #time compute_duo cost ${j} ${all} "${common_plink}" "${target} ${others}" \
-    #frac_${j}.keep "${covs}" ${config_file}
     time compute_duo cost ${j} ${j}.keep ${config_file}
 
 done
@@ -688,12 +688,14 @@ export -f python_merge
 export -f run_gwas
 export -f forloopcorr
 
-echo -e "sample=${sample}\nstep=${step}\ntarget=${target}" > variables.txt
-echo -e "all=${all}\ncommon_plink='`echo ${common_plink}`'" >> variables.txt
-echo -e "others='`echo ${others}`'\nflashpca=${flashpca}" >> variables.txt
-echo -e "covs=${covs}\nchrs=${chrs}\ncpus=${cpus}" >> variables.txt
-echo -e "processes=${processes}\nplink=${plink}\nmulti='`echo ${multi}`'" >> variables.txt
-echo -e "genos=${genos}"  >> variables.txt
+
+cat $1 >  variables.txt
+
+echo -e "sample=${sample}\nstep=${step}\nall=${all}">> variables.txt
+echo -e "common_plink='`echo ${common_plink}`'" >> variables.txt
+echo -e "others='`echo ${others}`'\ncovs=${covs}" >> variables.txt
+echo -e "processes=${processes}\nmulti='`echo ${multi}`'" >> variables.txt
+
 
 echo "proportions_f ${PWD}/variables.txt" > commands.txt
 echo "init_f ${PWD}/variables.txt"  >> commands.txt
