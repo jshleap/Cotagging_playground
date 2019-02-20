@@ -689,10 +689,10 @@ export -f run_gwas
 export -f forloopcorr
 
 echo -e "sample=${sample}\nstep=${step}\ntarget=${target}" > variables.txt
-echo -e "all=${all}\n'\ncommon_plink=`echo ${common_plink}`'" >> variables.txt
-echo -e "others='`echo ${others}`'\n${covs}\nflashpca=${flashpca}" >> variables.txt
+echo -e "all=${all}\ncommon_plink='`echo ${common_plink}`'" >> variables.txt
+echo -e "others='`echo ${others}`'\nflashpca=${flashpca}" >> variables.txt
 echo -e "covs=${covs}\nchrs=${chrs}\ncpus=${cpus}" >> variables.txt
-echo -e "processes=${processes}\nplink=${plink}\nmulti=${multi}" >> variables.txt
+echo -e "processes=${processes}\nplink=${plink}\nmulti='`echo ${multi}`'" >> variables.txt
 echo -e "genos=${genos}"  >> variables.txt
 
 echo "proportions_f ${PWD}/variables.txt" > commands.txt
