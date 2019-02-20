@@ -362,7 +362,7 @@ compute_duo()
     blines=`wc -l < current_pop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
     split -l ${nlines} current_pop.bim
-    time parallel --will-cite${multi} --j ${cpus} --wd . run_gwas ${plink} \
+    time parallel --will-cite ${multi} --j ${cpus} --wd . run_gwas ${plink} \
     "${p}" {} ${prefix} $8 ::: x*
     cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_x*.assoc.linear
@@ -528,7 +528,7 @@ echo -e "\n\nRunning init" >&2
 cwd=${PWD}
 mkdir -p init
 cd init
-mv ${cwd}/initial.keep
+mv ${cwd}/initial.keep ./
 ln -s ${cwd}/${target}.test ./
 ln -s ${cwd}/${target}.train ./
 # constant initial source add mixing
@@ -553,7 +553,7 @@ do
    cat ${config_file} >&2
    #time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    #init_${i}.keep "${covs}" ${config_file}
-   time compute_duo init ${i} ${i}.keep ${config_file}
+   time compute_duo init ${i} init_${i} ${config_file}
 done
 TIMEFORMAT="init done! Time elapsed: %R"
 export TIMEFORMAT
@@ -593,11 +593,11 @@ do
         sort -R ${cwd}/EUR.train| head -n ${eu} >> frac_${j}.keep
     fi
     # Perform associations and clumping
-    echo "compute_duo cost ${j} ${j}.keep ${config_file} with config_file:" >&2
+    echo "compute_duo cost ${j} frac_${j}.keep ${config_file} with config_file:" >&2
     cat ${config_file} >&2
     TIMEFORMAT="compute_duo cost Done! Time elapsed: %R"
     export TIMEFORMAT
-    time compute_duo cost ${j} ${j}.keep ${config_file}
+    time compute_duo cost ${j} frac_${j}.keep ${config_file}
 
 done
 TIMEFORMAT="cost done! Time elapsed: %R"
