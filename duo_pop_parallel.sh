@@ -295,9 +295,13 @@ run_gwas(){
 # 3) snps to compute
 # 4) prefix
 source $5
+echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} and running on parallel" >&2
+blines=`wc -l < $3`
+nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
+split -l ${nlines} $3 cpus
 $1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
---covar pcs.txt --covar-name $2 --extract $3 --out $4_${3} --keep-allele-order \
-${common_plink}
+--covar pcs.txt --covar-name $2 --extract {} --out $4_{} --keep-allele-order \
+${common_plink} ::: cpus*
 #--allow-no-sex
 #$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
@@ -357,15 +361,16 @@ compute_duo()
     export TIMEFORMAT
     export -f run_gwas
     echo "Running GWAS in parallel in ${chrs} chromosomes" >&2
-    echo "Spliting current_pop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks" >&2
+    #echo "Spliting current_pop.bim into ${nnodes} nodes * ${cpus} cpus = ${processes} chunks" >&2
+    echo "Spliting current_pop.bim into ${nnodes} nodes" >&2
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_pop.bim`
-    nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${processes})))"`
-    split -l ${nlines} current_pop.bim
+    nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${nnodes})))"`
+    split -l ${nlines} current_pop.bim nodes
     time parallel --will-cite ${multi} --j ${cpus} --wd . run_gwas ${plink} \
-    "${p}" {} ${prefix} $8 ::: x*
-    cat ${prefix}_x*.assoc.linear > ${prefix}.assoc.linear
-    rm ${prefix}_x*.assoc.linear
+    "${p}" {} ${prefix} $8 ::: nodes*
+    cat ${prefix}_cpus*.assoc.linear > ${prefix}.assoc.linear
+    rm ${prefix}_cpus*.assoc.linear
     # ${plink} --bfile current_pop --linear hide-covar --pheno train.pheno \
     # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
@@ -384,7 +389,7 @@ compute_duo()
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
-  time parallel --will-cite ${multi} --j ${cpus} --wd . forloopcorr {} $1 \
+  time parallel --will-cite --j ${cpus} --wd . forloopcorr {} $1 \
   ${prefix} ${plink} "'${common_plink}'" ${genos} ::: EUR ASN AFR AD
   TIMEFORMAT="compute_duo $1 Done! Time elapsed: %R"
   export TIMEFORMAT
@@ -484,6 +489,7 @@ echo -e "\n\nRunning proportions" >&2
 cwd=${PWD}
 mkdir -p proportions
 cd proportions
+ln -s ../train.pheno ./
 prop=NONE
 const=NONE
 sequence=`seq 0 ${step} ${sample}`
@@ -531,6 +537,7 @@ cd init
 mv ${cwd}/initial.keep ./
 ln -s ${cwd}/${target}.test ./
 ln -s ${cwd}/${target}.train ./
+ln -s ../train.pheno ./
 # constant initial source add mixing
 if [[ -f init.tsv ]]
     then
@@ -553,7 +560,7 @@ do
    cat ${config_file} >&2
    #time compute_duo init ${i} ${all} "${common_plink}" "${target} ${others}" \
    #init_${i}.keep "${covs}" ${config_file}
-   time compute_duo init ${i} init_${i} ${config_file}
+   time compute_duo init ${i} init_${i}.keep ${config_file}
 done
 TIMEFORMAT="init done! Time elapsed: %R"
 export TIMEFORMAT
@@ -567,6 +574,7 @@ echo -e "\n\nRunning cost" >&2
 cwd=${PWD}
 mkdir -p cost
 cd cost
+ln -s ../train.pheno ./
 # do the cost derived
 sequence=`seq 0 10`
 if [[ -f cost.tsv ]]
@@ -697,11 +705,14 @@ echo -e "others='`echo ${others}`'\ncovs=${covs}" >> variables.txt
 echo -e "processes=${processes}\nmulti='`echo ${multi}`'" >> variables.txt
 
 
-echo "proportions_f ${PWD}/variables.txt" > commands.txt
-echo "init_f ${PWD}/variables.txt"  >> commands.txt
-echo "cost_f ${PWD}/variables.txt" >> commands.txt
-
-parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
+#echo "proportions_f ${PWD}/variables.txt" > commands.txt
+#echo "init_f ${PWD}/variables.txt"  >> commands.txt
+#echo "cost_f ${PWD}/variables.txt" >> commands.txt
+#
+#parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
+proportions_f ${PWD}/variables.txt &
+init_f ${PWD}/variables.txt &
+cost_f ${PWD}/variables.txt &
 
 TIMEFORMAT="Time elapsed in the full pipeline: %R"
 export TIMEFORMAT
