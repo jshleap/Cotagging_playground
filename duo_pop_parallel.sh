@@ -294,14 +294,18 @@ run_gwas(){
 # 2) Covariate names
 # 3) snps to compute
 # 4) prefix
+# 5) Variables file
 source $5
 echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} and running on parallel" >&2
 blines=`wc -l < $3`
 nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
 split -l ${nlines} $3 cpus
-$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
---covar pcs.txt --covar-name $2 --extract {} --out $4_{} --keep-allele-order \
-${common_plink} ::: cpus*
+echo -e "\tExecuting this code:parallel --joblog --will-cite --j ${cpus} --wd . $1 --bfile current_pop \
+--linear hide-covar --pheno train.pheno --memory 7000 --covar pcs.txt \
+--covar-name $2 --extract {} --out $4_{} --keep-allele-order --allow-no-sex  ::: cpus*"
+parallel --joblog --will-cite --j ${cpus} --wd . $1 --bfile current_pop \
+--linear hide-covar --pheno train.pheno --memory 7000 --covar pcs.txt \
+--covar-name $2 --extract {} --out $4_{} --keep-allele-order --allow-no-sex  ::: cpus*
 #--allow-no-sex
 #$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
@@ -368,7 +372,7 @@ compute_duo()
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${nnodes})))"`
     split -l ${nlines} current_pop.bim nodes
     time parallel --will-cite ${multi} --j ${cpus} --wd . run_gwas ${plink} \
-    "${p}" {} ${prefix} $8 ::: nodes*
+    "${p}" {} ${prefix} $4 ::: nodes*
     cat ${prefix}_cpus*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
     # ${plink} --bfile current_pop --linear hide-covar --pheno train.pheno \
