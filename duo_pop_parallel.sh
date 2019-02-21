@@ -389,7 +389,7 @@ compute_duo()
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
-  time parallel --will-cite --j ${cpus} --wd . forloopcorr {} $1 \
+  time parallel --will-cite --j 4 --wd . forloopcorr {} $1 \
   ${prefix} ${plink} "'${common_plink}'" ${genos} ::: EUR ASN AFR AD
   TIMEFORMAT="compute_duo $1 Done! Time elapsed: %R"
   export TIMEFORMAT
@@ -705,14 +705,14 @@ echo -e "others='`echo ${others}`'\ncovs=${covs}" >> variables.txt
 echo -e "processes=${processes}\nmulti='`echo ${multi}`'" >> variables.txt
 
 
-#echo "proportions_f ${PWD}/variables.txt" > commands.txt
-#echo "init_f ${PWD}/variables.txt"  >> commands.txt
-#echo "cost_f ${PWD}/variables.txt" >> commands.txt
+echo "proportions_f ${PWD}/variables.txt" > commands.txt
+echo "init_f ${PWD}/variables.txt"  >> commands.txt
+echo "cost_f ${PWD}/variables.txt" >> commands.txt
 #
-#parallel --joblog --will-cite ${multi} --j ${cpus} --wd . < commands.txt
-proportions_f ${PWD}/variables.txt &
-init_f ${PWD}/variables.txt &
-cost_f ${PWD}/variables.txt &
+parallel --joblog --will-cite --j 3 --wd . < commands.txt
+#proportions_f ${PWD}/variables.txt &
+#init_f ${PWD}/variables.txt &
+#cost_f ${PWD}/variables.txt &
 
 TIMEFORMAT="Time elapsed in the full pipeline: %R"
 export TIMEFORMAT
