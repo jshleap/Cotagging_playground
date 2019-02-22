@@ -296,16 +296,19 @@ run_gwas(){
 # 4) prefix
 # 5) Variables file
 source $5
-echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} and running on parallel" >&2
+echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} cpus and running on parallel" >&2
 blines=`wc -l < $3`
 nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
 split -l ${nlines} $3 cpus
-echo -e "\tExecuting this code:parallel --joblog --will-cite --j ${cpus} --wd . $1 --bfile current_pop \
---linear hide-covar --pheno train.pheno --memory 7000 --covar pcs.txt \
---covar-name $2 --extract {} --out $4_{} --keep-allele-order --allow-no-sex  ::: cpus*"
-parallel --joblog --will-cite --j ${cpus} --wd . $1 --bfile current_pop \
---linear hide-covar --pheno train.pheno --memory 7000 --covar pcs.txt \
---covar-name $2 --extract {} --out $4_{} --keep-allele-order --allow-no-sex  ::: cpus*
+echo -e "\tExecuting this code: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
+--wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
+--memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out $4_{} \
+--keep-allele-order --allow-no-sex  ::: cpus*"
+
+parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
+--wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
+--memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out $4_{} \
+--keep-allele-order --allow-no-sex  ::: cpus*
 #--allow-no-sex
 #$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
@@ -347,14 +350,17 @@ compute_duo()
   # 2 : fraction computed
   # 3 : keep file of prefix
   # 4 : Variables file
+  out=$1
+  frac=$2
+  keep=$3
   source $4
   pcs='PC1 PC2 PC3 PC4'
-  prefix="${1}_${2}"
+  prefix="${out}_${frac}"
   if [[ ! -f ${prefix}.clumped ]]
   then
     echo -e "\nComputing summary statistics for ${prefix}:\n" >&2
-    echo -e "${plink} --bfile ${all} --keep $3 --make-bed --out current_pop ${common_plink}" >&2
-    ${plink} --bfile ${all} --keep $3 --make-bed --out current_pop ${common_plink}
+    echo -e "${plink} --bfile ${all} --keep ${keep} --make-bed --out current_pop ${common_plink}" >&2
+    ${plink} --bfile ${all} --keep ${keep} --make-bed --out current_pop ${common_plink}
     echo -e "${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4"
     ${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4
     if echo ${covs}| grep -q -- '--covs'; then
@@ -371,31 +377,30 @@ compute_duo()
     blines=`wc -l < current_pop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${nnodes})))"`
     split -l ${nlines} current_pop.bim nodes
-    time parallel --will-cite ${multi} --j ${cpus} --wd . run_gwas ${plink} \
-    "${p}" {} ${prefix} $4 ::: nodes*
+    time parallel --will-cite --joblog ${PWD}/rungwas_parallel.log ${multi} \
+    --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ::: nodes*
     cat ${prefix}_cpus*.assoc.linear > ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
-    # ${plink} --bfile current_pop --linear hide-covar --pheno train.pheno \
-    # --covar pcs.txt --covar-name ${pcs} --out ${prefix} $4
     # --clump-r2 0.50              LD thqreshold for clumping is default
     echo "Running Scorings" >&2
     TIMEFORMAT="Scorings Done! Time elapsed: %R"
     export TIMEFORMAT
     time ${plink} --bfile current_pop --clump ${prefix}.assoc.linear \
-     --clump-p1 0.01 --pheno train.pheno --out ${prefix} $4
-  else
+     --clump-p1 0.01 --pheno train.pheno --out ${prefix} ${common_plink}
+  elseF
     echo -e "${prefix} has already been done" >&2
   fi
   if [[ ! -f ${prefix}.myscore ]]; then
-    grep -w "$(awk -F' ' '{if (NR!=1) { print $3 }}' ${prefix}.clumped)" \
+    grep -w "$(awk -F' ' '{if (NR!=1) { print ${keep} }}' ${prefix}.clumped)" \
     ${prefix}.assoc.linear > ${prefix}.myscore
   fi
   TIMEFORMAT="Correlations Done! Time elapsed: %R"
   export TIMEFORMAT
   export -f forloopcorr
-  time parallel --will-cite --j 4 --wd . forloopcorr {} $1 \
-  ${prefix} ${plink} "'${common_plink}'" ${genos} ::: EUR ASN AFR AD
-  TIMEFORMAT="compute_duo $1 Done! Time elapsed: %R"
+  time parallel --will-cite --joblog ${PWD}/forloop_parallel.log --j 8 --wd . \
+  forloopcorr {} ${out} ${prefix} ${plink} "'${common_plink}'" \
+  ${genos} ::: EUR ASN AFR AD
+  TIMEFORMAT="compute_duo ${out} Done! Time elapsed: %R"
   export TIMEFORMAT
 }
 
@@ -597,7 +602,7 @@ do
     n=`bc <<< "$n/1"`
     eu=`bc <<< "($n * $eu)/1"`
     ad=`bc <<< "($n * $ad)/1"`
-    echo -e "\n\nProcesing ${eu} european and ${ad} admixed" >&2
+    echo -e "\n\nProcesing ${eu} european and ${ad} ${target}" >&2
     if [[ ! ${ad} = 0  ]]; then
         sort -R ${cwd}/${target}.train| head -n $ad > frac_${j}.keep
     fi
@@ -713,7 +718,7 @@ echo "proportions_f ${PWD}/variables.txt" > commands.txt
 echo "init_f ${PWD}/variables.txt"  >> commands.txt
 echo "cost_f ${PWD}/variables.txt" >> commands.txt
 #
-parallel --joblog --will-cite --j 3 --wd . < commands.txt
+parallel --joblog ${PWD}/parallel.log --will-cite --j 6 --wd . < commands.txt
 #proportions_f ${PWD}/variables.txt &
 #init_f ${PWD}/variables.txt &
 #cost_f ${PWD}/variables.txt &
