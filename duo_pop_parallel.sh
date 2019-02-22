@@ -543,6 +543,7 @@ echo -e "\n\nRunning init" >&2
 cwd=${PWD}
 mkdir -p init
 cd init
+sequence=`seq 0 ${step} ${sample}`
 mv ${cwd}/initial.keep ./
 ln -s ${cwd}/${target}.test ./
 ln -s ${cwd}/${target}.train ./
