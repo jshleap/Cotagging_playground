@@ -547,6 +547,7 @@ mv ${cwd}/initial.keep ./
 ln -s ${cwd}/${target}.test ./
 ln -s ${cwd}/${target}.train ./
 ln -s ../train.pheno ./
+sequence=`seq 0 ${step} ${sample}`
 # constant initial source add mixing
 if [[ -f init.tsv ]]
     then
