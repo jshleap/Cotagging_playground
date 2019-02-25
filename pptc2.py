@@ -122,16 +122,22 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
                                     check=kwargs['check'],
                                     max_memory=max_memory)
-
+    common_snps = list(set(rbim.snp).difference(tbim.snp))
     plink_args = ['plink', '--bfile', refgeno, '--bmerge', '%s.bed' % targeno,
                   '%s.bim' % targeno, '%s.fam' % targeno, '--make-bed',
                   '--out', '%s_merged' % prefix]
-    run(plink_args)
-    opts = {'outprefix': "merged", 'bfile': '%s_merged' % prefix, 'h2': h2,
-            'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
-            'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
-            'flip': kwargs['gflip'], 'max_memory': max_memory,
-            'high_precision_on_zero': kwargs['highp']}
+    if not os.path.isfile('%s.bed' % plink_args[-1]):
+        run(plink_args)
+    (fbim, ffam, fgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
+                                    check=kwargs['check'],
+                                    usable_snps=common_snps,
+                                    max_memory=max_memory)
+    opts = dict(outprefix="merged", bfile= fgeno, bim= fbim, fam=ffam, h2= h2,
+                ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
+                uniform=kwargs['uniform'], snps=None, seed=seed,
+                flip=kwargs['gflip'], max_memory=max_memory,
+                high_precision_on_zero=kwargs['highp'],
+                freq_thresh=0.0)
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):
         rpheno = dd.read_table(refpheno, blocksize=25e6, delim_whitespace=True)
@@ -375,9 +381,10 @@ if __name__ == '__main__':
                         help='Use arbitrary precision')
 
     args = parser.parse_args()
-    main(args.prefix, args.reference, args.refpheno, args.target, args.tarpheno,
-         args.h2, args.labels, args.window, args.sumstats, seed=args.seed,
-         threads=args.threads, ncausal=args.ncausal, normalize=True, by=args.by,
-         uniform=args.uniform, by_range=args.r_range, max_memory=args.maxmem,
-         split=args.split, flip=args.flip, gflip=args.gflip, within=args.within,
-         check=args.check, highp=args.highp)
+    main(args.prefix, args.reference, args.refpheno, args.target,
+         args.tarpheno, args.h2, args.labels, args.window, args.sumstats,
+         seed=args.seed, threads=args.threads, ncausal=args.ncausal,
+         normalize=True, by=args.by, uniform=args.uniform,  within=args.within,
+         by_range=args.r_range, max_memory=args.maxmem, split=args.split,
+         flip=args.flip, gflip=args.gflip, check=args.check, highp=args.highp,
+         freq_thresh=args.freq_thresh)

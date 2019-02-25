@@ -163,7 +163,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     else:
         dask_options = dict(num_workers=threads, cache=cache, pool=ThreadPool(
             threads))
-        with ProgressBar(), dask.set_options(**dask_options):
+        with ProgressBar(), dask.config.set(**dask_options):
             fam['gen_eff'] = g[:, idx].dot(causals.beta).compute()
     if causaleff is not None:
         try:

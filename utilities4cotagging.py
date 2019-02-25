@@ -122,7 +122,7 @@ def norm(array, a=0, b=1):
 
 # ---------------------------------------------------------------------------
 def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
-              max_memory=None):
+              max_memory=None, usable_snps=None):
     """
     Read the plink bed fileset, restrict to a given frequency (optional,
     freq_thresh), flip the sequence to match the MAF (optional; flip), and check
@@ -149,12 +149,18 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         g_std = g.std(axis=1)
         with ProgressBar():
             print('Removing invariant sites')
-            with dask.set_options(pool=ThreadPool(threads)):
+            with dask.config.set(pool=ThreadPool(threads)):
                 idx = (g_std != 0).compute(cache=cache)
         g = g[idx, :]
-        bim = bim[idx].copy()
+        bim = bim[bim.i.isin(idx)].copy().reset_index(drop=True)
+        bim.i = bim.index.tolist()
         del g_std, idx
         gc.collect()
+    if usable_snps is not None:
+        idx = bim[bim.snp.isin(usable_snps)].i.tolist()
+        g = g[idx, :]
+        bim = bim[bim.i.isin(idx)].copy().reset_index(drop=True)
+        bim.i = bim.index.tolist()
     # compute the mafs if required
     mafs = g.sum(axis=1) / (2 * n) if flip or freq_thresh > 0 else None
     if flip:
@@ -177,7 +183,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         assert freq_thresh < 0.5
         good = (mafs < (1 - float(freq_thresh))) & (mafs > float(freq_thresh))
         with ProgressBar():
-            with dask.set_options(pool=ThreadPool(threads)):
+            with dask.config.set(pool=ThreadPool(threads)):
                 good, mafs = dask.compute(good, mafs, cache=cache)
         g = g[:, good]
         bim = bim[good]
@@ -235,7 +241,7 @@ def smartcotagsort(prefix, gwascotag, column='Cotagging', ascending=False,
         if not tail.empty:
             # Include the tail lines in a random order
             df = df.append(tail.sample(frac=1), ignore_index=True)
-        df = df.reset_index()
+        df = df.reset_index(drop=False)
         with open(picklefile, 'wb') as F:
             pickle.dump((df, beforetail), F)
     try:
@@ -354,7 +360,7 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
         print('Just prunning', n)
         tup = (df.iloc[: n], geno, pheno, label, beta)
         delayed_results = [dask.delayed(single_score)(*tup)]
-        with ProgressBar(), dask.set_options(**opts):
+        with ProgressBar(), dask.config.set(**opts):
             res = list(dask.compute(*delayed_results))
     else:
         # Process the first 200 snps at one step regardless of the step passed.
@@ -367,14 +373,14 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
                range(1, min(201, df.shape[0] + 1), 1))
         # Run the scoring in parallel threads
         delayed_results = [dask.delayed(single_score)(*i) for i in gen]
-        with ProgressBar(), dask.set_options(**opts):
+        with ProgressBar(), dask.config.set(**opts):
             res = list(dask.compute(*delayed_results))
         print('Processing the rest of variants')
         if df.shape[0] > 200:
             ngen = ((df.iloc[: i], geno, pheno, label) for i in
                     range(201, df.shape[0] + 1, int(step)))
             delayed_results = [dask.delayed(single_score)(*i) for i in ngen]
-            with ProgressBar(), dask.set_options(**opts):
+            with ProgressBar(), dask.config.set(**opts):
                 res += list(dask.compute(*delayed_results))
     return pd.DataFrame(res)
 
@@ -520,7 +526,7 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
                                         extend) for rg, tg, ridx, tidx, df in
             window_yielder(rgeno, tgeno, mbim)]
 
-        with ProgressBar(), dask.set_options(num_workers=threads, cache=cache,
+        with ProgressBar(), dask.config.set(num_workers=threads, cache=cache,
                                              pool=ThreadPool(threads)):
             r = tuple(dask.compute(*delayed_results))
         if justd:
