@@ -123,7 +123,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                                     check=kwargs['check'],
                                     max_memory=max_memory)
 
-    plink_args = ['plink', '-bfile', refgeno, '-bmerge', '%s.bed' % targeno,
+    plink_args = ['plink', '--bfile', refgeno, '--bmerge', '%s.bed' % targeno,
                   '%s.bim' % targeno, '%s.fam' % targeno, '--make-bed',
                   '--out', '%s_merged' % prefix]
     run(plink_args)
