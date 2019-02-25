@@ -1,6 +1,7 @@
 from ese import *
 from comparison_ese import sortbylocus
 from utilities4cotagging import *
+from subprocess import run, PIPE
 
 np.seterr(all='raise')  # Debugging
 
@@ -111,10 +112,26 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     else:
         available_memory = psutil.virtual_memory().available
     cache = Chest(available_memory=available_memory)
-
     seed = np.random.randint(1e4) if seed is None else seed
     print('Performing P + T + C!')
     refl, tarl = labels
+    # Merge target and reference
+    (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
+                                    check=kwargs['check'],
+                                    max_memory=max_memory)
+    (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
+                                    check=kwargs['check'],
+                                    max_memory=max_memory)
+
+    plink_args = ['plink', '--bfile', refgeno, '--bmerge', '%s.bed' % targeno,
+                  '%s.bim' % targeno, '%s.fam' % targeno, '--make-bed',
+                  '--out', '%s_merged' % prefix]
+    run(plink_args)
+    opts = {'outprefix': "merged", 'bfile': '%s_merged' % prefix, 'h2': h2,
+            'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
+            'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
+            'flip': kwargs['gflip'], 'max_memory': max_memory,
+            'high_precision_on_zero': kwargs['highp']}
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):
         rpheno = dd.read_table(refpheno, blocksize=25e6, delim_whitespace=True)
@@ -122,29 +139,10 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     elif refpheno is None:
         # make simulation for reference
         print('Simulating phenotype for reference population %s \n' % refl)
-        opts = {'outprefix': refl, 'bfile': refgeno, 'h2': h2,
-                'ncausal': kwargs['ncausal'], 'normalize': kwargs['normalize'],
-                'uniform': kwargs['uniform'], 'snps': None, 'seed': seed,
-                'bfile2': targeno, 'flip': kwargs['gflip'],
-                'max_memory': max_memory,
-                'high_precision_on_zero': kwargs['highp']}
-        rpheno, h2, (rgeno, rbim, rtruebeta, rvec) = qtraits_simulation(**opts)
-        # make simulation for target
-        print('Simulating phenotype for target population %s \n' % tarl)
-        opts.update(
-            dict(outprefix=tarl, bfile=targeno, validate=kwargs['split'],
-                 causaleff=rbim.dropna(subset=['beta']), bfile2=refgeno))
-        tpheno, h2, (tgeno, tbim, ttruebeta, tvec) = qtraits_simulation(**opts)
-        opts.update(dict(prefix='ranumo_gwas', pheno=rpheno, geno=rgeno,
-                         validate=None, threads=threads, bim=rbim,
-                         flip=kwargs['flip']))
-    elif isinstance(refgeno, str):
-        (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
-                                        check=kwargs['check'],
-                                        max_memory=max_memory)
-        (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
-                                        check=kwargs['check'],
-                                        max_memory=max_memory)
+        fpheno, h2, (fgeno, fbim, ftruebeta, fvec) = qtraits_simulation(**opts)
+        tpheno = fpheno[fpheno.iid.isin(tfam.iid)]
+        rpheno = fpheno[fpheno.iid.isin(rfam.iid)]
+
     if isinstance(sum_stats, str):
         sum_stats = pd.read_table(sum_stats, delim_whitespace=True)
     else:
@@ -152,7 +150,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     print("Reference bim's shape: %d, %d" % (rbim.shape[0], rbim.shape[1]))
     print("Target bim's shape: %d, %d" % (tbim.shape[0], tbim.shape[1]))
     # process causals
-    causal_snps = tvec.snp.tolist()
+    causal_snps = fvec.snp.tolist()
     r2_causal = just_score(causal_snps, sum_stats, tpheno, tgeno)
     # Compute Ds
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow, justd=True,
