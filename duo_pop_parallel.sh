@@ -380,7 +380,7 @@ compute_duo()
     time parallel --will-cite --joblog ${PWD}/rungwas_parallel.log ${multi} \
     --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ::: nodes*
     head -1 ${prefix}_cpusaa.assoc.linear > ${prefix}.assoc.linear
-    tail -n +2 ${prefix}_cpus*.assoc.linear >> ${prefix}.assoc.linear
+    tail -q -n +2 ${prefix}_cpus*.assoc.linear >> ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
     # --clump-r2 0.50              LD thqreshold for clumping is default
     echo "Running Scorings" >&2
