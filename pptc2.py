@@ -122,7 +122,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
                                     check=kwargs['check'],
                                     max_memory=max_memory)
-    common_snps = list(set(rbim.snp).difference(tbim.snp))
+    common_snps = list(set(rbim.snp).intersection(tbim.snp))
     plink_args = ['plink', '--bfile', refgeno, '--bmerge', '%s.bed' % targeno,
                   '%s.bim' % targeno, '%s.fam' % targeno, '--make-bed',
                   '--out', '%s_merged' % prefix]
@@ -132,7 +132,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                                     check=kwargs['check'],
                                     usable_snps=common_snps,
                                     max_memory=max_memory)
-    opts = dict(outprefix="merged", bfile= fgeno, bim= fbim, fam=ffam, h2= h2,
+    opts = dict(outprefix="merged", bfile= fgeno, bim=fbim, fam=ffam, h2= h2,
                 ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
                 uniform=kwargs['uniform'], snps=None, seed=seed,
                 flip=kwargs['gflip'], max_memory=max_memory,
@@ -152,7 +152,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     if isinstance(sum_stats, str):
         sum_stats = pd.read_table(sum_stats, delim_whitespace=True)
     else:
-        sum_stats, X_train, X_test, y_train, y_test = plink_free_gwas(**opts)
+        out = plink_free_gwas('train', rpheno, rgeno, **opts)
+        sum_stats, X_train, X_test, y_train, y_test = out
     print("Reference bim's shape: %d, %d" % (rbim.shape[0], rbim.shape[1]))
     print("Target bim's shape: %d, %d" % (tbim.shape[0], tbim.shape[1]))
     # process causals
