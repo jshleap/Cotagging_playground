@@ -303,13 +303,13 @@ spl=`hostname`_cpus
 split -l ${nlines} $3 ${spl}
 echo -e "\tExecuting this code: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
---memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out $4_{} \
---keep-allele-order --allow-no-sex  ::: cpus*"
+--memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out ${pre}_{} \
+--keep-allele-order --allow-no-sex  ::: ${spl}*"
 pre=${4}_`hostname`
 parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
 --memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out ${pre}_{} \
---keep-allele-order --allow-no-sex  ::: ${splq}*
+--keep-allele-order --allow-no-sex  ::: ${spl}*
 #--allow-no-sex
 #$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
@@ -380,7 +380,7 @@ compute_duo()
     split -l ${nlines} current_pop.bim nodes
     time parallel --will-cite --joblog ${PWD}/rungwas_parallel.log ${multi} \
     --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ::: nodes*
-    head -1 ${prefix}_cpusaa.assoc.linear > ${prefix}.assoc.linear
+    head -q -n 1 ${prefix}_cpusaa.assoc.linear|head -1 > ${prefix}.assoc.linear
     tail -q -n +2 ${prefix}_cpus*.assoc.linear >> ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
     # --clump-r2 0.50              LD thqreshold for clumping is default
