@@ -299,16 +299,17 @@ source $5
 echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} cpus and running on parallel" >&2
 blines=`wc -l < $3`
 nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
-split -l ${nlines} $3 cpus
+spl=`hostname`_cpus
+split -l ${nlines} $3 ${spl}
 echo -e "\tExecuting this code: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
 --memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out $4_{} \
 --keep-allele-order --allow-no-sex  ::: cpus*"
-
+pre=${4}_`hostname`
 parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
---memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out $4_{} \
---keep-allele-order --allow-no-sex  ::: cpus*
+--memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out ${pre}_{} \
+--keep-allele-order --allow-no-sex  ::: ${splq}*
 #--allow-no-sex
 #$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
 #--covar pcs.txt --covar-name $2 --chr $3 --out $4_chr${3} --keep-allele-order \
@@ -388,7 +389,7 @@ compute_duo()
     export TIMEFORMAT
     time ${plink} --bfile current_pop --clump ${prefix}.assoc.linear \
      --clump-p1 0.01 --pheno train.pheno --out ${prefix} ${common_plink}
-  elseF
+  else
     echo -e "${prefix} has already been done" >&2
   fi
   if [[ ! -f ${prefix}.myscore ]]; then
@@ -721,7 +722,7 @@ echo "proportions_f ${PWD}/variables.txt" > commands.txt
 echo "init_f ${PWD}/variables.txt"  >> commands.txt
 echo "cost_f ${PWD}/variables.txt" >> commands.txt
 #
-parallel --joblog ${PWD}/parallel.log --will-cite --j 6 --wd . < commands.txt
+parallel --joblog ${PWD}/parallel.log --will-cite --j 3 --wd . < commands.txt
 #proportions_f ${PWD}/variables.txt &
 #init_f ${PWD}/variables.txt &
 #cost_f ${PWD}/variables.txt &
