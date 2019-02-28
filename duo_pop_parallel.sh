@@ -380,8 +380,8 @@ compute_duo()
     split -l ${nlines} current_pop.bim nodes
     time parallel --will-cite --joblog ${PWD}/rungwas_parallel.log ${multi} \
     --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ::: nodes*
-    head -q -n 1 ${prefix}_cpusaa.assoc.linear|head -1 > ${prefix}.assoc.linear
-    tail -q -n +2 ${prefix}_cpus*.assoc.linear >> ${prefix}.assoc.linear
+    head -q -n 1 ${prefix}*_cpusaa.assoc.linear|head -1 > ${prefix}.assoc.linear
+    tail -q -n +2 ${prefix}*_cpus*.assoc.linear >> ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
     # --clump-r2 0.50              LD thqreshold for clumping is default
     echo "Running Scorings" >&2
