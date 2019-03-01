@@ -54,6 +54,7 @@ def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
     # make sure x and y are numeric
     sorteddf['pos'] = pd.to_numeric(sorteddf.pos)
     sorteddf['index'] = pd.to_numeric(sorteddf.index)
+    print(sorteddf.head())
     idx = sorteddf.dropna(subset=['beta']).index.tolist()
     causals = sorteddf.loc[idx, :]
     f, ax = plt.subplots()

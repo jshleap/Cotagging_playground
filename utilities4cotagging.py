@@ -19,6 +19,7 @@ from subprocess import Popen, PIPE
 import dask
 import dask.array as da
 import dask.dataframe as dd
+from dask.distributed import Client
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -386,7 +387,6 @@ def prune_it(df, geno, pheno, label, step=10, threads=1, beta='slope',
 
 
 # ----------------------------------------------------------------------
-#@jit()#parallel=True)
 def single_window(df, rg, tg, threads=1, max_memory=None, justd=False,
                   extend=False):
     """
@@ -405,7 +405,7 @@ def single_window(df, rg, tg, threads=1, max_memory=None, justd=False,
     if max_memory is not None:
         available_memory = max_memory
     else:
-        available_memory = psutil.virtual_memory().available
+        available_memory = psutil.virtual_memory().available/2
     cache = Chest(available_memory=available_memory)
     # Make sure chunks make sense
     chunk_opts = dict(threads=threads, memory=available_memory)
@@ -441,6 +441,7 @@ def single_window(df, rg, tg, threads=1, max_memory=None, justd=False,
     if justd:
         # return the raw LD matrices
         return df.snp, rho_r, rho_t
+    gc.collect()
     # compute the cotagging/tagging scores
     cot = da.diag(da.dot(rho_r, rho_t))
     ref = da.diag(da.dot(rho_r, rho_r))
@@ -468,7 +469,8 @@ def window_yielder(rgeno, tgeno, mbim):
             assert ridx.shape == tidx.shape
             # Subset the genotype arrays
             rg, tg = rgeno[:, ridx], tgeno[:, tidx]
-            yield rg, tg, ridx, tidx, df
+            yield dask.delayed(rg), dask.delayed(tg), ridx, tidx, \
+                  dask.delayed(df)
 
 
 # ----------------------------------------------------------------------
@@ -521,10 +523,12 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
         # Get the proper intervals into the dataframe
         mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
         # Compute each locus in parallel
+        dask_rgeno = dask.delayed(rgeno)
+        dask_tgeno = dask.delayed(tgeno)
         delayed_results = [
             dask.delayed(single_window)(df, rg, tg, threads, max_memory, justd,
                                         extend) for rg, tg, ridx, tidx, df in
-            window_yielder(rgeno, tgeno, mbim)]
+            window_yielder(dask_rgeno, dask_tgeno, mbim)]
 
         with ProgressBar(), dask.config.set(num_workers=threads, cache=cache,
                                              pool=ThreadPool(threads)):
@@ -618,7 +622,6 @@ def optimize_it(loci, ld_range, by_range, h2, avh2, n, threads, cache, memory,
 
 
 # ----------------------------------------------------------------------
-# noinspection PyUnresolvedReferences
 def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache,
                         sum_stats, available_memory, test_geno, test_pheno,
                         tpheno, tgeno, prefix, clump_function,

@@ -115,29 +115,40 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     seed = np.random.randint(1e4) if seed is None else seed
     print('Performing P + T + C!')
     refl, tarl = labels
-    # Merge target and reference
-    (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'], threads,
-                                    check=kwargs['check'],
-                                    max_memory=max_memory)
-    (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
-                                    check=kwargs['check'],
-                                    max_memory=max_memory)
-    common_snps = list(set(rbim.snp).intersection(tbim.snp))
-    plink_args = ['plink', '--bfile', refgeno, '--bmerge', '%s.bed' % targeno,
-                  '%s.bim' % targeno, '%s.fam' % targeno, '--make-bed',
-                  '--out', '%s_merged' % prefix]
-    if not os.path.isfile('%s.bed' % plink_args[-1]):
-        run(plink_args)
-    (fbim, ffam, fgeno) = read_geno(targeno, kwargs['freq_thresh'], threads,
-                                    check=kwargs['check'],
-                                    usable_snps=common_snps,
-                                    max_memory=max_memory)
-    opts = dict(outprefix="merged", bfile= fgeno, bim=fbim, fam=ffam, h2= h2,
-                ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
-                uniform=kwargs['uniform'], snps=None, seed=seed,
-                flip=kwargs['gflip'], max_memory=max_memory,
-                high_precision_on_zero=kwargs['highp'],
-                freq_thresh=0.0)
+    picklefile = '%s.pckl' % prefix
+    if os.path.isfile(picklefile):
+        with open(picklefile, 'rb') as pckl:
+            (opts, ffam, fbim, fgeno, tbim, tfam, tgeno, rbim, rfam, rgeno,
+             seed) = pickle.load(pckl)
+    else:
+        # Merge target and reference
+        (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'],
+                                        threads, check=kwargs['check'],
+                                        max_memory=max_memory)
+        (tbim, tfam, tgeno) = read_geno(targeno, kwargs['freq_thresh'],
+                                        threads, check=kwargs['check'],
+                                        max_memory=max_memory)
+        common_snps = list(set(rbim.snp).intersection(tbim.snp))
+        plink_args = ['plink', '--bfile', refgeno, '--bmerge',
+                      '%s.bed' % targeno, '%s.bim' % targeno,
+                      '%s.fam' % targeno, '--make-bed', '--out',
+                      '%s_merged' % prefix]
+        if not os.path.isfile('%s.bed' % plink_args[-1]):
+            run(plink_args)
+        (fbim, ffam, fgeno) = read_geno("%s.bed" % plink_args[-1],
+                                        kwargs['freq_thresh'], threads,
+                                        check=kwargs['check'],
+                                        usable_snps=common_snps,
+                                        max_memory=max_memory)
+        opts = dict(outprefix="merged", bfile=fgeno, bim=fbim, fam=ffam, h2=h2,
+                    ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
+                    uniform=kwargs['uniform'], snps=None, seed=seed,
+                    flip=kwargs['gflip'], max_memory=max_memory,
+                    high_precision_on_zero=kwargs['highp'],
+                    freq_thresh=0.0)
+        with open('%s.pckl' % prefix, 'wb') as pckl:
+            pickle.dump((opts, ffam, fbim, fgeno, tbim, tfam, tgeno, rbim,
+                         rfam, rgeno, seed), pckl)
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):
         rpheno = dd.read_table(refpheno, blocksize=25e6, delim_whitespace=True)
@@ -148,12 +159,14 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         fpheno, h2, (fgeno, fbim, ftruebeta, fvec) = qtraits_simulation(**opts)
         tpheno = fpheno[fpheno.iid.isin(tfam.iid)]
         rpheno = fpheno[fpheno.iid.isin(rfam.iid)]
-
+    causal_betas = fvec.reindex(columns=['snp', 'beta'])
     if isinstance(sum_stats, str):
         sum_stats = pd.read_table(sum_stats, delim_whitespace=True)
     else:
+        opts.update({'bim': rbim, 'fam': rfam})
         out = plink_free_gwas('train', rpheno, rgeno, **opts)
         sum_stats, X_train, X_test, y_train, y_test = out
+    sum_stats = sum_stats.merge(causal_betas, on='snp', how='outer')
     print("Reference bim's shape: %d, %d" % (rbim.shape[0], rbim.shape[1]))
     print("Target bim's shape: %d, %d" % (tbim.shape[0], tbim.shape[1]))
     # process causals
@@ -164,7 +177,6 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                   threads=threads, max_memory=max_memory)
     # optimize R2
     n, m = X_train.shape
-    pval_thresh = [1, 0.5, 0.05, 10E-3, 10E-5, 10E-7, 1E-9]
     if by is None:
         opts = dict(by_range=None, sort_by='pvalue', loci=loci, h2=h2, m=m, n=n,
                     threads=threads, cache=cache, sum_stats=sum_stats,
@@ -172,7 +184,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     test_pheno=y_test, tpheno=tpheno, tgeno=tgeno,
                     prefix='%s_pval_all' % prefix, select_index_by='pvalue',
                     clump_with=clump_with, do_locus_ese=False,
-                    normalize=kwargs['normalize'], clump_function=compute_clumps
+                    normalize=kwargs['normalize'],
+                    clump_function=compute_clumps
                     )
         # run standard P + T
         pvalue = run_optimization_by(**opts)

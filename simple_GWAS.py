@@ -323,21 +323,25 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
                 estimate_chunks(x_train.shape, threads, max_memory))
         if 'normalize' in kwargs:
             if kwargs['normalize']:
-                print('Normalizing train/test sets to variance 1 and mean 0')
-                x_train = (x_train - x_train.mean(axis=0)) / x_train.std(axis=0)
+                print('Normalizing train set to variance 1 and mean 0')
+                x_train = (x_train - x_train.mean(axis=0)) / x_train.std(axis=0
+                                                                         )
+                print('Normalizing test set to variance 1 and mean 0')
                 x_test = (x_test - x_test.mean(axis=0)) / x_test.std(axis=0)
         # Get apropriate function for linear regression
         func = nu_linregress if high_precision else st_mod if stmd else lr
+        daskpheno = dask.delayed(y_train.PHENO)
+        daskgeno = dask.delayed(x_train)
         if pca is not None:
             print('Using %d PCs' % pca)
             #Perform PCA
             func = st_mod                   # Force function to statsmodels
             covs = do_pca(x_train, pca)     # Estimate PCAs
             delayed_results = [
-                dask.delayed(func)(x_train[:, i], y_train.PHENO, covs=covs) for
+                dask.delayed(func)(daskgeno[:, i], daskpheno, covs=covs) for
                 i in range(x_train.shape[1])]
         else:
-            delayed_results = [dask.delayed(func)(x_train[:, i], y_train.PHENO)
+            delayed_results = [dask.delayed(func)(daskgeno[:, i], daskpheno)
                                for i in range(x_train.shape[1])]
         dask_options = dict(num_workers=threads, cache=cache,
                             pool=ThreadPool(threads))
