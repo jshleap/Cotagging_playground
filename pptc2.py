@@ -44,29 +44,45 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
         # get the clump around index for
         vec = (locals()[clump_with] ** 2).loc[index.snp, :]
         tag = vec[vec > ld_threshold].index.tolist()
-        # Subset the sumary statistic dataframe with the snps in the clump
-        sub_stats = sum_stats[sum_stats.snp.isin(tag)]
-        # Store the sub matrices in a tuple for ESE estimation
-        n_locus = (tag, d_reference.loc[tag, tag], d_target.loc[tag, tag])
-        # Compute ESE and include it into the main dataframe for this clump
-        df_ese = per_locus(n_locus, sub_stats, avh2, h2, n, 0, within=0)
-        ss = sub_stats.merge(df_ese.reindex(columns=['snp', 'ese']), on='snp')
-        # Get the highest ESE of the clump
-        max_ese = ss.nlargest(1, 'ese')
-        if select_index_by == 'locus_ese':
-            max_l_ese = ss.nlargest(1, 'locus_ese')
+        if tag:
+            # Subset the sumary statistic dataframe with the snps in the clump
+            sub_stats = sum_stats[sum_stats.snp.isin(tag)]
+            if not sub_stats.empty:
+                # Store the sub matrices in a tuple for ESE estimation
+                n_locus = (tag, d_reference.loc[tag, tag], d_target.loc[tag,
+                                                                        tag])
+                # Compute ESE and include it into the main dataframe for this
+                # clump
+                try:
+                    df_ese = per_locus(n_locus, sub_stats, avh2, h2, n, 0,
+                                       within=0)
+                except:
+                    df_ese = per_locus(n_locus, sub_stats, avh2, h2, n, 0,
+                                       within=0)
+                ss = sub_stats.merge(df_ese.reindex(columns=['snp', 'ese']),
+                                     on='snp')
+                # Get the highest ESE of the clump
+                max_ese = ss.nlargest(1, 'ese')
+                if select_index_by == 'locus_ese':
+                    max_l_ese = ss.nlargest(1, 'locus_ese')
+                else:
+                    max_l_ese = pd.DataFrame([{'snp': 'None',
+                                               'locus_ese': 'None'}])
+                #try:
+                key = (index.snp, index.pvalue, max_ese.snp.iloc[0],
+                       max_ese.ese.iloc[0], max_l_ese.snp.iloc[0],
+                       max_l_ese.locus_ese.iloc[0])
+                clumps[key] = ss
+                # except:
+                #     pass
+                # remove the clumped snps from the summary statistics dataframe
+                sum_stats = sum_stats[~sum_stats.snp.isin(tag)]
+            else:
+                #Tagged SNPS has been tagged already
+                sum_stats = sum_stats[~sum_stats.snp.isin([index.snp])]
         else:
-            max_l_ese = pd.DataFrame([{'snp': 'None', 'locus_ese': 'None'}])
-        try:
-            key = (index.snp, index.pvalue, max_ese.snp.iloc[0],
-                   max_ese.ese.iloc[0], max_l_ese.snp.iloc[0],
-                   max_l_ese.locus_ese.iloc[0])
-        except:
-            pass
-
-        clumps[key] = ss
-        # remove the clumped snps from the summary statistics dataframe
-        sum_stats = sum_stats[~sum_stats.snp.isin(tag)]
+            # none element tagged
+            sum_stats = sum_stats[~sum_stats.snp.isin([index.snp])]
     return clumps
 
 
@@ -178,8 +194,8 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     # optimize R2
     n, m = X_train.shape
     if by is None:
-        opts = dict(by_range=None, sort_by='pvalue', loci=loci, h2=h2, m=m, n=n,
-                    threads=threads, cache=cache, sum_stats=sum_stats,
+        opts = dict(by_range=None, sort_by='pvalue', loci=loci, h2=h2, m=m,
+                    threads=threads, cache=cache, sum_stats=sum_stats, n=n,
                     available_memory=available_memory, test_geno=X_test,
                     test_pheno=y_test, tpheno=tpheno, tgeno=tgeno,
                     prefix='%s_pval_all' % prefix, select_index_by='pvalue',
@@ -187,90 +203,150 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                     normalize=kwargs['normalize'],
                     clump_function=compute_clumps
                     )
-        # run standard P + T
-        pvalue = run_optimization_by(**opts)
+        print('Running standard P + T')
+        if os.path.isfile('pvalue.pickle'):
+            with open('pvalue.pickle', 'rb') as pckl:
+                pvalue = pickle.load(pckl)
+        else:
+            pvalue = run_optimization_by(**opts)
+            with open('pvalue.pickle', 'wb') as pckl:
+                pickle.dump(pvalue, pckl)
+        ##
+        print('Clumping with pval, select index with pval, select across with '
+              'ese')
+        if os.path.isfile('ppe.pickle'):
+            with open('ppe.pickle', 'rb') as pckl:
+                pval_pval_ese = pickle.load(pckl)
+        else:
+            opts.update(sort_by='ese', prefix='%s_pval_pval_ese' % prefix,
+                        select_index_by='pvalue')
+            pval_pval_ese = run_optimization_by(**opts)
+            with open('ppe.pickle', 'wb') as pckl:
+                pickle.dump(pval_pval_ese, pckl)
+        ##
+        print('Clumping with pval, select index with pval, select across with '
+              'locus ese')
+        if os.path.isfile('ppl.pickle'):
+            with open('ppl.pickle', 'rb') as pckl:
+                pval_pval_lese = pickle.load(pckl)
+        else:
+            opts.update(sort_by='locus_ese', prefix='%s_pval_pval_lese'%prefix,
+                        select_index_by='pvalue')
+            pval_pval_lese = run_optimization_by(**opts)
+            with open('ppl.pickle', 'wb') as pckl:
+                pickle.dump(pval_pval_lese, pckl)
+        #
+        print('Clumping with pval, select index with ese, select across with '
+              'ese')
+        if os.path.isfile('pep.pickle'):
+            with open('pep.pickle', 'rb') as pckl:
+                pval_ese_pval = pickle.load(pckl)
+        else:
+            opts.update(sort_by='pvalue', prefix='%s_pval_ese_pval' % prefix,
+                        select_index_by='ese')
+            pval_ese_pval = run_optimization_by(**opts)
+            with open('pep.pickle', 'wb') as pckl:
+                pickle.dump(pval_ese_pval, pckl)
+        #
+        print('Clumping with pval, select index with ese, select across with '
+              'ese')
+        if os.path.isfile('pee.pickle'):
+            with open('pee.pickle', 'rb') as pckl:
+                pval_ese_ese = pickle.load(pckl)
+        else:
+            opts.update(sort_by='ese', prefix='%s_pval_ese_ese' % prefix,
+                        select_index_by='ese')
+            pval_ese_ese = run_optimization_by(**opts)
+            with open('pee.pickle', 'wb') as pckl:
+                pickle.dump(pval_ese_ese, pckl)
+        #
+        print('Clumping with pval, select index with ese, select across with '
+              'locus ese')
+        if os.path.isfile('pel.pickle'):
+            with open('pel.pickle', 'rb') as pckl:
+                pval_ese_lese = pickle.load(pckl)
+        else:
+            opts.update(sort_by='locus_ese', prefix='%s_pval_ese_lese' %prefix,
+                        select_index_by='ese')
+            pval_ese_lese = run_optimization_by(**opts)
+            with open('pel.pickle', 'wb') as pckl:
+                pickle.dump(pval_ese_lese, pckl)
+        #
+        print('Clumping with pval, select index with lpcus ese, select across '
+              'with pval')
+        if os.path.isfile('plp.pickle'):
+            with open('plp.pickle', 'rb') as pckl:
+                pval_lese_pval = pickle.load(pckl)
+        else:
+            opts.update(sort_by='pvalue', prefix='%s_pval_lese_pval' % prefix,
+                        select_index_by='locus_ese')
+            pval_lese_pval = run_optimization_by(**opts)
+            with open('plp.pickle', 'wb') as pckl:
+                pickle.dump(pval_lese_pval, pckl)
+        #
+        print('Clumping with pval, select index with locus ese, select across '
+              'with ese')
 
-        # Clump pval, select index with pval, select across with ese
-        opts.update(sort_by='ese', prefix='%s_pval_pval_ese' % prefix,
-                    select_index_by='pvalue')
-        pval_pval_ese = run_optimization_by(**opts)
-
-        # Clump pval, select index with pval, select across with ese
-        opts.update(sort_by='locus_ese', prefix='%s_pval_pval_lese' % prefix,
-                    select_index_by='pvalue')
-        pval_pval_lese = run_optimization_by(**opts)
-
-        # Clump pval, select index with ese, select across with ese
-        opts.update(sort_by='pvalue', prefix='%s_pval_ese_pval' % prefix,
-                    select_index_by='ese')
-        pval_ese_pval = run_optimization_by(**opts)
-
-        # Clump pval, select index with pval, select across with ese
-        opts.update(sort_by='ese', prefix='%s_pval_ese_ese' % prefix,
-                    select_index_by='ese')
-        pval_ese_ese = run_optimization_by(**opts)
-
-        # Clump pval, select index with pval, select across with ese
-        opts.update(sort_by='locus_ese', prefix='%s_pval_ese_lese' % prefix,
-                    select_index_by='ese')
-        pval_ese_lese = run_optimization_by(**opts)
-
-        # Clump pval, select index with lese, select across with pval
-        opts.update(sort_by='pvalue', prefix='%s_pval_lese_pval' % prefix,
-                    select_index_by='locus_ese')
-        pval_lese_pval = run_optimization_by(**opts)
-
-        # Clump pval, select index with lese, select across with ese
         opts.update(sort_by='ese', prefix='%s_pval_lese_ese' % prefix,
                     select_index_by='locus_ese')
         pval_lese_ese = run_optimization_by(**opts)
 
-        # Clump pval, select index with lese, select across with lese
+        print('Clumping with  pval, select index with locus ese, select across'
+              ' with locus ese')
         opts.update(sort_by='locus_ese', prefix='%s_pval_lese_lese' % prefix,
                     select_index_by='locus_ese')
         pval_lese_lese = run_optimization_by(**opts)
 
-        # Clump lese, select index with pval, select across with pval
+        print('Clump locus ese, select index with pval, select across with '
+              'pval')
         opts.update(sort_by='pvalue', prefix='%s_lese_pval_pval' % prefix,
                     select_index_by='pvalue', do_locus_ese=True)
         lese_pval_pval = run_optimization_by(**opts)
 
-        # Clump lese, select index with pval, select across with ese
+        print('Clumping with locus ese, select index with pval, select across '
+              'with ese')
         opts.update(sort_by='ese', prefix='%s_lese_pval_ese' % prefix,
                     select_index_by='pvalue', do_locus_ese=True)
         lese_pval_ese = run_optimization_by(**opts)
 
-        # Clump lese, select index with pval, select across with lese
+        print('Clumping with locus ese, select index with pval, select across '
+              'with locus ese')
         opts.update(sort_by='locus_ese', prefix='%s_lese_pval_lese' % prefix,
                     select_index_by='pvalue', do_locus_ese=True)
         lese_pval_lese = run_optimization_by(**opts)
 
-        # Clump lese, select index with ese, select across with pval
+        print('Clumping with locus ese, select index with ese, select across '
+              'with pval')
         opts.update(sort_by='pvalue', prefix='%s_lese_ese_pval' % prefix,
                     select_index_by='ese', do_locus_ese=True)
         lese_ese_pval = run_optimization_by(**opts)
 
-        # Clump lese, select index with ese, select across with ese
+        print('Clumping with locus ese, select index with ese, select across '
+              'with ese')
         opts.update(sort_by='ese', prefix='%s_lese_ese_ese' % prefix,
                     select_index_by='ese', do_locus_ese=True)
         lese_ese_ese = run_optimization_by(**opts)
 
-        # Clump lese, select index with ese, select across with lese
+        print('Clumping with locus ese, select index with ese, select across '
+              'with locus ese')
         opts.update(sort_by='locus_ese', prefix='%s_lese_ese_lese' % prefix,
                     select_index_by='ese', do_locus_ese=True)
         lese_ese_lese = run_optimization_by(**opts)
 
-        # Clump lese, select index with lese, select across with pval
+        print('Clumping with locus ese, select index with locus ese, select '
+              'across with pval')
         opts.update(sort_by='pvalue', prefix='%s_lese_lese_pval' % prefix,
                     select_index_by='locus_ese', do_locus_ese=True)
         lese_lese_pval = run_optimization_by(**opts)
 
-        # Clump lese, select index with lese, select across with ese
+        print('Clumping with locus ese, select index with locus ese, select '
+              'across with ese')
         opts.update(sort_by='ese', prefix='%s_lese_lese_ese' % prefix,
                     select_index_by='locus_ese', do_locus_ese=True)
         lese_lese_ese = run_optimization_by(**opts)
 
-        # Clump lese, select index with lese, select across with lese
+        print('Clumping with locus ese, select index with locus ese, select '
+              'across with locus ese')
         opts.update(sort_by='locus_ese', prefix='%s_lese_lese_lese' % prefix,
                     select_index_by='locus_ese', do_locus_ese=True)
         lese_lese_lese = run_optimization_by(**opts)

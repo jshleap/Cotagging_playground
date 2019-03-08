@@ -15,59 +15,63 @@ within_dict = {0: 'ese cotag', 1: 'ese EUR', 2: 'ese AFR'}
 prunestep = 30
 
 
-def sortbylocus(prefix, df, column='ese', title=None, ascending=False):
-    picklefile = '%s.pickle' % prefix
+def sortbylocus(prefix, df, column='ese', title=None, ascending=False,
+                plot=False):
+    #picklefile = '%s.pickle' % prefix
     sort_columns = [column, 'beta_sq', 'pos']
-    if os.path.isfile(picklefile):
-        with open(picklefile, 'rb') as F:
-            sorteddf = pickle.load(F)
-    else:
-        df['m_size'] = norm(abs(df.slope), 20, 200)
-        if 'beta_sq' not in df.columns:
-            df['beta_sq'] = df.slope**2
-        df = df.sort_values(by=sort_columns, ascending=[ascending, False, True])
-        try:
-            grouped = df.groupby('locus', as_index=False)
-        except:
-            grouped = df.groupby('locus_ese', as_index=False)
-        try:
-            if ascending:
-                grouped = grouped.apply(lambda grp: grp.nsmallest(1, column))
-            else:
-                grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
-        except TypeError:
-            grouped = grouped.apply(lambda grp: grp.sort_values(
-                by=column, ascending=ascending).iloc[0])
-        sorteddf = grouped.sort_values(by=sort_columns, ascending=[ascending,
-                                                                   False, True])
-        tail = df[~df.snp.isin(sorteddf.snp)]
-        # grouped = tail.groupby('locus', as_index=False)
-        if not tail.empty:
-            sorteddf = sorteddf.append(
-                tail.sort_values(by=sort_columns, ascending=[ascending, False,
-                                                             True]))
-        sorteddf = sorteddf.reset_index(drop=True)
-        sorteddf['index'] = sorteddf.index.tolist()
-        with open(picklefile, 'wb') as F:
-            pickle.dump(sorteddf, F)
+    # if os.path.isfile(picklefile):
+    #     with open(picklefile, 'rb') as F:
+    #         sorteddf = pickle.load(F)
+    # else:
+    df['m_size'] = norm(abs(df.slope.copy()), 20, 200)
+    if 'beta_sq' not in df.columns:
+        df['beta_sq'] = df.slope**2
+    df = df.sort_values(by=sort_columns, ascending=[ascending, False, True])
+    try:
+        grouped = df.groupby('locus', as_index=False)
+    except:
+        grouped = df.groupby('locus_ese', as_index=False)
+    try:
+        if ascending:
+            grouped = grouped.apply(lambda grp: grp.nsmallest(1, column))
+        else:
+            grouped = grouped.apply(lambda grp: grp.nlargest(1, column))
+    except TypeError:
+        grouped = grouped.apply(lambda grp: grp.sort_values(
+            by=column, ascending=ascending).iloc[0])
+    sorteddf = grouped.sort_values(by=sort_columns, ascending=[ascending,
+                                                               False, True])
+    tail = df[~df.snp.isin(sorteddf.snp)]
+    # grouped = tail.groupby('locus', as_index=False)
+    if not tail.empty:
+        sorteddf = sorteddf.append(
+            tail.sort_values(by=sort_columns, ascending=[ascending, False,
+                                                         True]))
+    sorteddf = sorteddf.reset_index(drop=True)
+    sorteddf['index'] = sorteddf.index.tolist()
+    # with open(picklefile, 'wb') as F:
+    #     pickle.dump(sorteddf, F)
     size = sorteddf.m_size
     # make sure x and y are numeric
     sorteddf['pos'] = pd.to_numeric(sorteddf.pos)
     sorteddf['index'] = pd.to_numeric(sorteddf.index)
-    print(sorteddf.head())
-    idx = sorteddf.dropna(subset=['beta']).index.tolist()
-    causals = sorteddf.loc[idx, :]
-    f, ax = plt.subplots()
-    sorteddf.plot.scatter(x='pos', y='index', ax=ax, label=column, s=size.values
-                          )
-    if not causals.empty:
-        causals.plot.scatter(x='pos', y='index', c='k', marker='*', ax=ax,
-                             label='Causals', s=size[idx].values)
-    if title is not None:
-        plt.title(title)
-    plt.tight_layout()
-    plt.savefig('%s.pdf' % prefix)
-    plt.close()
+    #print(sorteddf.head())
+    if plot:
+        idx = sorteddf.dropna(subset=['beta']).index.tolist()
+        causals = sorteddf.loc[idx, :]
+        f, ax = plt.subplots()
+        sorteddf.plot.scatter(x='pos', y='index', ax=ax, label=column,
+                              s=size.values
+                              )
+        if not causals.empty:
+            causals.plot.scatter(x='pos', y='index', c='k', marker='*', ax=ax,
+                                 label='Causals', s=size[idx].values)
+        if title is not None:
+            plt.title(title)
+        plt.tight_layout()
+        plt.savefig('%s.pdf' % prefix)
+        plt.close()
+    #
     return sorteddf
 
 

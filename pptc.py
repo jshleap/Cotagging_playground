@@ -12,6 +12,7 @@ from comparison_ese import dirty_ppt
 
 np.seterr(all='raise')  # Debugging
 
+
 def get_tagged2(locus, ld_thr, ese_thresh, sumstats, avh2, h2, n):
     snp_list, d_r, d_t = locus
     d_r = pd.DataFrame(d_r, index=snp_list, columns=snp_list) ** 2

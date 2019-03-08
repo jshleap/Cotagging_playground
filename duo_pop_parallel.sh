@@ -282,10 +282,10 @@ python_merge()
 { # more predictable behaviour than join
 python - << EOF
 import pandas as pd
-df1 = pd.read_table('pcs.txt', sep='\t')
+df1 = pd.read_table('${1}', sep='\t')
 df2 = pd.read_table('Covs.txt', sep='\t')
 merged = df1.merge(df2, on=['FID','IID'])
-merged.to_csv('pcs.txt', sep='\t', index=False)
+merged.to_csv('${1}', sep='\t', index=False)
 EOF
 }
 
@@ -295,6 +295,7 @@ run_gwas(){
 # 3) snps to compute
 # 4) prefix
 # 5) Variables file
+# 6) pcs file
 source $5
 echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} cpus and running on parallel" >&2
 blines=`wc -l < $3`
@@ -303,12 +304,12 @@ spl=`hostname`_cpus
 split -l ${nlines} $3 ${spl}
 echo -e "\tExecuting this code: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
---memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out ${pre}_{} \
+--memory 7000 --covar $6 --covar-name $2 --extract {} --out ${pre}_{} \
 --keep-allele-order --allow-no-sex  ::: ${spl}*"
 pre=${4}_`hostname`
 parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
---memory 7000 --covar pcs.txt --covar-name $2 --extract {} --out ${pre}_{} \
+--memory 7000 --covar $6 --covar-name $2 --extract {} --out ${pre}_{} \
 --keep-allele-order --allow-no-sex  ::: ${spl}*
 #--allow-no-sex
 #$1 --bfile current_pop --linear hide-covar --pheno train.pheno --memory 7000 \
@@ -363,10 +364,11 @@ compute_duo()
     echo -e "${plink} --bfile ${all} --keep ${keep} --make-bed --out current_pop ${common_plink}" >&2
     ${plink} --bfile ${all} --keep ${keep} --make-bed --out current_pop ${common_plink}
     echo -e "${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4"
-    ${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4
+    ${flashpca} --bfile current_pop -n ${cpus} -m ${mem} -d 4 --suffix _${prefix}.txt
+    pcname="pcs_${prefix}.txt"
     if echo ${covs}| grep -q -- '--covs'; then
-        python_merge
-        pcs=`cut -d$'\t' -f3- pcs.txt|head -1`
+        python_merge ${pcname}
+        pcs=`cut -d$'\t' -f3- ${pcname} | head -1`
     fi
     TIMEFORMAT="GWAS done! Time elapsed: %R"
     export TIMEFORMAT
@@ -379,7 +381,7 @@ compute_duo()
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${nnodes})))"`
     split -l ${nlines} current_pop.bim nodes
     time parallel --will-cite --joblog ${PWD}/rungwas_parallel.log ${multi} \
-    --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ::: nodes*
+    --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ${pcname} ::: nodes*
     head -q -n 1 ${prefix}*_cpusaa.assoc.linear|head -1 > ${prefix}.assoc.linear
     tail -q -n +2 ${prefix}*_cpus*.assoc.linear >> ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
@@ -505,6 +507,7 @@ prop=NONE
 const=NONE
 sequence=`seq 0 ${step} ${sample}`
 if [[ -f proportions.tsv ]]
+    awk  -F $'\t' '$2!=""'  proportions.tsv > tmp && mv tmp proportions.tsv
     then
         pre=`cut -f1 proportions.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`
@@ -553,6 +556,7 @@ ln -s ../train.pheno ./
 sequence=`seq 0 ${step} ${sample}`
 # constant initial source add mixing
 if [[ -f init.tsv ]]
+    awk  -F $'\t' '$2!=""' init.tsv > tmp && mv tmp init.tsv
     then
         pre=`cut -f1 init.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`
@@ -591,6 +595,7 @@ ln -s ../train.pheno ./
 # do the cost derived
 sequence=`seq 0 10`
 if [[ -f cost.tsv ]]
+    awk  -F $'\t' '$2!=""'  cost.tsv > tmp && mv tmp cost.tsv
     then
         pre=`cut -f1 cost.tsv`
         sequ=`echo ${pre[@]} ${sequence[@]}| tr ' ' '\n'| sort| uniq -u`

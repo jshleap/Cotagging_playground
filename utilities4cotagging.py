@@ -401,56 +401,58 @@ def single_window(df, rg, tg, threads=1, max_memory=None, justd=False,
     :param extend: 'Circularize' the genome by extending both ends
     :return:
     """
-    # set Cache to protect memory spilling
-    if max_memory is not None:
-        available_memory = max_memory
-    else:
-        available_memory = psutil.virtual_memory().available/2
-    cache = Chest(available_memory=available_memory)
-    # Make sure chunks make sense
-    chunk_opts = dict(threads=threads, memory=available_memory)
-    if not isinstance(rg, np.ndarray):
-        rg = rg.rechunk(estimate_chunks(shape=rg.shape, **chunk_opts))
-        tg = tg.rechunk(estimate_chunks(shape=tg.shape, **chunk_opts))
-    # extend the genotype at both end to avoid edge effects
-    if extend:
-        # get the indices of the subset genotype array
-        nidx = np.arange(rg.shape[1])
-        # Split the array in half (approximately)
-        idx_a, idx_b = np.array_split(nidx, 2)
-        # Get the extednded indices
-        i = np.concatenate([idx_a[::-1][:-1], nidx, idx_b[::-1][1:]])
-        # Re-subset the genotype arrays with the extensions
-        rg, tg = rg[:, i], tg[:, i]
-        assert rg.shape[1] == tg.shape[1]
-        # Compute the correltion as X'X/N
-        rho_r = da.dot(rg.T, rg) / rg.shape[0]
-        rho_t = da.dot(tg.T, tg) / tg.shape[0]
-        # remove the extras
-        idx = np.arange(i.shape[0])[idx_a.shape[0]-1: (nidx.shape[0] +
-                                                        idx_b.shape[0])]
-        rho_r, rho_t = rho_r[idx, :], rho_t[idx, :]
-        rho_r, rho_t = rho_r[:, idx], rho_t[:, idx]
-        # Make sure the shape match
-        assert rho_r.shape[1] == rho_r.shape[0]
-        assert rho_t.shape[1] == rho_t.shape[0]
-    else:
-        # Just compute the correlations
-        rho_r = da.dot(rg.T, rg) / rg.shape[0]
-        rho_t = da.dot(tg.T, tg) / tg.shape[0]
-    if justd:
-        # return the raw LD matrices
-        return df.snp, rho_r, rho_t
-    gc.collect()
-    # compute the cotagging/tagging scores
-    cot = da.diag(da.dot(rho_r, rho_t))
-    ref = da.diag(da.dot(rho_r, rho_r))
-    tar = da.diag(da.dot(rho_t, rho_t))
-    stacked = da.stack([df.snp, ref, tar, cot], axis=1)
-    c_h_u_n_k_s = estimate_chunks(stacked.shape, threads, max_memory)
-    stacked = da.rechunk(stacked, chunks=c_h_u_n_k_s)
-    columns = ['snp', 'ref', 'tar', 'cotag']
-    return dd.from_dask_array(stacked, columns=columns).compute(cache=cache)
+    if not df.empty:
+        # set Cache to protect memory spilling
+        if max_memory is not None:
+            available_memory = max_memory
+        else:
+            available_memory = psutil.virtual_memory().available/2
+        cache = Chest(available_memory=available_memory)
+        # Make sure chunks make sense
+        chunk_opts = dict(threads=threads, memory=available_memory)
+        if not isinstance(rg, np.ndarray):
+            rg = rg.rechunk(estimate_chunks(shape=rg.shape, **chunk_opts))
+            tg = tg.rechunk(estimate_chunks(shape=tg.shape, **chunk_opts))
+        # extend the genotype at both end to avoid edge effects
+        if extend:
+            # get the indices of the subset genotype array
+            nidx = np.arange(rg.shape[1])
+            # Split the array in half (approximately)
+            idx_a, idx_b = np.array_split(nidx, 2)
+            # Get the extednded indices
+            i = np.concatenate([idx_a[::-1][:-1], nidx, idx_b[::-1][1:]])
+            # Re-subset the genotype arrays with the extensions
+            rg, tg = rg[:, i], tg[:, i]
+            assert rg.shape[1] == tg.shape[1]
+            # Compute the correltion as X'X/N
+            rho_r = da.dot(rg.T, rg) / rg.shape[0]
+            rho_t = da.dot(tg.T, tg) / tg.shape[0]
+            # remove the extras
+            idx = np.arange(i.shape[0])[idx_a.shape[0]-1: (nidx.shape[0] +
+                                                            idx_b.shape[0])]
+            rho_r, rho_t = rho_r[idx, :], rho_t[idx, :]
+            rho_r, rho_t = rho_r[:, idx], rho_t[:, idx]
+            # Make sure the shape match
+            assert rho_r.shape[1] == rho_r.shape[0]
+            assert rho_t.shape[1] == rho_t.shape[0]
+        else:
+            # Just compute the correlations
+            rho_r = da.dot(rg.T, rg) / rg.shape[0]
+            rho_t = da.dot(tg.T, tg) / tg.shape[0]
+        if justd:
+            # return the raw LD matrices
+            return df.snp, rho_r, rho_t
+        gc.collect()
+        # compute the cotagging/tagging scores
+        cot = da.diag(da.dot(rho_r, rho_t))
+        ref = da.diag(da.dot(rho_r, rho_r))
+        tar = da.diag(da.dot(rho_t, rho_t))
+        stacked = da.stack([df.snp, ref, tar, cot], axis=1)
+        c_h_u_n_k_s = estimate_chunks(stacked.shape, threads, max_memory)
+        stacked = da.rechunk(stacked, chunks=c_h_u_n_k_s)
+        columns = ['snp', 'ref', 'tar', 'cotag']
+        return dd.from_dask_array(stacked, columns=columns).compute(
+            cache=cache)
 
 
 # ----------------------------------------------------------------------
@@ -488,7 +490,7 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     :param max_memory: Memory limit
     :param justd: Return only the raw LD matrices or the tagging/cotagging
     :param extend: 'Circularize' the genome by extending both ends
-    :return: A list of tuples (or dataframe if not justd) with the ld per blocks
+    :return: A list of tuples (or dataframe if not justd) with the ld per block
     """
     # # Set CPU limits
     # soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
@@ -497,46 +499,54 @@ def get_ld(rgeno, rbim, tgeno, tbim, kbwindow=1000, threads=1, max_memory=None,
     # print('Soft limit changed to :', soft)
 
     # set Cache to protect memory spilling
-    if max_memory is not None:
-        available_memory = max_memory
+    rp = 'r.pickle'
+    if os.path.isfile(rp):
+        with open(rp, 'rb') as pckl:
+            r = pickle.load(pckl)
     else:
-        available_memory = psutil.virtual_memory().available
-    cache = Chest(available_memory=available_memory)
-    if os.path.isfile('ld.matrix'):
-        print('Loading precomputed LD matrix')
-        r = dd.read_parquet('ld.matrix')
-    else:
-        print('Computing LD score per window')
-        # Get the overlapping snps and their info
-        shared = ['chrom', 'snp', 'pos']
-        mbim = rbim.merge(tbim, on=shared, suffixes=['_ref', '_tar'])
-        assert mbim.i_ref.values.shape == mbim.i_tar.values.shape
-        # Get the number of bins or loci to be computed
-        nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
-        # Get the limits of the loci
-        bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True,
-                           dtype=int)
-        if bins.shape[0] == 1:
-            # Fix the special case in which the window is much bigger than the
-            # range
-            bins = np.append(bins, kbwindow * 1000)
-        # Get the proper intervals into the dataframe
-        mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
-        # Compute each locus in parallel
-        dask_rgeno = dask.delayed(rgeno)
-        dask_tgeno = dask.delayed(tgeno)
-        delayed_results = [
-            dask.delayed(single_window)(df, rg, tg, threads, max_memory, justd,
-                                        extend) for rg, tg, ridx, tidx, df in
-            window_yielder(dask_rgeno, dask_tgeno, mbim)]
-
-        with ProgressBar(), dask.config.set(num_workers=threads, cache=cache,
-                                             pool=ThreadPool(threads)):
-            r = tuple(dask.compute(*delayed_results))
-        if justd:
-            return r
-        r = pd.concat(r)
-        dd.to_parquet(r, 'ld.matrix')
+        if max_memory is not None:
+            available_memory = max_memory
+        else:
+            available_memory = psutil.virtual_memory().available
+        cache = Chest(available_memory=available_memory)
+        if os.path.isfile('ld.matrix'):
+            print('Loading precomputed LD matrix')
+            r = dd.read_parquet('ld.matrix')
+        else:
+            print('Computing LD score per window')
+            # Get the overlapping snps and their info
+            shared = ['chrom', 'snp', 'pos']
+            mbim = rbim.merge(tbim, on=shared, suffixes=['_ref', '_tar'])
+            assert mbim.i_ref.values.shape == mbim.i_tar.values.shape
+            # Get the number of bins or loci to be computed
+            nbins = np.ceil(max(mbim.pos)/(kbwindow * 1000)).astype(int)
+            # Get the limits of the loci
+            bins = np.linspace(0, max(mbim.pos) + 1, num=nbins, endpoint=True,
+                               dtype=int)
+            if bins.shape[0] == 1:
+                # Fix the special case in which the window is much bigger than
+                # the range
+                bins = np.append(bins, kbwindow * 1000)
+            # Get the proper intervals into the dataframe
+            mbim['windows'] = pd.cut(mbim['pos'], bins, include_lowest=True)
+            # Compute each locus in parallel
+            dask_rgeno = dask.delayed(rgeno)
+            dask_tgeno = dask.delayed(tgeno)
+            delayed_results = [
+                dask.delayed(single_window)(df, rg, tg, threads, max_memory,
+                                            justd, extend) for
+                rg, tg, ridx, tidx, df in
+                window_yielder(dask_rgeno, dask_tgeno, mbim)]
+            opts = dict(num_workers=threads, cache=cache,
+                        pool=ThreadPool(threads))
+            with ProgressBar(), dask.config.set(**opts), open(rp, 'wb') as pck:
+                r = tuple(dask.compute(*delayed_results))
+                pickle.dump(r, pck)
+    r = tuple(x for x in r if x is not None)
+    if justd:
+        return r
+    r = pd.concat(r)
+    dd.to_parquet(r, 'ld.matrix')
     return r
 
 
