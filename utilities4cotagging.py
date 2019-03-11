@@ -153,7 +153,7 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
             with dask.config.set(pool=ThreadPool(threads)):
                 idx = (g_std != 0).compute(cache=cache)
         g = g[idx, :]
-        bim = bim[bim.i.isin(idx)].copy().reset_index(drop=True)
+        bim = bim[idx].copy().reset_index(drop=True)
         bim.i = bim.index.tolist()
         del g_std, idx
         gc.collect()
@@ -191,7 +191,6 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
         print(bim.shape)
         bim = bim[good]
         bim['mafs'] = mafs[good]
-
         del good
         gc.collect()
     bim = bim.reset_index(drop=True)    # Get the indices in order
