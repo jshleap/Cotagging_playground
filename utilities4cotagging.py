@@ -187,9 +187,11 @@ def read_geno(bfile, freq_thresh, threads, flip=False, check=False,
             with dask.config.set(pool=ThreadPool(threads)):
                 good, mafs = dask.compute(good, mafs, cache=cache)
         g = g[:, good]
+        print('    Genotype matrix shape after', g.shape)
+        print(bim.shape)
         bim = bim[good]
         bim['mafs'] = mafs[good]
-        print('    Genotype matrix shape after', g.shape)
+
         del good
         gc.collect()
     bim = bim.reset_index(drop=True)    # Get the indices in order
