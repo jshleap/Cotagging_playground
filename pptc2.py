@@ -132,10 +132,14 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     print('Performing P + T + C!')
     refl, tarl = labels
     picklefile = '%s.pckl' % prefix
+    loaded = False
     if os.path.isfile(picklefile):
         with open(picklefile, 'rb') as pckl:
             (opts, ffam, fbim, fgeno, tbim, tfam, tgeno, rbim, rfam, rgeno,
              seed) = pickle.load(pckl)
+        loaded = True
+        common_snps = list(set(rbim.snp).intersection(tbim.snp))
+        causals = pd.read_table('merged.causaleff', delim_whitespace=True)
     else:
         # Merge target and reference
         (rbim, rfam, rgeno) = read_geno(refgeno, kwargs['freq_thresh'],
@@ -156,6 +160,17 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                                         check=kwargs['check'],
                                         usable_snps=common_snps,
                                         max_memory=max_memory)
+        # split them again
+        rbim = tbim = fbim
+        tfam = ffam[ffam.iid.isin(tfam.iid.tolist())].reset_index(drop=True)
+        tidx = tfam.i.tolist()
+        tfam.i = tfam.index.tolist()
+        tgeno = fgeno[tidx, :]
+        rfam = ffam[ffam.iid.isin(rfam.iid.tolist())].reset_index(drop=True)
+        ridx = rfam.i.tolist()
+        rfam.i = rfam.index.tolist()
+        rgeno = fgeno[ridx, :]
+
         opts = dict(outprefix="merged", bfile=fgeno, bim=fbim, fam=ffam, h2=h2,
                     ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
                     uniform=kwargs['uniform'], snps=None, seed=seed,
@@ -165,6 +180,23 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         with open('%s.pckl' % prefix, 'wb') as pckl:
             pickle.dump((opts, ffam, fbim, fgeno, tbim, tfam, tgeno, rbim,
                          rfam, rgeno, seed), pckl)
+    plink_args = ['plink', '--bfile', refgeno, '--bmerge', '%s.bed' % targeno,
+                  '%s.bim' % targeno, '%s.fam' % targeno, '--make-bed',
+                  '--out', '%s_merged' % prefix]
+    if not os.path.isfile('%s.bed' % plink_args[-1]):
+        run(plink_args)
+    if not loaded:
+        (fbim, ffam, fgeno) = read_geno(targeno, kwargs['freq_thresh'],
+                                        threads, check=kwargs['check'],
+                                        usable_snps=common_snps,
+                                        max_memory=max_memory)
+
+    opts = dict(outprefix="merged", bfile=fgeno, bim=fbim, fam=ffam, h2=h2,
+                ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
+                uniform=kwargs['uniform'], snps=None, seed=seed,
+                flip=kwargs['gflip'], max_memory=max_memory,
+                high_precision_on_zero=kwargs['highp'],
+                freq_thresh=0.0)
     # If pheno is None for the reference, make simulation
     if isinstance(refpheno, str):
         rpheno = dd.read_table(refpheno, blocksize=25e6, delim_whitespace=True)
@@ -188,6 +220,10 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     # process causals
     causal_snps = fvec.snp.tolist()
     r2_causal = just_score(causal_snps, sum_stats, tpheno, tgeno)
+    print('R2_causal for Target', r2_causal)
+    r2_causal_ref = just_score(causal_snps, sum_stats, rpheno, rgeno)
+    print('R2_causal for Target', r2_causal)
+    assert np.allclose(r2_causal, r2_causal_ref, atol=0.01, rtol=0.01)
     # Compute Ds
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow, justd=True,
                   threads=threads, max_memory=max_memory)
@@ -287,6 +323,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
         print('Clumping with pval, select index with locus ese, select across '
               'with ese')
 
+        # Clump pval, select index with lese, select across with ese
         opts.update(sort_by='ese', prefix='%s_pval_lese_ese' % prefix,
                     select_index_by='locus_ese')
         pval_lese_ese = run_optimization_by(**opts)
