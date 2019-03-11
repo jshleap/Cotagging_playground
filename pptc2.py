@@ -222,7 +222,7 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
     r2_causal = just_score(causal_snps, sum_stats, tpheno, tgeno)
     print('R2_causal for Target', r2_causal)
     r2_causal_ref = just_score(causal_snps, sum_stats, rpheno, rgeno)
-    print('R2_causal for Target', r2_causal)
+    print('R2_causal for reference', r2_causal_ref)
     assert np.allclose(r2_causal, r2_causal_ref, atol=0.01, rtol=0.01)
     # Compute Ds
     loci = get_ld(rgeno, rbim, tgeno, tbim, kbwindow=LDwindow, justd=True,

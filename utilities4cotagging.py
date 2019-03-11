@@ -9,7 +9,7 @@
 import gc
 import operator
 import os
-import pickle
+import dill as pickle
 from collections import ChainMap
 from collections import Counter
 from functools import reduce
