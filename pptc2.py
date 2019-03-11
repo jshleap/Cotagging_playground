@@ -185,11 +185,11 @@ def main(prefix, refgeno, refpheno, targeno, tarpheno, h2, labels, LDwindow,
                   '--out', '%s_merged' % prefix]
     if not os.path.isfile('%s.bed' % plink_args[-1]):
         run(plink_args)
-    if not loaded:
-        (fbim, ffam, fgeno) = read_geno(targeno, kwargs['freq_thresh'],
-                                        threads, check=kwargs['check'],
-                                        usable_snps=common_snps,
-                                        max_memory=max_memory)
+    # if not loaded:
+    #     (fbim, ffam, fgeno) = read_geno(targeno, kwargs['freq_thresh'],
+    #                                     threads, check=kwargs['check'],
+    #                                     usable_snps=common_snps,
+    #                                     max_memory=max_memory)
 
     opts = dict(outprefix="merged", bfile=fgeno, bim=fbim, fam=ffam, h2=h2,
                 ncausal=kwargs['ncausal'], normalize=kwargs['normalize'],
