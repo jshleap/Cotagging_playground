@@ -688,8 +688,9 @@ def run_optimization_by(by_range, sort_by, loci, h2, m, n, threads, cache,
         sort_by, ascending=ascending)
     pd.concat([pre, pos]).to_csv('%s_full.tsv' % prefix, index=False, sep='\t')
     result = dict(index_snps=pre, tagged_snps=pos, R2=r2, R2_ref=r2_ref)
-    with open('result_%s.pickle' % sort_by, 'wb') as P:
+    with open('result_%s.pickle' % prefix, 'wb') as P:
         pickle.dump(result, P)
+    print('R2 for', prefix, ':', r2)
     return result
 
 
