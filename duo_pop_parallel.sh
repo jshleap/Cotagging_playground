@@ -300,13 +300,14 @@ source $5
 echo "Running GWAS on host `hostname`. Spliting $3 into ${cpus} cpus and running on parallel" >&2
 blines=`wc -l < $3`
 nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
-spl=`hostname`_cpus
+pre=${4}_`hostname`
+spl=${pre}_cpus
 split -l ${nlines} $3 ${spl}
 echo -e "\tExecuting this code: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
 --memory 7000 --covar $6 --covar-name $2 --extract {} --out ${pre}_{} \
 --keep-allele-order --allow-no-sex  ::: ${spl}*"
-pre=${4}_`hostname`
+
 parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
 --memory 7000 --covar $6 --covar-name $2 --extract {} --out ${pre}_{} \
@@ -379,9 +380,9 @@ compute_duo()
     p=`echo ${pcs}| sed 's/ /,/g'`
     blines=`wc -l < current_pop.bim`
     nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${nnodes})))"`
-    split -l ${nlines} current_pop.bim nodes
+    split -l ${nlines} current_pop.bim ${prefix}_nodes
     time parallel --will-cite --joblog ${PWD}/rungwas_parallel.log ${multi} \
-    --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ${pcname} ::: nodes*
+    --j ${cpus} --wd . run_gwas ${plink} "${p}" {} ${prefix} $4 ${pcname} ::: ${prefix}_nodes*
     head -q -n 1 ${prefix}*_cpusaa.assoc.linear|head -1 > ${prefix}.assoc.linear
     tail -q -n +2 ${prefix}*_cpus*.assoc.linear >> ${prefix}.assoc.linear
     rm ${prefix}_cpus*.assoc.linear
