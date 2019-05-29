@@ -23,10 +23,11 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
     d_target = pd.DataFrame(d_target, index=snp_list, columns=snp_list)
     # subset sum_stats
     sum_stats = sum_stats[sum_stats.snp.isin(snp_list)]
-    locus_ese = per_locus(locus, sum_stats, avh2, h2, n, 0, within=0)
-    locus_ese = locus_ese.reindex(columns=['snp', 'ese']).rename(columns={
-        'ese': 'locus_ese'})
-    sum_stats = sum_stats.merge(locus_ese, on='snp')
+    if h2 > 0:
+        locus_ese = per_locus(locus, sum_stats, avh2, h2, n, 0, within=0)
+        locus_ese = locus_ese.reindex(columns=['snp', 'ese']).rename(columns={
+            'ese': 'locus_ese'})
+        sum_stats = sum_stats.merge(locus_ese, on='snp')
     # Get the clumps pfr this locus
     clumps = {}
     while not sum_stats.empty:
@@ -68,10 +69,12 @@ def clumps(locus, sum_stats, ld_threshold, h2, avh2, n, do_locus_ese=False,
                 else:
                     max_l_ese = pd.DataFrame([{'snp': 'None',
                                                'locus_ese': 'None'}])
-                #try:
-                key = (index.snp, index.pvalue, max_ese.snp.iloc[0],
-                       max_ese.ese.iloc[0], max_l_ese.snp.iloc[0],
-                       max_l_ese.locus_ese.iloc[0])
+                try:
+                    key = (index.snp, index.pvalue, max_ese.snp.iloc[0],
+                           max_ese.ese.iloc[0], max_l_ese.snp.iloc[0],
+                           max_l_ese.locus_ese.iloc[0])
+                except:
+                    key = (index.snp, index.pvalue)
                 clumps[key] = ss
                 # except:
                 #     pass
