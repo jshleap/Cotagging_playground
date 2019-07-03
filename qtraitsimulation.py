@@ -53,7 +53,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         # get indices of second pop if needed
         if bfile2 is not None:
             # merge the bim files of tw populations to use common snps
-            #bim2 = pd.read_table('%s.bim' % bfile2, # delim_whitespace=True)
+            #bim2 = pd.read_csv('%s.bim' % bfile2, # delim_whitespace=True)
             (bim2, fam2, G2) = read_geno(bfile2, f_thr, threads, check=check,
                                          max_memory=max_memory)
             snps2 = bim2.snp
@@ -149,7 +149,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         p_line = p_line % (plink, bfile, causalfn, prefix, prefix, threads, mem)
         p = Popen(p_line, shell=True)
         p.communicate()
-        gen_eff = pd.read_table('%s.profile' % prefix, delim_whitespace=True
+        gen_eff = pd.read_csv('%s.profile' % prefix, delim_whitespace=True
                                 )
         cols = {'FID': 'fid', 'IID': 'iid', 'SCORESUM': 'gen_eff'}
         gen_eff = gen_eff.rename(columns=cols)
@@ -222,7 +222,7 @@ def create_pheno(prefix, h2, prs_true, noenv=False, covs=None, force_h2=False):
     dim1 = prs_true.shape[0]
     # check covariates
     if covs is not None:
-        cov = pd.read_table(covs, delim_whitespace=True, header=None)
+        cov = pd.read_csv(covs, delim_whitespace=True, header=None)
         # change names for ease
         covs_names = ['Cov%d' % x for x in range(len(cov.columns) - 2)]
         columns = dict(zip(cov.columns, ['fid', 'iid'] + covs_names))
@@ -312,7 +312,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
     # If causal effect, read it into pandas dataframe
     if causaleff is not None:
         if isinstance(causaleff, str):
-            causaleff = pd.read_table('%s' % causaleff, delim_whitespace=True)
+            causaleff = pd.read_csv('%s' % causaleff, delim_whitespace=True)
         causaleff = causaleff.reindex(columns=['snp', 'beta'])
         assert causaleff.shape[0] == ncausal
     # If another run has been performed, load it if not compute it
@@ -339,7 +339,7 @@ def qtraits_simulation(outprefix, bfile, h2, ncausal, snps=None, noenv=False,
                                           covs=covs, force_h2=force_h2)
         # gc.collect()
     else:
-        pheno = pd.read_table('%s.prs_pheno.gz' % outprefix, sep='\t')
+        pheno = pd.read_csv('%s.prs_pheno.gz' % outprefix, sep='\t')
         realized_h2 = float(open('realized_h2.txt').read().strip().split()[-1])
         # gc.collect()
     if plothist:

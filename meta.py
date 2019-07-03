@@ -4,10 +4,17 @@
   Author:  Jose Sergio Hleap --<2019>
   Purpose: Run transethnic metaanalysis varying sample size
   Created: 21/04/19
+  Requires pyrs in path
 """
 import scipy
 import pandas as pd
 import numpy as np
+from pyrs import PRS, read_geno, just_score
+matplotlib.use('Agg')
+import seaborn as sns
+import matplotlib.pyplot as plt
+import argparse
+plt.style.use('ggplot')
 
 
 header_names=['CHR', 'SNP', 'BP', 'A1', 'TEST', 'NMISS', 'BETA', 'STAT', 'P']
@@ -52,7 +59,7 @@ def fixed_effects(source_b, target_b, source_v, target_v):
     mean_bar = ((source_b * w_source) + (target_b * w_target)) / v_dot
     low_lim, hig_lim, p_values = scores(mean_bar, comb_se)
     return pd.concat([mean_bar, low_lim, hig_lim, p_values], ignore_index=True,
-                     name=['BETA_meta', '95% CI low', '95% CI high', 'P'])
+                     names=['BETA_meta', '95% CI low', '95% CI high', 'P'])
 
 
 def get_betarandom(q, c):
@@ -79,8 +86,9 @@ def random_effects(source_b, target_b, source_v, target_v):
     mean_barstar /= v_star
     comb_se = np.sqrt(v_star)
     low_lim, hig_lim, p_values = scores(mean_barstar, comb_se)
-    return pd.concat([mean_bar, low_lim, hig_lim, p_values], ignore_index=True,
-                     name=['BETA_meta', '95% CI low', '95% CI high', 'P'])
+    return pd.concat([mean_barstar, low_lim, hig_lim, p_values],
+                     ignore_index=True, names=['BETA_meta', '95% CI low',
+                                              '95% CI high', 'P'])
 
 
 def adjust_vars_in_one(frac_n, ori_n, merged_df, suffix):
@@ -102,36 +110,96 @@ def compute_one_n(source_n, max_n, merged_df, suffixes):
     return r_meta_gwas, r_fixe_gwas
 
 
-def ppt():
-    opts = dict(by_range=None, sort_by='pvalue', loci=loci, h2=h2, m=m,
-                threads=threads, cache=cache, sum_stats=sum_stats, n=n,
-                available_memory=available_memory, test_geno=X_test,
-                test_pheno=y_test, tpheno=tpheno, tgeno=tgeno,
-                prefix='%s_pval_all' % prefix, select_index_by='pvalue',
-                clump_with=clump_with, do_locus_ese=False,
-                normalize=kwargs['normalize'],
-                clump_function=compute_clumps
-                )
-def main(source_gwas, target_gwas, labels):
+def plot_it(intended_labels, df, outprefix):
+    source_label, target_label = intended_labels
+    time = '%s (%)' % source_label
+    value = r"$R^2$"
+    f, ax = plt.subplots()
+    sns.tsplot(time=time, value=value, unit="run", data=df, ax=ax,
+               condition='Pop', ci=[25, 50, 75, 95])
+    plt.tight_layout()
+    plt.savefig('%s.pdf' % outprefix)
+    plt.close()
+
+
+def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno=None,
+         threads=8, unintended_tuples=None, ld_range=None, pval_range=None,
+         freq_thr=0.01, index_snps=None):
+    # unintended_tuples are a list of tuples with: 1) name of population,
+    # 2) bed fileset prefix, and 3) file with phenotype
+    run = 0 # intended to extend to simulations later on
+    (bim, fam, geno) = read_geno(geno_prefix, freq_thr, threads)
     suffixes = tuple('_%s' % x for x in labels)
     merged = read_gwas(source_gwas, target_gwas, suffixes=suffixes)
     max_n = merged.NMISS.max()
+    df_rand = []
+    df_fixe = []
     for source_n in np.linspace(0, max_n, 10):
-        r_meta_gwas, r_fixe_gwas = compute_one_n(source_n, max_n, merged_df,
+        percentage = source_n/max_n
+        r_meta_gwas, r_fixe_gwas = compute_one_n(source_n, max_n, merged,
                                                  suffixes)
-        # do PPT here
+        ppt_rand = PRS((bim, fam, geno), r_meta_gwas, ld_range=ld_range,
+                        pval_range=pval_range, threads=threads)
+        ppt_fixe = PRS((bim, fam, geno), r_fixe_gwas, ld_range=ld_range,
+                       pval_range=pval_range, threads=threads)
+        if pheno is not None and index_snps is None:
+            assert geno.shape[0] == pheno.shape[0]
+            # optimize ppt
+            ppt_rand.optimize_it(geno, pheno)
+            ppt_fixe.optimize_it(geno, pheno)
+            best_rand = ppt_rand.best
+            best_fixe = ppt_fixe.best
+            df_rand.append((labels[1], best_rand.r2, percentage, run))
+            df_fixe.append((labels[1], best_fixe.r2, percentage, run))
+            for tup in unintended_tuples:
+                (c_bim, c_fam, c_geno) = read_geno(tup[1], freq_thr, threads)
+                c_pheno = pd.read_csv(tup[2], blocksize=25e6,
+                                      delim_whitespace=True)
+                r2_rand = just_score(best_rand.indices, r_meta_gwas, c_pheno,
+                                     c_geno)
+                r2_fixe = just_score(best_fixe.indices, r_fixe_gwas, c_pheno,
+                                     c_geno)
+                df_rand.append((tup[0], r2_rand, percentage, run))
+                df_fixe.append((tup[0], r2_fixe, percentage, run))
+    df_rand = pd.DataFrame(df_rand, columns=['%s (%)' % labels[0],  r'$R^2$',
+                                             'Pop', 'run'])
+    df_fixe = pd.DataFrame(df_fixe, columns=['%s (%)' % labels[0], r'$R^2$',
+                                             'Pop', 'run'])
+    plot_it(labels, df_rand, '%s_meta_randomeffects' % outprefix)
+    plot_it(labels, df_fixe, '%s_meta_fixedeffects' % outprefix)
 
-    
-    
-    # 1. Read each individual association file
-    # 2. Compute the variance based on the SE
-    # 3. feed "sample corrected betas" to the meta analysis functions
-    # 4. compute PRS with PPT
-    # 5. assess and output plot?
-    
-    
-    
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        prog='PROG', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('geno', help='Genotype file (bed filename)')
+    parser.add_argument('source_gwas', help='GWAS of source, plink format')
+    parser.add_argument('target_gwas', help='GWAS of target, plink format')
+    parser.add_argument('labels', help='Labels of source, target populations',
+                        nargs=2)
+    parser.add_argument('outprefix', help='prefix for outputs')
+    parser.add_argument('-f', '--pheno', default=None,
+                        help='Phenotype of the training set')
+    parser.add_argument('-t', '--threads', default=1, type=int)
+    parser.add_argument('-u', '--unintended_pops', default=None, type=tuple,
+                        nargs='*', help='Tuple with label, bed fileset prefix '
+                                        'and phenotype filename')
+    parser.add_argument('-p', '--pval_range', default=None,
+                        help='Range of pvalues to explore')
+    parser.add_argument('-r', '--ld_range', default=None, help='Range of R2 to'
+                                                               ' explore')
+
+    parser.add_argument('--f_thr', type=float, default=0,
+                        help='Keyword argument for read_geno. The frequency '
+                             'threshold to cleanup the genotype file')
+    parser.add_argument('-i', '--indices', default=None, nargs='*',
+                        help='Index snps')
+
+    args = parser.parse_args()
+    main(args.geno, args.source_gwas, args.target_gwas, args.labels,
+         args.outprefix, pheno=args.pheno, threads=args.threads,
+         unintended_tuples=args.unintended_pops, ld_range=args.ld_range,
+         pval_range=args.pval_range, freq_thr=args.freq_thr, index_snps=None)
 
 
 
