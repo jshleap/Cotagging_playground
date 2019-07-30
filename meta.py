@@ -15,6 +15,7 @@ matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
 import argparse
+from tqdm import tqdm
 plt.style.use('ggplot')
 
 
@@ -135,7 +136,8 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno=None,
     max_n = merged.NMISS.max()
     df_rand = []
     df_fixe = []
-    for source_n in np.linspace(0, max_n, 10):
+    space = np.linspace(0, max_n, 10)
+    for source_n in tqdm(space, total=len(space)):
         percentage = source_n/max_n
         r_meta_gwas, r_fixe_gwas = compute_one_n(source_n, max_n, merged,
                                                  suffixes)
