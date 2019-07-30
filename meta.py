@@ -9,6 +9,7 @@
 import matplotlib
 import scipy
 import pandas as pd
+import numpy as np
 from pyrs import PRS
 from utilities4cotagging import read_geno, just_score
 matplotlib.use('Agg')
