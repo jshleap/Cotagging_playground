@@ -9,8 +9,8 @@
 import matplotlib
 import scipy
 
-from pyrs import *
-
+from pyrs import PRS
+from utilities4cotagging import read_geno, just_score
 matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
