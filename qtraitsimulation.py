@@ -386,8 +386,8 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--uniform', default=False, action='store_true')
     parser.add_argument('-t', '--threads', default=False, action='store',
                         type=int)
-    parser.add_argument('-M', '--maxmem', default=None, action='store', type=int
-                        )
+    parser.add_argument('-M', '--maxmem', default=None, action='store',
+                        type=int)
     parser.add_argument('-s', '--seed', default=None, type=int)
     parser.add_argument('-F', '--flip', default=False, action='store_true')
     parser.add_argument('-C', '--check', default=False, action='store_true')

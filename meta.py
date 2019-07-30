@@ -6,10 +6,11 @@
   Created: 21/04/19
   Requires pyrs in path
 """
+import matplotlib
 import scipy
-import pandas as pd
-import numpy as np
-from pyrs import PRS, read_geno, just_score
+
+from pyrs import *
+
 matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
