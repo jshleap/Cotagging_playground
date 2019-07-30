@@ -174,7 +174,7 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno=None,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        prog='PROG', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        prog='meta.py', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('geno', help='Genotype file (bed filename)')
     parser.add_argument('source_gwas', help='GWAS of source, plink format')
     parser.add_argument('target_gwas', help='GWAS of target, plink format')
