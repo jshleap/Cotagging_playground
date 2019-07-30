@@ -202,7 +202,8 @@ if __name__ == '__main__':
     main(args.geno, args.source_gwas, args.target_gwas, args.labels,
          args.outprefix, pheno=args.pheno, threads=args.threads,
          unintended_tuples=args.unintended_pops, ld_range=args.ld_range,
-         pval_range=args.pval_range, freq_thr=args.freq_thr, index_snps=None)
+         pval_range=args.pval_range, freq_thr=args.f_thr,
+         index_snps=args.indices)
 
 
 
