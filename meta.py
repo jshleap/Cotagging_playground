@@ -39,10 +39,14 @@ def read_gwas(gwas1, gwas2, suffixes=('_EUR', '_ASN'), names=header_names):
     df2 = pd.read_csv(gwas2, sep='\t', names=names)
     merged = df1.merge(df2, on=['CHR', 'SNP'], suffixes=suffixes)
     for s in suffixes:
-        merged['SE%s' % s] = np.vectorize(get_se)(merged['BETA%s' % s],
-                                                  merged['STAT%s' % s])
-        merged['SD%s' % s] = np.vectorize(get_std)(merged['SE%s' % s],
-                                                   merged['NMISS%s' % s])
+        try:
+            merged['SE%s' % s] = np.vectorize(get_se)(merged['BETA%s' % s],
+                                                      merged['STAT%s' % s])
+            merged['SD%s' % s] = np.vectorize(get_std)(merged['SE%s' % s],
+                                                       merged['NMISS%s' % s])
+        except TypeError:
+            print(merged.head())
+            raise
     return merged
 
 
