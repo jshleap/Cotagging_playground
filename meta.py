@@ -6,15 +6,17 @@
   Created: 21/04/19
   Requires pyrs in path
 """
+import matplotlib
 import scipy
 import pandas as pd
 import numpy as np
-from pyrs import read_geno, just_score
-from graph_clump import PRS
+from pyrs import PRS
+from utilities4cotagging import read_geno, just_score
 matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
 import argparse
+from tqdm import tqdm
 plt.style.use('ggplot')
 
 
@@ -37,10 +39,14 @@ def read_gwas(gwas1, gwas2, suffixes=('_EUR', '_ASN'), names=header_names):
     df2 = pd.read_csv(gwas2, sep='\t', names=names)
     merged = df1.merge(df2, on=['CHR', 'SNP'], suffixes=suffixes)
     for s in suffixes:
-        merged['SE%s' % s] = np.vectorize(get_se)(merged['BETA%s' % s],
-                                                  merged['STAT%s' % s])
-        merged['SD%s' % s] = np.vectorize(get_std)(merged['SE%s' % s],
-                                                   merged['NMISS%s' % s])
+        try:
+            merged['SE%s' % s] = np.vectorize(get_se)(merged['BETA%s' % s],
+                                                      merged['STAT%s' % s])
+            merged['SD%s' % s] = np.vectorize(get_std)(merged['SE%s' % s],
+                                                       merged['NMISS%s' % s])
+        except TypeError:
+            print(merged.head())
+            raise
     return merged
 
 
@@ -132,10 +138,11 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno,
     (bim, fam, geno) = read_geno(geno_prefix, freq_thr, threads)
     suffixes = tuple('_%s' % x for x in labels)
     merged = read_gwas(source_gwas, target_gwas, suffixes=suffixes)
-    max_n = merged.NMISS.max()
+    max_n = merged.loc[:, 'NMISS%s'%suffixes[0]].max()
     df_rand = []
     df_fixe = []
-    for source_n in np.linspace(0, max_n, 10):
+    space = np.linspace(0, max_n, 10)
+    for source_n in tqdm(space, total=len(space)):
         percentage = source_n/max_n
         r_meta_gwas, r_fixe_gwas = compute_one_n(source_n, max_n, merged,
                                                  suffixes)
@@ -178,7 +185,7 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        prog='PROG', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        prog='meta.py', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('geno', help='Genotype file (bed filename)')
     parser.add_argument('source_gwas', help='GWAS of source, plink format')
     parser.add_argument('target_gwas', help='GWAS of target, plink format')
@@ -206,7 +213,8 @@ if __name__ == '__main__':
     main(args.geno, args.source_gwas, args.target_gwas, args.labels,
          args.outprefix, pheno=args.pheno, threads=args.threads,
          unintended_tuples=args.unintended_pops, ld_range=args.ld_range,
-         pval_range=args.pval_range, freq_thr=args.freq_thr, index_snps=None)
+         pval_range=args.pval_range, freq_thr=args.f_thr,
+         index_snps=args.indices)
 
 
 

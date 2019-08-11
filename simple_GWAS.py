@@ -272,7 +272,7 @@ def plink_free_gwas(prefix, pheno, geno, validate=None, seed=None, plot=False,
         np.random.seed(seed=seed)
         if isinstance(geno, str):
             # read the genotype files if the provided geno is a string
-            options = dict(bfile=geno, freq_thresh=kwargs['freq_thresh'],
+            options = dict(bfile=geno, freq_thresh=kwargs['f_thr'],
                            threads=threads, flip=kwargs['flip'],
                            check=kwargs['check'], max_memory=max_memory)
             (bim, fam, x) = read_geno(**options)
@@ -422,7 +422,7 @@ if __name__ == '__main__':
                               'of causal variats.'))
     parser.add_argument('--bim', help=('Filename of the mapping file if geno is'
                                        ' an array'))
-    parser.add_argument('--normalize', action='store_true', type=bool,
+    parser.add_argument('--normalize', action='store_true',
                         help=('Keyword argument for qtraits_simulation. Whether '
                               'to normalize the genotype or not.'))
     parser.add_argument('--snps', type=list, nargs='+',
@@ -433,7 +433,8 @@ if __name__ == '__main__':
                               'threshold to filter MAF by'))
 
     args = parser.parse_args()
-    plink_free_gwas(args.prefix, args.pheno, args.bfile, validate=args.validate,
+    plink_free_gwas(args.prefix, args.pheno, args.geno, validate=args.validate,
                     plot=args.plot, threads=args.threads, seed=args.seed,
                     stmd=args.use_statsmodels, flip=args.flip, pca=args.pca,
-                    max_memory=args.maxmem, f_thr=args.f_thr, check=args.check)
+                    max_memory=args.maxmem, f_thr=args.freqthreshold,
+                    check=args.check)
