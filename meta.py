@@ -9,7 +9,8 @@
 import scipy
 import pandas as pd
 import numpy as np
-from pyrs import PRS, read_geno, just_score
+from pyrs import read_geno, just_score
+from graph_clump import PRS
 matplotlib.use('Agg')
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -122,7 +123,7 @@ def plot_it(intended_labels, df, outprefix):
     plt.close()
 
 
-def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno=None,
+def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno,
          threads=8, unintended_tuples=None, ld_range=None, pval_range=None,
          freq_thr=0.01, index_snps=None):
     # unintended_tuples are a list of tuples with: 1) name of population,
@@ -142,25 +143,31 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno=None,
                         pval_range=pval_range, threads=threads)
         ppt_fixe = PRS((bim, fam, geno), r_fixe_gwas, ld_range=ld_range,
                        pval_range=pval_range, threads=threads)
-        if pheno is not None and index_snps is None:
-            assert geno.shape[0] == pheno.shape[0]
-            # optimize ppt
-            ppt_rand.optimize_it(geno, pheno)
-            ppt_fixe.optimize_it(geno, pheno)
-            best_rand = ppt_rand.best
-            best_fixe = ppt_fixe.best
-            df_rand.append((labels[1], best_rand.r2, percentage, run))
-            df_fixe.append((labels[1], best_fixe.r2, percentage, run))
-            for tup in unintended_tuples:
-                (c_bim, c_fam, c_geno) = read_geno(tup[1], freq_thr, threads)
-                c_pheno = pd.read_csv(tup[2], blocksize=25e6,
-                                      delim_whitespace=True)
-                r2_rand = just_score(best_rand.indices, r_meta_gwas, c_pheno,
-                                     c_geno)
-                r2_fixe = just_score(best_fixe.indices, r_fixe_gwas, c_pheno,
-                                     c_geno)
-                df_rand.append((tup[0], r2_rand, percentage, run))
-                df_fixe.append((tup[0], r2_fixe, percentage, run))
+        r2_rand = ppt_rand.compute_prs()
+        r2_fixe = ppt_fixe.compute_prs()
+        best_rand = ppt_rand.best
+        best_fixe = ppt_fixe.best
+        df_rand.append((labels[1], r2_rand, percentage, run))
+        df_fixe.append((labels[1], r2_fixe, percentage, run))
+        # if pheno is not None and index_snps is None:
+        #     assert geno.shape[0] == pheno.shape[0]
+        #     # optimize ppt
+        #     ppt_rand.optimize_it(geno, pheno)
+        #     ppt_fixe.optimize_it(geno, pheno)
+        #     best_rand = ppt_rand.best
+        #     best_fixe = ppt_fixe.best
+        #     df_rand.append((labels[1], best_rand.r2, percentage, run))
+        #     df_fixe.append((labels[1], best_fixe.r2, percentage, run))
+        for tup in unintended_tuples:
+            (c_bim, c_fam, c_geno) = read_geno(tup[1], freq_thr, threads)
+            c_pheno = pd.read_csv(tup[2], blocksize=25e6,
+                                  delim_whitespace=True)
+            r2_rand = just_score(best_rand.indices, r_meta_gwas, c_pheno,
+                                 c_geno)
+            r2_fixe = just_score(best_fixe.indices, r_fixe_gwas, c_pheno,
+                                 c_geno)
+            df_rand.append((tup[0], r2_rand, percentage, run))
+            df_fixe.append((tup[0], r2_fixe, percentage, run))
     df_rand = pd.DataFrame(df_rand, columns=['%s (%)' % labels[0],  r'$R^2$',
                                              'Pop', 'run'])
     df_fixe = pd.DataFrame(df_fixe, columns=['%s (%)' % labels[0], r'$R^2$',

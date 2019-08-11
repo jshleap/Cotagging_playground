@@ -78,7 +78,12 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
-        g = (g - g.mean(axis=0)) / g.std(axis=0)
+        std = g.std(axis=0).compute()
+        boole = (std != 0)
+        g = g[:, boole]
+        bim = bim.loc[boole,:]
+        bim['i'] = range(bim.shape[0])
+        g = (g - g.mean(axis=0)) / std[boole]
     # Set some local variables
     allele = '%s.alleles' % prefix
     totalsnps = '%s.totalsnps' % prefix
@@ -101,8 +106,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         c = cols if 'beta' in bim else 'snp'
         causals = causals.merge(causaleff.reindex(columns=cols), on=c)
         bim = bim.merge(causaleff, on='snp', how='outer')
-        print(bim.head())
-        print(causals.head())
+        # print(bim.head())
+        # print(causals.head())
     elif uniform:
         idx = np.linspace(0, bim.shape[0] - 1, num=ncausal, dtype=int)
         causals = bim.iloc[idx].copy()
@@ -117,7 +122,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # If causal effects are provided use them, otherwise get them
     if causaleff is None:
         # chunks = estimate_chunks((ncausal,), threads)
-        if ncausal <= 5:
+        if ncausal <= 10:
             pre_beta = np.repeat(std, ncausal)
         else:
             pre_beta = np.random.normal(loc=0, scale=std, size=ncausal)
@@ -177,7 +182,7 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # # gc.collect()
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', fam.gen_eff.var())
-    print(bim.head())
+    #print(bim.head())
     # write full table
     fam.to_csv('%s.full' % prefix, sep=' ', index=False)
     return g, bim, fam, causals
