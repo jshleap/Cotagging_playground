@@ -138,7 +138,7 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno=None,
     (bim, fam, geno) = read_geno(geno_prefix, freq_thr, threads)
     suffixes = tuple('_%s' % x for x in labels)
     merged = read_gwas(source_gwas, target_gwas, suffixes=suffixes)
-    max_n = merged.NMISS.max()
+    max_n = merged.loc[:, 'NMISS%s'%suffixes[0]].max()
     df_rand = []
     df_fixe = []
     space = np.linspace(0, max_n, 10)
