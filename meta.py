@@ -59,8 +59,14 @@ def scores(mean_bar, comb_se):
 
 
 def fixed_effects(source_b, target_b, source_v, target_v):
-    w_source = 1 / source_v
-    w_target = 1 / target_v
+    try:
+        w_source = 1 / source_v
+    except ZeroDivisionError:
+        w_source = np.repeat(0, source_v.shape[0])
+    try:
+        w_target = 1 / target_v
+    except ZeroDivisionError:
+        w_target = np.repeat(0, target_v.shape[0])
     v_dot = 1 / (w_source + w_target)
     comb_se = np.sqrt(v_dot)
     mean_bar = ((source_b * w_source) + (target_b * w_target)) / v_dot
@@ -77,8 +83,14 @@ def get_betarandom(q, c):
 
 def random_effects(source_b, target_b, source_v, target_v):
     df = 1 # for two pop
-    w_source = 1 / source_v
-    w_target = 1 / target_v
+    try:
+        w_source = 1 / source_v
+    except ZeroDivisionError:
+        w_source = np.repeat(0, source_v.shape[0])
+    try:
+        w_target = 1 / target_v
+    except ZeroDivisionError:
+        w_target = np.repeat(0, target_v.shape[0])
     sumofwei = sum(w_source, w_target)
     sqsumofw = (w_source**2, w_target**2)
     c = sumofwei - (sqsumofw/sumofwei)
@@ -101,9 +113,12 @@ def random_effects(source_b, target_b, source_v, target_v):
 def adjust_vars_in_one(frac_n, ori_n, merged_df, suffix):
     betas = merged_df['BETA%s' % suffix]
     sigma = merged_df['SD%s' % suffix]
-    noise = (((sigma**2) * (ori_n - 1)) / (ori_n - frac_n -1))
-    eta_s = np.random.normal(scale=(noise-sigma))
-    b_mod = betas + eta_s
+    noise = (((sigma**2) * (ori_n - 1)) / (ori_n - frac_n - 1))
+    try:
+        eta_s = np.random.normal(scale=(noise - sigma))
+        b_mod = betas + eta_s
+    except ValueError:
+        b_mod = np.repean(0, sigma.shape[0])
     return b_mod, noise
 
     
