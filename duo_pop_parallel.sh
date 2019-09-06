@@ -303,7 +303,7 @@ nlines=`python -c "import numpy as np; print(int(np.ceil(${blines}/${cpus})))"`
 pre=${4}_`hostname`
 spl=${pre}_cpus
 split -l ${nlines} $3 ${spl}
-echo -e "\tExecuting this code: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
+echo -e "\tExecuting this command: parallel --joblog ${PWD}/rungwas_cpus_parallel.log --will-cite --j ${cpus} \
 --wd . $1 --bfile current_pop --linear hide-covar --pheno train.pheno \
 --memory 7000 --covar $6 --covar-name $2 --extract {} --out ${pre}_{} \
 --keep-allele-order --allow-no-sex  ::: ${spl}*"

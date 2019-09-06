@@ -9,6 +9,7 @@ import argparse
 import time
 
 from utilities4cotagging import *
+from dask import dataframe as dd
 
 plt.style.use('ggplot')
 
@@ -78,12 +79,13 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
     # Normalize G to variance 1 and mean 0 if required
     if normalize:
         print('Normalizing genotype to variance 1 and mean 0')
-        std = g.std(axis=0).compute()
-        boole = (std != 0)
-        g = g[:, boole]
-        bim = bim.loc[boole,:]
-        bim['i'] = range(bim.shape[0])
-        g = (g - g.mean(axis=0)) / std[boole]
+        with ProgressBar():
+            std = g.std(axis=0).compute()
+            boole = (std != 0)
+            g = g[:, boole]
+            bim = bim.loc[boole, :]
+            bim['i'] = range(bim.shape[0])
+            g = (g - g.mean(axis=0)) / std[boole]
     # Set some local variables
     allele = '%s.alleles' % prefix
     totalsnps = '%s.totalsnps' % prefix
@@ -166,8 +168,8 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
         fam['fid'] = fam.fid.astype(str)
         fam = fam.merge(gen_eff, on=['fid', 'iid'])
     else:
-        dask_options = dict(num_workers=threads, cache=cache, pool=ThreadPool(
-            threads))
+        dask_options = dict(num_workers=threads, cache=cache,
+                            scheduler='threads')
         with ProgressBar(), dask.config.set(**dask_options):
             fam['gen_eff'] = g[:, idx].dot(causals.beta).compute()
     if causaleff is not None:
@@ -178,8 +180,6 @@ def true_prs(prefix, bfile, h2, ncausal, normalize=False, bfile2=None,
             print(sorted(bim.dropna(subset=['beta']).snp)[:10])
             print(sorted(causaleff.snp)[:10])
             raise
-    # del g_eff
-    # # gc.collect()
     print('Variance in beta is', bim.beta.var())
     print('Variance of genetic component', fam.gen_eff.var())
     #print(bim.head())

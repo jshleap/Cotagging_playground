@@ -10,7 +10,7 @@ import matplotlib
 import scipy
 import pandas as pd
 import numpy as np
-from pyrs import PRS
+from graph_clump import main as pyrs
 from utilities4cotagging import read_geno, just_score
 matplotlib.use('Agg')
 import seaborn as sns
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import argparse
 from tqdm import tqdm
 plt.style.use('ggplot')
-
+np.seterr(all='raise')
 
 header_names=['CHR', 'SNP', 'BP', 'A1', 'TEST', 'NMISS', 'BETA', 'STAT', 'P']
 
@@ -54,7 +54,7 @@ def scores(mean_bar, comb_se):
     low_lim = mean_bar - 1.96 * comb_se
     hig_lim = mean_bar + 1.96 * comb_se
     z_scores = mean_bar / comb_se
-    p_values = scipy.stats.norm.sf(abs(z_scores)) * 2
+    p_values = pd.Series(scipy.stats.norm.sf(abs(z_scores)) * 2)
     return low_lim, hig_lim, p_values
 
 
@@ -75,39 +75,47 @@ def fixed_effects(source_b, target_b, source_v, target_v):
                      names=['BETA_meta', '95% CI low', '95% CI high', 'P'])
 
 
-def get_betarandom(q, c):
-    if q > 1:
-        return (q - 1) / c
+def get_betarandom(q, c, df):
+    if q > df:
+        return (q - df) / c
     else:
         return 0
+
 
 def random_effects(source_b, target_b, source_v, target_v):
     df = 1 # for two pop
     try:
         w_source = 1 / source_v
-    except ZeroDivisionError:
+    except FloatingPointError:
         w_source = np.repeat(0, source_v.shape[0])
     try:
         w_target = 1 / target_v
-    except ZeroDivisionError:
+    except FloatingPointError:
         w_target = np.repeat(0, target_v.shape[0])
-    sumofwei = sum(w_source, w_target)
-    sqsumofw = (w_source**2, w_target**2)
+    sumofwei = w_source + w_target
+    sqsumofw = w_source**2 + w_target**2
     c = sumofwei - (sqsumofw/sumofwei)
     w_sqsumb = (w_source * source_b**2) + (w_target * target_b**2)
     w_sumbsq = ((w_source * source_b) + (w_target * target_b))**2
     q = w_sqsumb * (w_sumbsq / sumofwei)
-    tau_squared = np.vectorize(get_betarandom)(q, c)
-    w_sourcestar = 1 / (source_v + tau_squared)
-    w_targetstar = 1 / (target_v + tau_squared)
+    tau_squared = np.vectorize(get_betarandom)(q, c, df)
+    try:
+        w_sourcestar = 1 / (source_v + tau_squared)
+    except FloatingPointError:
+        w_sourcestar = np.repeat(0, source_v.shape[0])
+    try:
+        w_targetstar = 1 / (target_v + tau_squared)
+    except FloatingPointError:
+        w_targetstar = np.repeat(0, target_v.shape[0])
     v_star = 1 / (w_sourcestar + w_targetstar)
     mean_barstar = ((source_b * w_sourcestar) + (target_b * w_targetstar))
     mean_barstar /= v_star
     comb_se = np.sqrt(v_star)
     low_lim, hig_lim, p_values = scores(mean_barstar, comb_se)
-    return pd.concat([mean_barstar, low_lim, hig_lim, p_values],
-                     ignore_index=True, names=['BETA_meta', '95% CI low',
-                                              '95% CI high', 'P'])
+    df = pd.concat([mean_barstar, low_lim, hig_lim, p_values],
+                   ignore_index=True, axis=1).rename(columns=dict(
+        zip(range(4), ['slope', '95% CI low', '95% CI high', 'pvalue'])))
+    return df
 
 
 def adjust_vars_in_one(frac_n, ori_n, merged_df, suffix):
@@ -118,18 +126,47 @@ def adjust_vars_in_one(frac_n, ori_n, merged_df, suffix):
         eta_s = np.random.normal(scale=(noise - sigma))
         b_mod = betas + eta_s
     except ValueError:
-        b_mod = np.repean(0, sigma.shape[0])
+        noise = b_mod = np.repeat(0, sigma.shape[0])
     return b_mod, noise
 
     
-def compute_one_n(source_n, max_n, merged_df, suffixes):
-    source, target = suffixes
-    target_n = max_n - source_n
-    source_b, source_v = adjust_vars_in_one(source_n, max_n, merged_df, source)
-    target_b, target_v = adjust_vars_in_one(target_n, max_n, merged_df, target)
-    r_meta_gwas = random_effects(source_b, target_b, source_v, target_v)
-    r_fixe_gwas = fixed_effects(source_b, target_b, source_v, target_v)
-    return r_meta_gwas, r_fixe_gwas
+def compute_one_n(source_n, target_n, ori_source, ori_target, merged_df,
+                  suffixes):
+    cols = dict(zip(range(8),['chr', 'snp', 'bp', 'a1', 'slope', '95% CI low',
+                              '95% CI high', 'pvalue']))
+    target, source = suffixes
+    p = source_n/ori_source
+    chr = merged_df.CHR
+    snps = merged_df.SNP
+    bp = merged_df['BP%s' % source]
+    a1 = merged_df['A1%s' % source]
+    if p == 1:
+        source_b = merged_df['BETA%s' % source]
+        #source_se = merged_df['SD%s' % source]
+        #low_lim, hig_lim, p_values = scores(source_b, source_se)
+        low_lim = pd.Series(np.nan, index=merged_df.index)
+        hig_lim = pd.Series(np.nan, index=merged_df.index)
+        p_values = merged_df['P%s' % source]
+        data = [chr, snps, bp, a1, source_b, low_lim, hig_lim, p_values]
+    elif p == 0:
+        target_b = merged_df['BETA%s' % target]
+        target_se = merged_df['SD%s' % target]
+        #low_lim, hig_lim, p_values = scores(target_b, target_se)
+        low_lim = pd.Series(np.nan, index=merged_df.index)
+        hig_lim = pd.Series(np.nan, index=merged_df.index)
+        p_values = merged_df['P%s' % target]
+        data = [chr, snps, bp, a1, target_b, low_lim, hig_lim, p_values]
+    else:
+        source_b, source_v = adjust_vars_in_one(source_n, ori_source,
+                                                merged_df, source)
+        target_b, target_v = adjust_vars_in_one(target_n, ori_target,
+                                                merged_df, target)
+        r_meta_gwas = random_effects(source_b, target_b, source_v, target_v)
+        f_meta_gwas = fixed_effects(source_b, target_b, source_v, target_v)
+        return r_meta_gwas, f_meta_gwas
+    r_meta_gwas = f_meta_gwas = pd.concat(data, ignore_index=True, axis=1
+                                          ).rename(columns=cols)
+    return r_meta_gwas, f_meta_gwas
 
 
 def plot_it(intended_labels, df, outprefix):
@@ -144,27 +181,37 @@ def plot_it(intended_labels, df, outprefix):
     plt.close()
 
 
-def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno,
-         threads=8, unintended_tuples=None, ld_range=None, pval_range=None,
-         freq_thr=0.01, index_snps=None):
+def main(geno_prefix, source_gwas, target_gwas, labels, outprefix,
+         source_gwas_n, pheno, threads=8, unintended_tuples=None,
+         ld_range=None, pval_range=None, freq_thr=0.01, index_snps=None):
     # unintended_tuples are a list of tuples with: 1) name of population,
     # 2) bed fileset prefix, and 3) file with phenotype
     run = 0 # intended to extend to simulations later on
     (bim, fam, geno) = read_geno(geno_prefix, freq_thr, threads)
     suffixes = tuple('_%s' % x for x in labels)
     merged = read_gwas(source_gwas, target_gwas, suffixes=suffixes)
-    max_n = merged.loc[:, 'NMISS%s'%suffixes[0]].max()
     df_rand = []
     df_fixe = []
-    space = np.linspace(0, max_n, 10)
-    for source_n in tqdm(space, total=len(space)):
-        percentage = source_n/max_n
-        r_meta_gwas, r_fixe_gwas = compute_one_n(source_n, max_n, merged,
-                                                 suffixes)
-        ppt_rand = PRS((bim, fam, geno), r_meta_gwas, ld_range=ld_range,
-                        pval_range=pval_range, threads=threads)
-        ppt_fixe = PRS((bim, fam, geno), r_fixe_gwas, ld_range=ld_range,
-                       pval_range=pval_range, threads=threads)
+    space = np.linspace(0, fam.shape[0], 10)
+    for target_n in tqdm(space, total=len(space)):
+        source_n = source_gwas_n - target_n
+        percentage = source_n/source_gwas_n
+        r_meta_gwas, f_meta_gwas = compute_one_n(
+            source_n, fam.shape[0], source_gwas_n, fam.shape[0], merged,
+            suffixes)
+        opt = dict(
+            geno=(bim, fam, geno), pheno=pheno, outpref=outprefix,
+            pval_range=pval_range, ld_range=ld_range, gwas=r_meta_gwas,
+            threads=threads, freq_thresh=freq_thr, covs=None, memory=None,
+            validate=3, check=None, snp_subset=None
+        )
+        r2_rand, ppt_rand = pyrs(**opt)
+
+        # PRS((bim, fam, geno), r_meta_gwas, ld_range=ld_range,
+        #                 pval_range=pval_range, pheno=pheno,  threads=threads)
+        # r2_rand = ppt_rand.compute_prs()
+        ppt_fixe = PRS((bim, fam, geno), f_meta_gwas, ld_range=ld_range,
+                       pval_range=pval_range, pheno=pheno, threads=threads)
         r2_rand = ppt_rand.compute_prs()
         r2_fixe = ppt_fixe.compute_prs()
         best_rand = ppt_rand.best
@@ -186,7 +233,7 @@ def main(geno_prefix, source_gwas, target_gwas, labels, outprefix, pheno,
                                   delim_whitespace=True)
             r2_rand = just_score(best_rand.indices, r_meta_gwas, c_pheno,
                                  c_geno)
-            r2_fixe = just_score(best_fixe.indices, r_fixe_gwas, c_pheno,
+            r2_fixe = just_score(best_fixe.indices, f_meta_gwas, c_pheno,
                                  c_geno)
             df_rand.append((tup[0], r2_rand, percentage, run))
             df_fixe.append((tup[0], r2_fixe, percentage, run))
@@ -207,8 +254,10 @@ if __name__ == '__main__':
     parser.add_argument('labels', help='Labels of source, target populations',
                         nargs=2)
     parser.add_argument('outprefix', help='prefix for outputs')
+    parser.add_argument('source_gwas_n', help='Number of individuals in source',
+                        type=int)
     parser.add_argument('-f', '--pheno', default=None,
-                        help='Phenotype of the training set')
+                        help='Tuple with Phenotype files of the training sets')
     parser.add_argument('-t', '--threads', default=1, type=int)
     parser.add_argument('-u', '--unintended_pops', default=None, type=tuple,
                         nargs='*', help='Tuple with label, bed fileset prefix '
@@ -226,10 +275,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     main(args.geno, args.source_gwas, args.target_gwas, args.labels,
-         args.outprefix, pheno=args.pheno, threads=args.threads,
-         unintended_tuples=args.unintended_pops, ld_range=args.ld_range,
-         pval_range=args.pval_range, freq_thr=args.f_thr,
-         index_snps=args.indices)
+         args.outprefix, args.source_gwas_n, pheno=args.pheno,
+         threads=args.threads, unintended_tuples=args.unintended_pops,
+         ld_range=args.ld_range, pval_range=args.pval_range,
+         freq_thr=args.f_thr, index_snps=args.indices)
 
 
 
